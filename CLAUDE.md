@@ -10,8 +10,9 @@
 - `.kiro/steering/` — 常時適用される方針(製品概要・技術方針・プロジェクト構成)
 - `.kiro/specs/excel-report-pdf-conversion/` — 中核機能の要件定義書・設計書・実装タスクリスト
 - `.claude/agents/` — レビュー・テスト作成用サブエージェント
+- `docs/開発環境メモ.md` — Claude Code on the web実行環境で実際に裏取りした環境固有の注意点(SDKセットアップ、`pkill -f`の自己マッチ問題など)
 
-実装に着手する際は、`.kiro/specs/excel-report-pdf-conversion/tasks.md` のタスクを順に消化すること。
+実装に着手する際は、`.kiro/specs/excel-report-pdf-conversion/tasks.md` のタスクを順に消化すること。実装中に環境起因と思われるエラーに遭遇したら、まず `docs/開発環境メモ.md` を確認する。
 
 ## 開発の進め方(spec駆動)
 
@@ -34,10 +35,13 @@
 
 | サブエージェント | 使うタイミング |
 |---|---|
+| `code-investigator` | 実装に着手する前の既存コード調査、バグ調査時の関連コード特定、影響範囲の洗い出し。メインの会話コンテキストを消費したくない大量のファイル読み込みが必要な調査全般 |
 | `code-reviewer` | 実装変更が完了した直後、コミット前 |
+| `layout-fidelity-reviewer` | Layout/Renderingレイヤー(改ページ計算・結合セル・フォントメトリクス・単位換算など)への変更直後。本プロダクトで最もリスクが高い領域専門のレビュー |
 | `test-writer` | 新規/変更実装にテストが不足している場合 |
 | `security-reviewer` | Excelファイル入力・帳票定義・出力パスを扱う変更、新規依存ライブラリ追加時 |
-| `spec-compliance-reviewer` | requirements/design/tasksの作成・更新時、実装完了後の仕様整合性確認 |
+| `spec-compliance-reviewer` | requirements/design/tasksの作成・更新時、実装完了後の仕様整合性確認(仕様↔実装のトレーサビリティ) |
+| `doc-reviewer` | `.kiro/steering/`・`.kiro/specs/`・`docs/`・`CLAUDE.md`等の追加・更新直後。ドキュメント間の矛盾、技術的記載の裏取り、参照切れ、体裁を確認 |
 
 ## 開発コマンド(プロジェクト作成後)
 
