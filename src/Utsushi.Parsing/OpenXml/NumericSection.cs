@@ -146,11 +146,16 @@ internal sealed class NumericSection
                     break;
 
                 case ',':
-                    if (placeholderSeen && !seenDecimalPoint)
+                    if (placeholderSeen)
                     {
-                        // 数字プレースホルダの直後の "," は桁区切り。
+                        // 数字プレースホルダの直後の "," は桁区切り(整数部のみ)。
                         // 末尾に続く "," は1000で割る指示(例: #,##0, は千単位表示)。
-                        useThousands = true;
+                        // これは小数点より後に置かれても同様(例: #,##0.0, は千単位・小数1桁)。
+                        if (!seenDecimalPoint)
+                        {
+                            useThousands = true;
+                        }
+
                         trailingCommas++;
                     }
                     else

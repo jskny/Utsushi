@@ -88,6 +88,11 @@ internal static class Program
         builder.SetText(8, 1, "ご請求金額", Style.SectionLabel);
         builder.Merge("C8:F8");
         builder.SetNumber(8, 3, 0, Style.TotalCurrency);
+        // 結合範囲の右端の罫線はF8自身のRightに保持されるため、アンカー(C8)だけでなく
+        // 範囲内の全セルに同じ箱罫線スタイルを設定する(D8:F8)。
+        builder.SetStyleOnly(8, 4, Style.TotalCurrency);
+        builder.SetStyleOnly(8, 5, Style.TotalCurrency);
+        builder.SetStyleOnly(8, 6, Style.TotalCurrency);
 
         // 明細表
         const int headerRow = 11;
@@ -268,10 +273,16 @@ internal static class Program
         builder.SetText(startRow + 4, 1, "金額", Style.SectionLabel);
         builder.Merge($"B{startRow + 4}:D{startRow + 4}");
         builder.SetNumber(startRow + 4, 2, 0, Style.TotalCurrency);
+        // 結合範囲の右端の罫線はD列自身のRightに保持されるため、アンカー(B)だけでなく
+        // 範囲内の全セルに同じ箱罫線スタイルを設定する。
+        builder.SetStyleOnly(startRow + 4, 3, Style.TotalCurrency);
+        builder.SetStyleOnly(startRow + 4, 4, Style.TotalCurrency);
 
         builder.SetText(startRow + 6, 1, "但し", Style.SectionLabel);
         builder.Merge($"B{startRow + 6}:D{startRow + 6}");
         builder.SetText(startRow + 6, 2, "サンプル代金として", Style.TableText);
+        builder.SetStyleOnly(startRow + 6, 3, Style.TableText);
+        builder.SetStyleOnly(startRow + 6, 4, Style.TableText);
 
         builder.SetText(startRow + 8, 1, "上記正に領収いたしました。", Style.Value);
 

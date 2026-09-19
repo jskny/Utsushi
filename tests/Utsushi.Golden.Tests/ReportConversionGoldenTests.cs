@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Utsushi;
+using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.Layout;
 using Utsushi.Layout.Model;
@@ -209,11 +210,13 @@ public sealed class ReportConversionGoldenTests
     [Fact]
     public void 帳票定義と一致しないExcelを渡すと失敗する()
     {
-        // 納品書のテンプレートを請求書の定義で読もうとするとシート名が一致しない(要件1.4)
+        // 納品書のテンプレートを請求書の定義で読もうとするとシート名が一致しない(要件1.4)。
+        // ファイル自体は正常な.xlsxのため、Parsing段階の障害ではなく帳票定義との構造不一致
+        // (Stage=ReportDefinition)として報告されるべき(要件6.4のStageベースの分岐に対応)。
         using var converter = CreateDeterministicConverter(out _);
         using var input = File.OpenRead(TestPaths.SampleTemplate("delivery-note"));
 
-        var ex = Assert.Throws<InvalidExcelFileException>(
+        var ex = Assert.Throws<ReportStructureMismatchException>(
             () => converter.ComputeLayout(
                 "invoice",
                 input,
@@ -224,8 +227,9 @@ public sealed class ReportConversionGoldenTests
                     ["TotalAmount"] = "z",
                 }));
 
-        Assert.Equal(InvalidExcelFileReason.NoWorksheet, ex.Reason);
+        Assert.Equal(ProcessingStage.ReportDefinition, ex.Stage);
         Assert.Equal("invoice", ex.ReportCode);
+        Assert.IsType<InvalidExcelFileException>(ex.InnerException);
     }
 
     [Fact]
@@ -296,6 +300,62 @@ public sealed class ReportConversionGoldenTests
             Assert.Contains(
                 page.Commands.OfType<TextCommand>(),
                 t => t.Text == "サンプル" && t.Font.Bold);
+        }
+    }
+
+    [Fact]
+    public void 既定以外のIPdfRendererでもファイル出力は一時ファイル経由で確定する()
+    {
+        // ConvertToFileはSkiaPdfRenderer以外のIPdfRendererにも対応する(コンストラクタで差し替え可能)。
+        // 要件5.4(失敗時に不完全なファイルを残さない)はレンダラーの実装によらず保証されるべき。
+        using var fontResolver = new FontResolver(FontResolverOptions.AllowFallback());
+        using var converter = new ReportPdfConverter(
+            new OpenXmlWorkbookReader(),
+            new FileSystemReportDefinitionRepository(TestPaths.SampleReportsRoot),
+            new ReportModelBuilder(),
+            new CellSubstitutor(),
+            new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => FixedTimestamp),
+            new FakePdfRenderer(),
+            fontResolver);
+
+        var directory = Path.Combine(Path.GetTempPath(), "utsushi-test-" + Guid.NewGuid().ToString("N"));
+        var outputPath = Path.Combine(directory, "invoice.pdf");
+
+        try
+        {
+            converter.ConvertToFile(
+                "invoice",
+                TestPaths.SampleTemplate("invoice"),
+                new Dictionary<string, string>
+                {
+                    ["CustomerName"] = "株式会社テスト製作所 御中",
+                    ["InvoiceNo"] = "INV-2026-0417",
+                    ["TotalAmount"] = "¥2,153,800",
+                },
+                outputPath);
+
+            Assert.True(File.Exists(outputPath));
+            Assert.Equal(FakePdfRenderer.Content, File.ReadAllText(outputPath));
+            Assert.False(File.Exists(outputPath + ".utsushi-tmp"), "一時ファイルが残ってはいけない");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>SkiaPdfRenderer以外のIPdfRenderer実装を想定したテスト用の最小実装。</summary>
+    private sealed class FakePdfRenderer : IPdfRenderer
+    {
+        public const string Content = "fake-pdf-content";
+
+        public void Render(PagedLayout layout, Stream output)
+        {
+            var bytes = Encoding.UTF8.GetBytes(Content);
+            output.Write(bytes, 0, bytes.Length);
         }
     }
 

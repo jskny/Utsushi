@@ -53,6 +53,15 @@ public sealed class NumberFormatterTests
     }
 
     [Theory]
+    [InlineData(1234567.0, "#,##0,", "1,235")]
+    [InlineData(1234567.0, "#,##0.0,", "1,234.6")]
+    [InlineData(1234567890.0, "#,##0.00,,", "1,234.57")]
+    public void 末尾のカンマは小数点の有無によらず桁区切りスケーリングになる(double value, string format, string expected)
+    {
+        Assert.Equal(expected, NumberFormatter.FormatNumber(value, format));
+    }
+
+    [Theory]
     [InlineData(2026, 4, 1, "yyyy/mm/dd", "2026/04/01")]
     [InlineData(2026, 4, 1, "yyyy\"年\"m\"月\"d\"日\"", "2026年4月1日")]
     [InlineData(2026, 12, 25, "yy/m/d", "26/12/25")]

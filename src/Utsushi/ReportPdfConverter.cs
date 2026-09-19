@@ -6,6 +6,7 @@ using Utsushi.Layout;
 using Utsushi.Layout.Model;
 using Utsushi.Layout.Text;
 using Utsushi.Parsing;
+using Utsushi.Parsing.Model;
 using Utsushi.Rendering;
 using Utsushi.ReportDefinitions;
 using Utsushi.ReportDefinitions.Model;
@@ -124,15 +125,8 @@ public sealed class ReportPdfConverter : IDisposable
         using var buffer = new MemoryStream();
         _renderer.Render(layout, buffer);
 
-        var directory = Path.GetDirectoryName(Path.GetFullPath(outputPath));
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory!);
-        }
-
-        using var file = File.Create(outputPath);
         buffer.Position = 0;
-        buffer.CopyTo(file);
+        AtomicFileWriter.Write(outputPath, buffer, layout.ReportCode, layout.SheetName);
     }
 
     /// <summary>
@@ -171,10 +165,32 @@ public sealed class ReportPdfConverter : IDisposable
             definition.ReportCode,
             definition.SheetName);
 
-        var workbook = _workbookReader.Read(xlsxStream, readOptions);
+        var workbook = ReadWorkbook(xlsxStream, readOptions, definition);
         var report = _modelBuilder.Build(workbook, definition);
         var substituted = _substitutor.Apply(report, values);
         return _layoutEngine.Compute(substituted);
+    }
+
+    /// <summary>
+    /// ワークブックを読み取る。帳票定義が期待するシートが実在しない場合、Parsing層は
+    /// 「読み込み対象を絞り込んだ結果0件だった」ことしか知らないため <see cref="InvalidExcelFileException"/>
+    /// (Stage=Parsing)を投げるが、これは実際にはファイル自体の不正ではなく帳票定義と
+    /// ワークブックの構造不一致(要件1.4)である。呼び出し元が <see cref="UtsushiException.Stage"/>
+    /// で正しく分岐できるよう、ここで <see cref="ReportStructureMismatchException"/>(Stage=ReportDefinition)
+    /// に読み替える。
+    /// </summary>
+    private WorkbookModel ReadWorkbook(Stream xlsxStream, WorkbookReadOptions readOptions, ReportDefinition definition)
+    {
+        try
+        {
+            return _workbookReader.Read(xlsxStream, readOptions);
+        }
+        catch (InvalidExcelFileException ex) when (ex.Reason == InvalidExcelFileReason.NoWorksheet
+            && readOptions.SheetNameFilter is not null)
+        {
+            throw new ReportStructureMismatchException(
+                ex.Message, definition.ReportCode, definition.SheetName, innerException: ex);
+        }
     }
 
     public void Dispose() => _ownedResources?.Dispose();

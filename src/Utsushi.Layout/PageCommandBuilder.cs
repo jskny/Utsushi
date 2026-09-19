@@ -80,7 +80,9 @@ internal sealed class PageCommandBuilder
                     }
 
                     var anchorCell = _sheet.GetCell(merged.Anchor);
-                    EmitCell(merged.Anchor, anchorCell, mergedRect.Value);
+                    var borders = ResolveMergedBorders(
+                        merged.Range, anchorCell?.Style.Borders ?? BorderSet.None, rowIndex, columnIndex);
+                    EmitCell(merged.Anchor, anchorCell, mergedRect.Value, borders);
                     continue;
                 }
 
@@ -97,7 +99,7 @@ internal sealed class PageCommandBuilder
         return commands;
     }
 
-    private void EmitCell(CellAddress address, CellModel? cell, RectPt rect)
+    private void EmitCell(CellAddress address, CellModel? cell, RectPt rect, BorderSet? bordersOverride = null)
     {
         if (rect.IsEmpty)
         {
@@ -111,13 +113,80 @@ internal sealed class PageCommandBuilder
             _fills.Add(new FillRectCommand(rect, style.BackgroundColor));
         }
 
-        EmitBorders(rect, style.Borders);
+        EmitBorders(rect, bordersOverride ?? style.Borders);
 
         var text = cell?.DisplayValue;
         if (!string.IsNullOrEmpty(text))
         {
             EmitText(address, cell!, style, rect, text!);
         }
+    }
+
+    /// <summary>
+    /// 結合範囲の外周4辺の罫線を、範囲を構成する各セルから辺ごとに合成する。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Excelで結合範囲に外枠/格子を設定すると、右端の罫線は右端列の各セルのRight、
+    /// 下端の罫線は下端行の各セルのBottomに保持される。アンカー(左上)セルの罫線だけを
+    /// 見ると、アンカー以外にしか設定されていない罫線(右端・下端など)が欠落する。
+    /// </para>
+    /// <para>
+    /// 結合範囲が改ページをまたぐ場合、このページに見えているのは範囲の一部だけである。
+    /// 範囲の本当の上端/下端/左端/右端がこのページに含まれていない辺は、
+    /// 単なる改ページの切れ目でしかないため罫線を出さない(<paramref name="rowIndex"/>/
+    /// <paramref name="columnIndex"/> で判定する)。
+    /// </para>
+    /// 斜め罫線はExcel上もアンカーセルのものしか意味を持たないため、そのまま使う。
+    /// </remarks>
+    private BorderSet ResolveMergedBorders(
+        CellRange range,
+        BorderSet anchorBorders,
+        IReadOnlyDictionary<int, int> rowIndex,
+        IReadOnlyDictionary<int, int> columnIndex)
+    {
+        var left = columnIndex.ContainsKey(range.FirstColumn)
+            ? ResolveColumnEdge(range.FirstColumn, range.FirstRow, range.LastRow, b => b.Left)
+            : BorderEdge.None;
+        var right = columnIndex.ContainsKey(range.LastColumn)
+            ? ResolveColumnEdge(range.LastColumn, range.FirstRow, range.LastRow, b => b.Right)
+            : BorderEdge.None;
+        var top = rowIndex.ContainsKey(range.FirstRow)
+            ? ResolveRowEdge(range.FirstRow, range.FirstColumn, range.LastColumn, b => b.Top)
+            : BorderEdge.None;
+        var bottom = rowIndex.ContainsKey(range.LastRow)
+            ? ResolveRowEdge(range.LastRow, range.FirstColumn, range.LastColumn, b => b.Bottom)
+            : BorderEdge.None;
+
+        return new BorderSet(left, right, top, bottom, anchorBorders.DiagonalDown, anchorBorders.DiagonalUp);
+    }
+
+    private BorderEdge ResolveColumnEdge(int column, int firstRow, int lastRow, Func<BorderSet, BorderEdge> selector)
+    {
+        for (var row = firstRow; row <= lastRow; row++)
+        {
+            var edge = selector(_sheet.GetCell(new CellAddress(row, column))?.Style.Borders ?? BorderSet.None);
+            if (edge.IsVisible)
+            {
+                return edge;
+            }
+        }
+
+        return BorderEdge.None;
+    }
+
+    private BorderEdge ResolveRowEdge(int row, int firstColumn, int lastColumn, Func<BorderSet, BorderEdge> selector)
+    {
+        for (var column = firstColumn; column <= lastColumn; column++)
+        {
+            var edge = selector(_sheet.GetCell(new CellAddress(row, column))?.Style.Borders ?? BorderSet.None);
+            if (edge.IsVisible)
+            {
+                return edge;
+            }
+        }
+
+        return BorderEdge.None;
     }
 
     // ---------------------------------------------------------------------
