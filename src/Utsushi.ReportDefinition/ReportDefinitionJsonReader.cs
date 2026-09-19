@@ -145,12 +145,15 @@ public static class ReportDefinitionJsonReader
         return fields;
     }
 
-    private static OverflowBehavior ReadOverflow(
+    /// <summary>
+    /// はみ出し挙動を読む。未指定は <c>null</c>(= Excel 側のセル書式に従う)を返す。
+    /// </summary>
+    private static OverflowBehavior? ReadOverflow(
         JsonElement element, string reportCode, string? definitionPath, string path)
     {
         if (!element.TryGetProperty("overflow", out var value))
         {
-            return OverflowBehavior.Overflow;
+            return null;
         }
 
         if (value.ValueKind != JsonValueKind.String)

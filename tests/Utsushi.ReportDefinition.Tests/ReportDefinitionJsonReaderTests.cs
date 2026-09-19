@@ -61,12 +61,12 @@ public sealed class ReportDefinitionJsonReaderTests
         Assert.Equal(UnsupportedElementPolicy.Ignore, definition.UnsupportedElements);
         Assert.Null(definition.PrintAreaOverride);
 
-        // required / overflow を省略したフィールドは「任意・はみ出し許容」になる。
-        var json2 = ValidJson;
-        var d2 = ReportDefinitionJsonReader.Read(json2);
+        // required を省略したフィールドは任意扱い。
+        // overflow を省略した場合は null(= Excel 側のセル書式に従う)になる。
+        var d2 = ReportDefinitionJsonReader.Read(ValidJson);
         Assert.True(d2.TryGetField("IssueDate", out var issueDate));
         Assert.False(issueDate.Required);
-        Assert.Equal(OverflowBehavior.Overflow, issueDate.Overflow);
+        Assert.Null(issueDate.Overflow);
     }
 
     [Fact]

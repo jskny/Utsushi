@@ -39,12 +39,16 @@ public enum UnsupportedElementPolicy
 /// <param name="Key">置換キー(論理名)。セル番地ではなくこのキーで指定する。</param>
 /// <param name="Cell">置換先セル番地。</param>
 /// <param name="Required">必須かどうか。true の場合、値が渡されないとエラーになる(要件2.4)。</param>
-/// <param name="Overflow">セル幅に収まらない場合の挙動(要件2.5)。</param>
+/// <param name="Overflow">
+/// セル幅に収まらない場合の挙動(要件2.5)。
+/// <c>null</c> は帳票定義で未指定であることを表し、この場合は Excel 側のセル書式
+/// (<c>wrapText</c> / <c>shrinkToFit</c>)に従う。
+/// </param>
 public sealed record SubstitutionFieldDefinition(
     string Key,
     CellAddress Cell,
     bool Required,
-    OverflowBehavior Overflow);
+    OverflowBehavior? Overflow);
 
 /// <summary>
 /// 1帳票テンプレートに対応する帳票定義。

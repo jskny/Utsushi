@@ -19,7 +19,7 @@ internal static class TestReports
             PrintAreaOverride: null);
 
     public static SubstitutionFieldDefinition Field(
-        string key, string cell, bool required = false, OverflowBehavior overflow = OverflowBehavior.Overflow) =>
+        string key, string cell, bool required = false, OverflowBehavior? overflow = null) =>
         new(key, CellAddress.Parse(cell), required, overflow);
 
     /// <summary>指定セルに値と書式を持つシートを作る。</summary>

@@ -21,7 +21,7 @@ public sealed class ReportModelBuilderTests
         var list = new List<SubstitutionFieldDefinition>();
         foreach (var (key, cell) in fields)
         {
-            list.Add(new SubstitutionFieldDefinition(key, CellAddress.Parse(cell), false, OverflowBehavior.Overflow));
+            list.Add(new SubstitutionFieldDefinition(key, CellAddress.Parse(cell), false, Overflow: null));
         }
 
         return new ReportDefinitions.Model.ReportDefinition(

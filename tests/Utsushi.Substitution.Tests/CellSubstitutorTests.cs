@@ -118,6 +118,19 @@ public sealed class CellSubstitutorTests
     }
 
     [Fact]
+    public void はみ出し挙動が未指定ならLayoutへ渡さずセル書式に委ねる()
+    {
+        // overflow を指定しない置換対象セルは OverflowByCell に載せない。
+        // 載せてしまうと、Excel 側の wrapText / shrinkToFit を上書きしてしまうため。
+        var definition = Definition(Field("NoOverflow", "A1"));
+        var report = Report(definition, Sheet(("A1", "a", null)));
+
+        var result = _substitutor.Apply(report, new Dictionary<string, string> { ["NoOverflow"] = "x" });
+
+        Assert.Null(result.GetOverflowBehavior(CellAddress.Parse("A1")));
+    }
+
+    [Fact]
     public void 置換していないセルにははみ出し挙動を設定しない()
     {
         var definition = Definition(Field("Key", "A1", overflow: OverflowBehavior.Clip));

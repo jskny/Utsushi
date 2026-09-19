@@ -55,8 +55,12 @@ public sealed class CellSubstitutor : ICellSubstitutor
                 ? new CellModel(replacement, CellValueKind.Text, CellStyle.Default, replacement)
                 : existing.WithText(replacement);
 
-            // 置換したセルのはみ出し挙動を Layout レイヤーへ伝える(要件2.5)。
-            overflowByCell[field.Cell] = field.Overflow;
+            // 帳票定義がはみ出し挙動を明示している場合だけ Layout レイヤーへ伝える(要件2.5)。
+            // 未指定(null)のときは記録せず、Excel 側のセル書式を Layout がそのまま使う。
+            if (field.Overflow is { } overflow)
+            {
+                overflowByCell[field.Cell] = overflow;
+            }
         }
 
         var updatedSheet = sheet with { Cells = cells };
