@@ -18,4 +18,13 @@
     <NeutralLanguage>ja-JP</NeutralLanguage>
   </PropertyGroup>
 
+  <!--
+    テストから internal のレイアウト計算ユーティリティ等を直接検証できるようにする。
+    公開APIを増やさずにユニットテストの粒度を保つため。
+  -->
+  <ItemGroup Condition="'$(MSBuildProjectDirectory.Contains(src))' == 'true'">
+    <InternalsVisibleTo Include="$(MSBuildProjectName).Tests" />
+    <InternalsVisibleTo Include="Utsushi.Golden.Tests" />
+  </ItemGroup>
+
 </Project>

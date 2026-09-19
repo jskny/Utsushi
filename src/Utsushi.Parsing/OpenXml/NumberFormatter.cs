@@ -23,6 +23,9 @@ internal static class NumberFormatter
     /// <summary>Excel のシリアル値の基準日(1900年日付システム)。</summary>
     private static readonly DateTime SerialEpoch = new(1899, 12, 30, 0, 0, 0, DateTimeKind.Unspecified);
 
+    /// <summary>1日あたりのミリ秒数。</summary>
+    private const double MillisecondsPerDay = 24.0 * 60.0 * 60.0 * 1000.0;
+
     /// <summary>
     /// 組み込み数値書式ID(<c>numFmtId</c> 0〜49)のうち、対象帳票で現れうるものの書式文字列。
     /// ECMA-376 Part 1, 18.8.30 の既定値。
@@ -336,13 +339,13 @@ internal static class NumberFormatter
 
                 case 'h':
                 case 'H':
-                {
-                    var hour = hasAmPm ? ToTwelveHour(dateTime.Hour) : dateTime.Hour;
-                    sb.Append(token.Length <= 1
-                        ? hour.ToString(CultureInfo.InvariantCulture)
-                        : hour.ToString("00", CultureInfo.InvariantCulture));
-                    break;
-                }
+                    {
+                        var hour = hasAmPm ? ToTwelveHour(dateTime.Hour) : dateTime.Hour;
+                        sb.Append(token.Length <= 1
+                            ? hour.ToString(CultureInfo.InvariantCulture)
+                            : hour.ToString("00", CultureInfo.InvariantCulture));
+                        break;
+                    }
 
                 case 's':
                 case 'S':
@@ -448,7 +451,12 @@ internal static class NumberFormatter
         // Excel は 1900年をうるう年とみなす既知の不具合があり、シリアル値60が存在しない日付
         // (1900-02-29)に割り当てられている。60未満は1日ずらして補正する。
         var adjusted = serial < 60 ? serial + 1 : serial;
-        return SerialEpoch.AddDays(adjusted);
+
+        // シリアル値の小数部は時刻を表すが、double の丸め誤差でそのまま日数加算すると
+        // 1ティック足りずに「9:05:00」が「9:04:59.999…」になることがある。
+        // ミリ秒に丸めてから加算する(日数のままでは値が大きく、doubleの整数精度を超える)。
+        var totalMilliseconds = Math.Round(adjusted * MillisecondsPerDay, MidpointRounding.AwayFromZero);
+        return SerialEpoch.AddTicks((long)totalMilliseconds * TimeSpan.TicksPerMillisecond);
     }
 
     private static string FormatNumericSection(double value, string section)

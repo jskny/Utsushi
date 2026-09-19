@@ -172,19 +172,19 @@ internal static class Program
                         break;
 
                     case "--set" or "-s":
-                    {
-                        if (!TryTakeValue(args, ref i, "--set", out var pair, out error)) { return null; }
-
-                        var separator = pair!.IndexOf('=');
-                        if (separator <= 0)
                         {
-                            error = $"--set の指定は <キー>=<値> の形式で指定してください: '{pair}'";
-                            return null;
-                        }
+                            if (!TryTakeValue(args, ref i, "--set", out var pair, out error)) { return null; }
 
-                        values[pair.Substring(0, separator)] = pair.Substring(separator + 1);
-                        break;
-                    }
+                            var separator = pair!.IndexOf('=');
+                            if (separator <= 0)
+                            {
+                                error = $"--set の指定は <キー>=<値> の形式で指定してください: '{pair}'";
+                                return null;
+                            }
+
+                            values[pair.Substring(0, separator)] = pair.Substring(separator + 1);
+                            break;
+                        }
 
                     case "--allow-font-fallback":
                         allowFallback = true;

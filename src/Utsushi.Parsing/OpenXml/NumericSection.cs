@@ -23,6 +23,7 @@ internal sealed class NumericSection
     private readonly int _percentCount;
     private readonly double _scaleDivisor;
     private readonly bool _supported;
+    private readonly bool _literalOnly;
 
     private NumericSection(
         List<Token> tokens,
@@ -31,7 +32,8 @@ internal sealed class NumericSection
         bool useThousandsSeparator,
         int percentCount,
         double scaleDivisor,
-        bool supported)
+        bool supported,
+        bool literalOnly)
     {
         _tokens = tokens;
         _integerDigits = integerDigits;
@@ -40,6 +42,7 @@ internal sealed class NumericSection
         _percentCount = percentCount;
         _scaleDivisor = scaleDivisor;
         _supported = supported;
+        _literalOnly = literalOnly;
     }
 
     public static NumericSection Parse(string section)
@@ -63,13 +66,13 @@ internal sealed class NumericSection
             switch (c)
             {
                 case '"':
-                {
-                    var end = section.IndexOf('"', i + 1);
-                    var literal = end < 0 ? section.Substring(i + 1) : section.Substring(i + 1, end - i - 1);
-                    tokens.Add(Token.Literal(literal));
-                    i = end < 0 ? section.Length : end;
-                    break;
-                }
+                    {
+                        var end = section.IndexOf('"', i + 1);
+                        var literal = end < 0 ? section.Substring(i + 1) : section.Substring(i + 1, end - i - 1);
+                        tokens.Add(Token.Literal(literal));
+                        i = end < 0 ? section.Length : end;
+                        break;
+                    }
 
                 case '\\' when i + 1 < section.Length:
                     tokens.Add(Token.Literal(section[i + 1].ToString()));
@@ -77,29 +80,29 @@ internal sealed class NumericSection
                     break;
 
                 case '[':
-                {
-                    // [Red] や [$¥-411] 等。色・ロケール指定は表示に反映しない。
-                    var end = section.IndexOf(']', i);
-                    var content = end < 0 ? string.Empty : section.Substring(i + 1, end - i - 1);
-                    if (content.StartsWith("$", StringComparison.Ordinal))
                     {
-                        // [$記号-ロケールID] 形式。記号部分のみリテラルとして出力する。
-                        var symbol = content.Substring(1);
-                        var dash = symbol.IndexOf('-');
-                        if (dash >= 0)
+                        // [Red] や [$¥-411] 等。色・ロケール指定は表示に反映しない。
+                        var end = section.IndexOf(']', i);
+                        var content = end < 0 ? string.Empty : section.Substring(i + 1, end - i - 1);
+                        if (content.StartsWith("$", StringComparison.Ordinal))
                         {
-                            symbol = symbol.Substring(0, dash);
+                            // [$記号-ロケールID] 形式。記号部分のみリテラルとして出力する。
+                            var symbol = content.Substring(1);
+                            var dash = symbol.IndexOf('-');
+                            if (dash >= 0)
+                            {
+                                symbol = symbol.Substring(0, dash);
+                            }
+
+                            if (symbol.Length > 0)
+                            {
+                                tokens.Add(Token.Literal(symbol));
+                            }
                         }
 
-                        if (symbol.Length > 0)
-                        {
-                            tokens.Add(Token.Literal(symbol));
-                        }
+                        i = end < 0 ? section.Length : end;
+                        break;
                     }
-
-                    i = end < 0 ? section.Length : end;
-                    break;
-                }
 
                 case '_':
                     // _x は「文字xの幅の空白」。等幅近似として空白1つに置き換える。
@@ -191,17 +194,30 @@ internal sealed class NumericSection
             useThousands = section.Contains("#,#") || section.Contains("0,0") || section.Contains("#,0");
         }
 
-        if (!placeholderSeen)
-        {
-            supported = false;
-        }
+        // 数字プレースホルダを1つも持たない書式(例: ゼロセクションの "-")は、
+        // リテラルだけをそのまま表示する。これは Excel の挙動と同じ。
+        var literalOnly = !placeholderSeen;
 
         return new NumericSection(
-            tokens, integerDigits, decimalDigits, useThousands, percentCount, scaleDivisor, supported);
+            tokens, integerDigits, decimalDigits, useThousands, percentCount, scaleDivisor, supported, literalOnly);
     }
 
     public string Format(double value)
     {
+        if (_literalOnly)
+        {
+            var literals = new StringBuilder();
+            foreach (var token in _tokens)
+            {
+                if (token.Kind == TokenKind.Literal)
+                {
+                    literals.Append(token.Text);
+                }
+            }
+
+            return literals.ToString();
+        }
+
         if (!_supported)
         {
             return value.ToString("0.##########", CultureInfo.InvariantCulture);
