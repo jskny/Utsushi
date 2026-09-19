@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Utsushi.Cli\Utsushi.Cli.csproj" />
+    <ProjectReference Include="..\..\src\Utsushi\Utsushi.csproj" />
   </ItemGroup>
 
   <ItemGroup>

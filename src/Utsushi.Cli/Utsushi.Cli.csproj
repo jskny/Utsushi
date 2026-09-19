@@ -3,14 +3,14 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>Utsushi.Cli</RootNamespace>
-    <AssemblyName>utsushi</AssemblyName>
+    <AssemblyName>Utsushi.Cli</AssemblyName>
     <!-- この開発環境には .NET 5 ランタイムが無いため、実行可能プロジェクトには必須
          (docs/開発環境メモ.md 参照) -->
     <RollForward>LatestMajor</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Utsushi.Rendering\Utsushi.Rendering.csproj" />
+    <ProjectReference Include="..\Utsushi\Utsushi.csproj" />
   </ItemGroup>
 
 </Project>

@@ -7,6 +7,7 @@
     <Project Path="src/Utsushi.Rendering/Utsushi.Rendering.csproj" />
     <Project Path="src/Utsushi.ReportDefinition/Utsushi.ReportDefinition.csproj" />
     <Project Path="src/Utsushi.Substitution/Utsushi.Substitution.csproj" />
+    <Project Path="src/Utsushi/Utsushi.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Utsushi.Golden.Tests/Utsushi.Golden.Tests.csproj" />

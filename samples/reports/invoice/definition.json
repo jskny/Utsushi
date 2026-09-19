@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "reportCode": "invoice",
+  "sheetName": "請求書",
+  "toleranceMm": 0.5,
+  "unsupportedElements": "error",
+  "maxDigitWidthPx": 7,
+  "substitutionFields": [
+    { "key": "CustomerName", "cell": "A3",  "required": true,  "overflow": "shrink" },
+    { "key": "InvoiceNo",    "cell": "F3",  "required": true,  "overflow": "clip" },
+    { "key": "Subject",      "cell": "A5",  "required": false, "overflow": "shrink" },
+    { "key": "TotalAmount",  "cell": "C8",  "required": true,  "overflow": "clip" },
+    { "key": "Remarks",      "cell": "A29", "required": false, "overflow": "wrap" }
+  ]
+}
