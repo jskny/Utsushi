@@ -47,8 +47,16 @@ inclusion: always
 > **既知の制約(SkiaSharp / PDFのフォント)**: NuGetで配布される SkiaSharp のネイティブビルドは、
 > PDF出力時に**フォントのサブセット化を行わず、使用フォントを丸ごと埋め込む**(2.88系・3.x系とも実測確認)。
 > 日本語フォントは数MBあるため、1ページの帳票でも出力PDFが4MB前後になる。
-> 配布サイズが問題になる場合は `PdfTextRendering.Outline`(文字のアウトライン化。同帳票で91KB、
-> 見た目は同一だがPDF内検索は不可)を選べる。詳細は `.kiro/specs/excel-report-pdf-conversion/design.md` を参照。
+> **PDF内の文字列検索を維持するため、フォント埋め込みを既定とし、このサイズは許容する方針**。
+> サイズを優先する場合は `PdfTextRendering.Outline`(文字のアウトライン化。同帳票で91KB、
+> 見た目は同一だがPDF内検索は不可)を選べる。
+>
+> **太字/斜体の注意**: SkiaSharp に書体レベルで太字/斜体を合成させると、PDFが Type 3 フォントになり
+> 文字列検索ができなくなる。Utsushi は通常字形を埋め込んで描画時に装飾を合成することで回避している。
+> 実字形の太字フォントファイルがある場合は `FontResolverOptions.FontFiles` に
+> `ファミリ名:bold` のキーで登録すれば、合成せずにそれを使う。
+>
+> 詳細は `.kiro/specs/excel-report-pdf-conversion/design.md`「Rendering レイヤー」を参照。
 
 商用配布物(Interop、EPPlus 5以降の商用ライセンス、Aspose、Spire.PDF等)は候補から除外する。
 
