@@ -10,8 +10,9 @@
 - `.kiro/steering/` — 常時適用される方針(製品概要・技術方針・プロジェクト構成)
 - `.kiro/specs/excel-report-pdf-conversion/` — 中核機能の要件定義書・設計書・実装タスクリスト
 - `.claude/agents/` — レビュー・テスト作成用サブエージェント
+- `docs/開発環境メモ.md` — Claude Code on the web実行環境で実際に裏取りした環境固有の注意点(SDKセットアップ、`pkill -f`の自己マッチ問題など)
 
-実装に着手する際は、`.kiro/specs/excel-report-pdf-conversion/tasks.md` のタスクを順に消化すること。
+実装に着手する際は、`.kiro/specs/excel-report-pdf-conversion/tasks.md` のタスクを順に消化すること。実装中に環境起因と思われるエラーに遭遇したら、まず `docs/開発環境メモ.md` を確認する。
 
 ## 開発の進め方(spec駆動)
 
