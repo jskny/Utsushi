@@ -56,6 +56,85 @@ public sealed class ReportLayoutEngineTests
     }
 
     [Fact]
+    public void 複数の印刷範囲はそれぞれ別のページ群になる()
+    {
+        // 要件3.6: 範囲を包含する矩形にまとめず、定義順に独立したページ群として出力する。
+        var sheet = UniformSheet(
+            rows: 10, columns: 4,
+            pageSetup: NoMarginA4(printAreas: new[]
+            {
+                CellRange.Parse("A1:B2"),
+                CellRange.Parse("C8:D9"),
+            }));
+
+        var layout = Compute(sheet);
+
+        Assert.Equal(2, layout.PageCount);
+
+        var first = Texts(layout.Pages[0]).Select(t => t.Text).ToHashSet();
+        var second = Texts(layout.Pages[1]).Select(t => t.Text).ToHashSet();
+
+        Assert.Equal(new[] { "A1", "A2", "B1", "B2" }.ToHashSet(), first);
+        Assert.Equal(new[] { "C8", "C9", "D8", "D9" }.ToHashSet(), second);
+    }
+
+    [Fact]
+    public void 複数の印刷範囲の間にあるセルは出力されない()
+    {
+        var sheet = UniformSheet(
+            rows: 6, columns: 2,
+            pageSetup: NoMarginA4(printAreas: new[]
+            {
+                CellRange.Parse("A1:B2"),
+                CellRange.Parse("A5:B6"),
+            }));
+
+        var layout = Compute(sheet);
+        var allTexts = layout.Pages.SelectMany(Texts).Select(t => t.Text).ToHashSet();
+
+        // 3〜4行目はどちらの印刷範囲にも含まれない
+        Assert.DoesNotContain("A3", allTexts);
+        Assert.DoesNotContain("A4", allTexts);
+        Assert.Contains("A1", allTexts);
+        Assert.Contains("A5", allTexts);
+    }
+
+    [Fact]
+    public void 複数の印刷範囲でもページ番号は通しで振られる()
+    {
+        // 1つ目の範囲が2ページに分かれ、2つ目の範囲が1ページになる構成
+        var sheet = UniformSheet(
+            rows: 30, columns: 1, rowHeightPt: 100.0,
+            pageSetup: NoMarginA4(printAreas: new[]
+            {
+                CellRange.Parse("A1:A20"),
+                CellRange.Parse("A25:A26"),
+            }));
+
+        var layout = Compute(sheet);
+
+        Assert.Equal(4, layout.PageCount);
+        Assert.Equal(new[] { 1, 2, 3, 4 }, layout.Pages.Select(p => p.PageNumber));
+    }
+
+    [Fact]
+    public void 帳票定義の印刷範囲指定は複数指定より優先される()
+    {
+        var sheet = UniformSheet(
+            rows: 10, columns: 4,
+            pageSetup: NoMarginA4(printAreas: new[]
+            {
+                CellRange.Parse("A1:B2"),
+                CellRange.Parse("C8:D9"),
+            }));
+
+        var layout = Compute(sheet, Definition(printAreaOverride: CellRange.Parse("A1:A1")));
+
+        var page = Assert.Single(layout.Pages);
+        Assert.Equal("A1", Assert.Single(Texts(page)).Text);
+    }
+
+    [Fact]
     public void 印刷範囲もセルも無ければエラーになる()
     {
         var sheet = UniformSheet(rows: 0, columns: 0, pageSetup: NoMarginA4());

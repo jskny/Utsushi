@@ -89,6 +89,69 @@ public sealed record PageScaling(int ScalePercent, int? FitToWidth, int? FitToHe
 }
 
 /// <summary>
+/// ページヘッダー/フッターの設定(要件3.7〜3.9)。
+/// </summary>
+/// <remarks>
+/// 各文字列は Excel の書式コード(<c>&amp;L</c>/<c>&amp;C</c>/<c>&amp;R</c> によるセクション指定、
+/// <c>&amp;P</c> ページ番号など)を含んだ生の値。解釈は Layout レイヤーが行う。
+/// </remarks>
+/// <param name="OddHeader">奇数ページ(既定)のヘッダー。</param>
+/// <param name="OddFooter">奇数ページ(既定)のフッター。</param>
+/// <param name="EvenHeader">偶数ページのヘッダー。<paramref name="DifferentOddEven"/> が true のときに使う。</param>
+/// <param name="EvenFooter">偶数ページのフッター。</param>
+/// <param name="FirstHeader">先頭ページのヘッダー。<paramref name="DifferentFirst"/> が true のときに使う。</param>
+/// <param name="FirstFooter">先頭ページのフッター。</param>
+/// <param name="DifferentOddEven">奇数/偶数ページで別の指定を使うかどうか。</param>
+/// <param name="DifferentFirst">先頭ページだけ別の指定を使うかどうか。</param>
+/// <param name="ScaleWithDocument">拡大縮小率をヘッダー/フッターにも適用するかどうか。</param>
+public sealed record HeaderFooterModel(
+    string? OddHeader,
+    string? OddFooter,
+    string? EvenHeader,
+    string? EvenFooter,
+    string? FirstHeader,
+    string? FirstFooter,
+    bool DifferentOddEven,
+    bool DifferentFirst,
+    bool ScaleWithDocument)
+{
+    /// <summary>ヘッダー/フッターなし。</summary>
+    public static HeaderFooterModel None { get; } =
+        new(null, null, null, null, null, null, false, false, true);
+
+    /// <summary>ヘッダーもフッターも設定されていないかどうか。</summary>
+    public bool IsEmpty =>
+        string.IsNullOrEmpty(OddHeader) && string.IsNullOrEmpty(OddFooter)
+        && string.IsNullOrEmpty(EvenHeader) && string.IsNullOrEmpty(EvenFooter)
+        && string.IsNullOrEmpty(FirstHeader) && string.IsNullOrEmpty(FirstFooter);
+
+    /// <summary>指定ページ(1始まり)に適用するヘッダーを返す。</summary>
+    public string? GetHeader(int pageNumber) =>
+        Select(pageNumber, FirstHeader, EvenHeader, OddHeader);
+
+    /// <summary>指定ページ(1始まり)に適用するフッターを返す。</summary>
+    public string? GetFooter(int pageNumber) =>
+        Select(pageNumber, FirstFooter, EvenFooter, OddFooter);
+
+    private string? Select(int pageNumber, string? first, string? even, string? odd)
+    {
+        // 「先頭ページのみ別指定」が優先。次に奇数/偶数の別指定。
+        // 該当する指定が空の場合、Excel はそのページのヘッダー/フッターを表示しない。
+        if (DifferentFirst && pageNumber == 1)
+        {
+            return first;
+        }
+
+        if (DifferentOddEven && pageNumber % 2 == 0)
+        {
+            return even;
+        }
+
+        return odd;
+    }
+}
+
+/// <summary>
 /// シートのページ設定。要件1.3 が求める項目を保持する。
 /// </summary>
 public sealed record PageSetupModel(
@@ -100,7 +163,8 @@ public sealed record PageSetupModel(
     IReadOnlyList<int> ManualRowBreaks,
     IReadOnlyList<int> ManualColumnBreaks,
     PrintTitles PrintTitles,
-    PageOrder PageOrder)
+    PageOrder PageOrder,
+    HeaderFooterModel HeaderFooter)
 {
     /// <summary>ページ設定が未指定のシート向けの既定値。</summary>
     public static PageSetupModel Default { get; } = new(
@@ -112,7 +176,8 @@ public sealed record PageSetupModel(
         new List<int>(),
         new List<int>(),
         PrintTitles.None,
-        PageOrder.DownThenOver);
+        PageOrder.DownThenOver,
+        HeaderFooterModel.None);
 
     /// <summary>向きを適用した用紙の実寸(ポイント)。</summary>
     public (double WidthPt, double HeightPt) PaperSizePt => Paper.GetSize(Orientation);

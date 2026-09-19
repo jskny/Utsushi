@@ -1,0 +1,236 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Utsushi.Layout.HeaderFooter;
+using Utsushi.Layout.Model;
+using Utsushi.Layout.Text;
+using Utsushi.Parsing.Model;
+using Utsushi.ReportDefinitions.Model;
+using Xunit;
+using static Utsushi.Layout.Tests.LayoutFixtures;
+
+namespace Utsushi.Layout.Tests;
+
+/// <summary>
+/// ヘッダー/フッターの書式コード展開と配置の検証(要件3.7〜3.9)。
+/// </summary>
+public sealed class HeaderFooterTests
+{
+    private static readonly DateTime Timestamp = new(2026, 4, 20, 14, 5, 0);
+
+    private static HeaderFooterContext Context(int pageNumber = 1, int totalPages = 3) =>
+        new(pageNumber, totalPages, "請求書", "invoice", Timestamp, FontStyle.Default);
+
+    private static IReadOnlyList<HeaderFooterRun> RunsOf(
+        IReadOnlyList<HeaderFooterPart> parts, HeaderFooterSection section) =>
+        parts.SingleOrDefault(p => p.Section == section)?.Runs ?? Array.Empty<HeaderFooterRun>();
+
+    private static string TextOf(IReadOnlyList<HeaderFooterPart> parts, HeaderFooterSection section) =>
+        string.Concat(RunsOf(parts, section).Select(r => r.Text));
+
+    // -- 書式コードの展開 -------------------------------------------------
+
+    [Fact]
+    public void セクション指定で左中央右に振り分ける()
+    {
+        var parts = HeaderFooterParser.Parse("&L左&C中央&R右", Context());
+
+        Assert.Equal("左", TextOf(parts, HeaderFooterSection.Left));
+        Assert.Equal("中央", TextOf(parts, HeaderFooterSection.Center));
+        Assert.Equal("右", TextOf(parts, HeaderFooterSection.Right));
+    }
+
+    [Fact]
+    public void セクション指定が無ければ中央に配置する()
+    {
+        var parts = HeaderFooterParser.Parse("セクション指定なし", Context());
+
+        var part = Assert.Single(parts);
+        Assert.Equal(HeaderFooterSection.Center, part.Section);
+    }
+
+    [Fact]
+    public void ページ番号と総ページ数を展開する()
+    {
+        var parts = HeaderFooterParser.Parse("&C&P / &N ページ", Context(pageNumber: 2, totalPages: 5));
+
+        Assert.Equal("2 / 5 ページ", TextOf(parts, HeaderFooterSection.Center));
+    }
+
+    [Fact]
+    public void 日付と時刻とシート名を展開する()
+    {
+        var parts = HeaderFooterParser.Parse("&L&D &T&R&A", Context());
+
+        Assert.Equal("2026/04/20 14:05", TextOf(parts, HeaderFooterSection.Left));
+        Assert.Equal("請求書", TextOf(parts, HeaderFooterSection.Right));
+    }
+
+    [Fact]
+    public void 二重のアンパサンドは文字として扱う()
+    {
+        var parts = HeaderFooterParser.Parse("&CA&&B", Context());
+
+        Assert.Equal("A&B", TextOf(parts, HeaderFooterSection.Center));
+    }
+
+    [Fact]
+    public void 太字と斜体の切り替えが書式に反映される()
+    {
+        var parts = HeaderFooterParser.Parse("&C通常&B太字&B通常に戻る", Context());
+
+        var runs = RunsOf(parts, HeaderFooterSection.Center);
+
+        Assert.Equal(3, runs.Count);
+        Assert.False(runs[0].Font.Bold);
+        Assert.True(runs[1].Font.Bold);
+        Assert.False(runs[2].Font.Bold);
+        Assert.Equal("太字", runs[1].Text);
+    }
+
+    [Fact]
+    public void フォント名とサイズの指定が反映される()
+    {
+        var parts = HeaderFooterParser.Parse("&C&\"MS Mincho,Bold\"&14見出し", Context());
+
+        var run = Assert.Single(RunsOf(parts, HeaderFooterSection.Center));
+
+        Assert.Equal("MS Mincho", run.Font.Name);
+        Assert.True(run.Font.Bold);
+        Assert.Equal(14.0, run.Font.SizePt);
+    }
+
+    [Fact]
+    public void 未対応の書式コードは読み飛ばす()
+    {
+        // &G(画像)と &Krrggbb(文字色)は対象外。例外にせず、文字列部分だけを残す。
+        var parts = HeaderFooterParser.Parse("&C&G&KFF0000テキスト", Context());
+
+        Assert.Equal("テキスト", TextOf(parts, HeaderFooterSection.Center));
+    }
+
+    [Fact]
+    public void 空の指定では何も返さない()
+    {
+        Assert.Empty(HeaderFooterParser.Parse(null, Context()));
+        Assert.Empty(HeaderFooterParser.Parse(string.Empty, Context()));
+        Assert.Empty(HeaderFooterParser.Parse("&L&C&R", Context()));
+    }
+
+    // -- ページごとの指定の選択(要件3.9) --------------------------------
+
+    [Fact]
+    public void 先頭ページのみ別指定が選択される()
+    {
+        var model = new HeaderFooterModel(
+            OddHeader: "通常", OddFooter: null,
+            EvenHeader: null, EvenFooter: null,
+            FirstHeader: "先頭のみ", FirstFooter: null,
+            DifferentOddEven: false, DifferentFirst: true, ScaleWithDocument: true);
+
+        Assert.Equal("先頭のみ", model.GetHeader(1));
+        Assert.Equal("通常", model.GetHeader(2));
+    }
+
+    [Fact]
+    public void 奇数偶数で別指定が選択される()
+    {
+        var model = new HeaderFooterModel(
+            OddHeader: "奇数", OddFooter: null,
+            EvenHeader: "偶数", EvenFooter: null,
+            FirstHeader: null, FirstFooter: null,
+            DifferentOddEven: true, DifferentFirst: false, ScaleWithDocument: true);
+
+        Assert.Equal("奇数", model.GetHeader(1));
+        Assert.Equal("偶数", model.GetHeader(2));
+        Assert.Equal("奇数", model.GetHeader(3));
+    }
+
+    [Fact]
+    public void 別指定が無効なら常に通常の指定を使う()
+    {
+        var model = new HeaderFooterModel(
+            OddHeader: "通常", OddFooter: null,
+            EvenHeader: "偶数", EvenFooter: null,
+            FirstHeader: "先頭", FirstFooter: null,
+            DifferentOddEven: false, DifferentFirst: false, ScaleWithDocument: true);
+
+        Assert.Equal("通常", model.GetHeader(1));
+        Assert.Equal("通常", model.GetHeader(2));
+    }
+
+    // -- レイアウトへの反映 -----------------------------------------------
+
+    [Fact]
+    public void ヘッダーは上余白にフッターは下余白に配置される()
+    {
+        var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => Timestamp);
+
+        var pageSetup = PageSetupModel.Default with
+        {
+            HeaderFooter = new HeaderFooterModel(
+                "&Cヘッダー", "&Cフッター", null, null, null, null, false, false, true),
+        };
+
+        var sheet = UniformSheet(rows: 2, columns: 2, pageSetup: pageSetup);
+        var layout = engine.Compute(ReportModel.Create(Definition(), sheet));
+
+        var page = Assert.Single(layout.Pages);
+        var texts = page.Commands.OfType<TextCommand>().ToList();
+
+        var header = texts.Single(t => t.Text == "ヘッダー");
+        var footer = texts.Single(t => t.Text == "フッター");
+        var body = texts.Single(t => t.Text == "A1");
+
+        // ヘッダーは本文より上、フッターは本文より下
+        Assert.True(header.Origin.Y < body.Origin.Y, "ヘッダーは本文より上にあるはず");
+        Assert.True(footer.Origin.Y > body.Origin.Y, "フッターは本文より下にあるはず");
+
+        // ヘッダーは上余白の中(本文の開始位置より上)
+        Assert.True(
+            header.Origin.Y < pageSetup.Margins.TopPt + 20,
+            $"ヘッダーは上余白内にあるはず (Y={header.Origin.Y}, 上余白={pageSetup.Margins.TopPt})");
+
+        // フッターは下余白の中
+        Assert.True(
+            footer.Origin.Y > page.HeightPt - pageSetup.Margins.BottomPt - 20,
+            $"フッターは下余白内にあるはず (Y={footer.Origin.Y})");
+    }
+
+    [Fact]
+    public void ヘッダーフッターは全ページに出力され総ページ数が展開される()
+    {
+        var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => Timestamp);
+
+        var pageSetup = NoMarginA4() with
+        {
+            Margins = new PageMargins(20, 20, 40, 40, 10, 10),
+            HeaderFooter = new HeaderFooterModel(
+                null, "&C&P/&N", null, null, null, null, false, false, true),
+        };
+
+        // 3ページに分かれる分量
+        var sheet = UniformSheet(rows: 30, columns: 1, rowHeightPt: 100.0, pageSetup: pageSetup);
+        var layout = engine.Compute(ReportModel.Create(Definition(), sheet));
+
+        Assert.True(layout.PageCount >= 2);
+
+        foreach (var page in layout.Pages)
+        {
+            var texts = page.Commands.OfType<TextCommand>().Select(t => t.Text).ToList();
+            Assert.Contains($"{page.PageNumber}/{layout.PageCount}", texts);
+        }
+    }
+
+    [Fact]
+    public void ヘッダーフッターが未設定なら描画命令を追加しない()
+    {
+        var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => Timestamp);
+        var sheet = UniformSheet(rows: 1, columns: 1, pageSetup: NoMarginA4());
+
+        var page = Assert.Single(engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+
+        // 本文の1セルぶんのテキストだけ
+        Assert.Single(page.Commands.OfType<TextCommand>());
+    }
+}

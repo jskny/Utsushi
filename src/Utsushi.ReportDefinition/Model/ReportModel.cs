@@ -13,14 +13,18 @@ namespace Utsushi.ReportDefinitions.Model;
 /// 置換を適用したセルの、はみ出し時の挙動。Layout レイヤーが参照する(要件2.5)。
 /// 置換対象でないセルは含まれない。
 /// </param>
+/// <param name="DefaultFont">
+/// ブックの標準フォント。セル書式を持たない描画(ヘッダー/フッター)の既定として使う。
+/// </param>
 public sealed record ReportModel(
     ReportDefinition Definition,
     SheetModel Sheet,
-    IReadOnlyDictionary<CellAddress, OverflowBehavior> OverflowByCell)
+    IReadOnlyDictionary<CellAddress, OverflowBehavior> OverflowByCell,
+    FontStyle DefaultFont)
 {
     /// <summary>置換をまだ適用していない初期状態のモデルを作る。</summary>
-    public static ReportModel Create(ReportDefinition definition, SheetModel sheet) =>
-        new(definition, sheet, new Dictionary<CellAddress, OverflowBehavior>());
+    public static ReportModel Create(ReportDefinition definition, SheetModel sheet, FontStyle? defaultFont = null) =>
+        new(definition, sheet, new Dictionary<CellAddress, OverflowBehavior>(), defaultFont ?? FontStyle.Default);
 
     /// <summary>指定セルのはみ出し挙動を返す。置換対象でない場合は null。</summary>
     public OverflowBehavior? GetOverflowBehavior(CellAddress address) =>

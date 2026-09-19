@@ -380,8 +380,33 @@ public sealed class OpenXmlWorkbookReader : IWorkbookReader
         var printTitles = DefinedNameParser.ParsePrintTitles(
             sheetNames is not null && sheetNames.TryGetValue(DefinedNameParser.PrintTitlesName, out var titles) ? titles : null);
 
+        var headerFooter = ReadHeaderFooter(worksheet);
+
         return new PageSetupModel(
-            paper, orientation, pageMargins, scaling, printAreas, rowBreaks, columnBreaks, printTitles, pageOrder);
+            paper, orientation, pageMargins, scaling, printAreas, rowBreaks, columnBreaks,
+            printTitles, pageOrder, headerFooter);
+    }
+
+    /// <summary>ページヘッダー/フッターの設定を読み取る(要件3.7〜3.9)。</summary>
+    private static HeaderFooterModel ReadHeaderFooter(X.Worksheet worksheet)
+    {
+        var headerFooter = worksheet.GetFirstChild<X.HeaderFooter>();
+        if (headerFooter is null)
+        {
+            return HeaderFooterModel.None;
+        }
+
+        return new HeaderFooterModel(
+            headerFooter.OddHeader?.Text,
+            headerFooter.OddFooter?.Text,
+            headerFooter.EvenHeader?.Text,
+            headerFooter.EvenFooter?.Text,
+            headerFooter.FirstHeader?.Text,
+            headerFooter.FirstFooter?.Text,
+            headerFooter.DifferentOddEven?.Value ?? false,
+            headerFooter.DifferentFirst?.Value ?? false,
+            // scaleWithDoc の既定は true(Excel の既定動作)。
+            headerFooter.ScaleWithDoc?.Value ?? true);
     }
 
     private static PageScaling ReadScaling(X.PageSetup? setup, X.SheetProperties? sheetProperties)

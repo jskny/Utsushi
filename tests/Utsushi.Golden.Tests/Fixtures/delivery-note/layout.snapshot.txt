@@ -724,6 +724,10 @@ text   origin=(63.53,780.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=n
 text   origin=(78.15,780.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 046"
 text   origin=(300.9,780.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="12"
 text   origin=(320.77,780.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(511.88,31.28) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="納品書"
+text   origin=(50.4,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="2026/04/20"
+text   origin=(264.64,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="1 / 2 ページ"
+text   origin=(499.56,817.87) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="サンプル"
 
 ## page 2 paper=A4/Portrait size=595.28x841.89 scale=1 rows=54-90 cols=1-5
 fill   rect=[50.4,149.5 26.25x13.5] color=#FFDCE6F1
@@ -1269,3 +1273,7 @@ text   origin=(63.53,618.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=n
 text   origin=(78.15,618.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 080"
 text   origin=(300.9,618.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
 text   origin=(320.77,618.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(511.88,31.28) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="納品書"
+text   origin=(50.4,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="2026/04/20"
+text   origin=(264.64,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="2 / 2 ページ"
+text   origin=(499.56,817.87) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="サンプル"

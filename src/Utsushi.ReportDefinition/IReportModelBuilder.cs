@@ -52,7 +52,7 @@ public sealed class ReportModelBuilder : IReportModelBuilder
         ValidateSubstitutionCells(sheet, definition);
         ValidatePrintArea(sheet, definition);
 
-        return ReportModel.Create(definition, sheet);
+        return ReportModel.Create(definition, sheet, workbook.DefaultFont);
     }
 
     /// <summary>

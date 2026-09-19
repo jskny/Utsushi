@@ -33,6 +33,7 @@ internal static class Program
 
         GenerateInvoice(Path.Combine(outputRoot, "invoice"));
         GenerateDeliveryNote(Path.Combine(outputRoot, "delivery-note"));
+        GenerateReceipt(Path.Combine(outputRoot, "receipt"));
 
         Console.WriteLine($"帳票サンプルを生成しました: {Path.GetFullPath(outputRoot)}");
         return 0;
@@ -173,6 +174,10 @@ internal static class Program
             // 1〜7行目(表題・宛先・明細見出し)を各ページの先頭に繰り返す。
             PrintTitleRows = "$1:$7",
             PrintArea = "$A$1:$E$90",
+
+            // 複数ページになる帳票なので、フッターにページ番号を入れる。
+            OddHeader = "&R&A",
+            OddFooter = "&L&D&C&P / &N ページ&R&\"MS PGothic,Bold\"サンプル",
         };
 
         builder.SetColumnWidth(1, 5.0);
@@ -214,6 +219,64 @@ internal static class Program
         }
 
         builder.Save(Path.Combine(directory, "template.xlsx"), Create());
+    }
+
+    /// <summary>
+    /// 領収書サンプル: 1シートに「本紙」と「控え」を別々の印刷範囲として持つ帳票。
+    /// 複数の印刷範囲(要件3.6)がそれぞれ独立したページになることを検証する。
+    /// </summary>
+    private static void GenerateReceipt(string directory)
+    {
+        Directory.CreateDirectory(directory);
+
+        var builder = new SpreadsheetBuilder("領収書")
+        {
+            // 本紙(1〜13行目)と控え(16〜28行目)を別々の印刷範囲にする。
+            // 範囲の間にある14〜15行目(区切りの注記)は印刷されない。
+            PrintArea = "$A$1:$D$13,$A$16:$D$28",
+            OddFooter = "&C- &P -",
+        };
+
+        builder.SetColumnWidth(1, 14.0);
+        builder.SetColumnWidth(2, 24.0);
+        builder.SetColumnWidth(3, 14.0);
+        builder.SetColumnWidth(4, 16.0);
+
+        // 本紙と控えは同じ構成なので、開始行だけ変えて2回書く。
+        WriteReceiptBlock(builder, startRow: 1, title: "領 収 書");
+        WriteReceiptBlock(builder, startRow: 16, title: "領 収 書(控)");
+
+        // 印刷範囲の外に置く注記。PDFに出てはいけない。
+        builder.SetText(14, 1, "※この行は印刷範囲外のため出力されない", Style.Note);
+
+        builder.Save(Path.Combine(directory, "template.xlsx"), Create());
+    }
+
+    private static void WriteReceiptBlock(SpreadsheetBuilder builder, int startRow, string title)
+    {
+        builder.SetRowHeight(startRow, 30.0);
+
+        builder.Merge($"A{startRow}:D{startRow}");
+        builder.SetText(startRow, 1, title, Style.Title);
+
+        builder.Merge($"A{startRow + 2}:B{startRow + 2}");
+        builder.SetText(startRow + 2, 1, "株式会社サンプル商事 様", Style.CustomerName);
+
+        builder.SetText(startRow + 2, 3, "発行日", Style.LabelRight);
+        builder.SetNumber(startRow + 2, 4, ToSerial(new DateTime(2026, 4, 20)), Style.DateValue);
+
+        builder.SetText(startRow + 4, 1, "金額", Style.SectionLabel);
+        builder.Merge($"B{startRow + 4}:D{startRow + 4}");
+        builder.SetNumber(startRow + 4, 2, 0, Style.TotalCurrency);
+
+        builder.SetText(startRow + 6, 1, "但し", Style.SectionLabel);
+        builder.Merge($"B{startRow + 6}:D{startRow + 6}");
+        builder.SetText(startRow + 6, 2, "サンプル代金として", Style.TableText);
+
+        builder.SetText(startRow + 8, 1, "上記正に領収いたしました。", Style.Value);
+
+        builder.Merge($"C{startRow + 10}:D{startRow + 11}");
+        builder.SetText(startRow + 10, 3, "株式会社Utsushi\n東京都サンプル区1-2-3", Style.Note);
     }
 
     /// <summary>Excel のシリアル値(1900年日付システム)へ変換する。</summary>

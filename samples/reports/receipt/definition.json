@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "reportCode": "receipt",
+  "sheetName": "領収書",
+  "toleranceMm": 0.5,
+  "unsupportedElements": "error",
+  "maxDigitWidthPx": 7,
+  "substitutionFields": [
+    { "key": "CustomerName", "cell": "A3",  "required": true,  "overflow": "shrink" },
+    { "key": "Amount",       "cell": "B5",  "required": true,  "overflow": "clip" },
+    { "key": "Description",  "cell": "B7",  "required": false },
+    { "key": "CopyCustomerName", "cell": "A18", "required": true,  "overflow": "shrink" },
+    { "key": "CopyAmount",       "cell": "B20", "required": true,  "overflow": "clip" },
+    { "key": "CopyDescription",  "cell": "B22", "required": false }
+  ]
+}

@@ -30,9 +30,23 @@ internal sealed class SpreadsheetBuilder
 
     public string SheetName { get; }
 
+    /// <summary>印刷範囲。複数指定する場合はカンマ区切り(例: "$A$1:$F$20,$A$22:$F$41")。</summary>
     public string? PrintArea { get; set; }
 
     public string? PrintTitleRows { get; set; }
+
+    /// <summary>ヘッダーの書式コード(例: "&amp;L&amp;D&amp;R&amp;A")。</summary>
+    public string? OddHeader { get; set; }
+
+    /// <summary>フッターの書式コード(例: "&amp;C&amp;P / &amp;N")。</summary>
+    public string? OddFooter { get; set; }
+
+    /// <summary>先頭ページだけ別のヘッダー/フッターを使うかどうか。</summary>
+    public bool DifferentFirstPage { get; set; }
+
+    public string? FirstHeader { get; set; }
+
+    public string? FirstFooter { get; set; }
 
     public uint PaperSizeCode { get; set; } = 9; // A4
 
@@ -164,6 +178,12 @@ internal sealed class SpreadsheetBuilder
             PageOrder = PageOrderValues.DownThenOver,
         });
 
+        var headerFooter = BuildHeaderFooter();
+        if (headerFooter is not null)
+        {
+            worksheet.Append(headerFooter);
+        }
+
         if (_manualRowBreaks.Count > 0)
         {
             var rowBreaks = new RowBreaks
@@ -181,6 +201,42 @@ internal sealed class SpreadsheetBuilder
         }
 
         return worksheet;
+    }
+
+    private HeaderFooter? BuildHeaderFooter()
+    {
+        if (OddHeader is null && OddFooter is null && FirstHeader is null && FirstFooter is null)
+        {
+            return null;
+        }
+
+        var headerFooter = new HeaderFooter();
+        if (DifferentFirstPage)
+        {
+            headerFooter.DifferentFirst = true;
+        }
+
+        if (OddHeader is not null)
+        {
+            headerFooter.Append(new OddHeader(OddHeader));
+        }
+
+        if (OddFooter is not null)
+        {
+            headerFooter.Append(new OddFooter(OddFooter));
+        }
+
+        if (FirstHeader is not null)
+        {
+            headerFooter.Append(new FirstHeader(FirstHeader));
+        }
+
+        if (FirstFooter is not null)
+        {
+            headerFooter.Append(new FirstFooter(FirstFooter));
+        }
+
+        return headerFooter;
     }
 
     private SheetData BuildSheetData()
@@ -263,11 +319,17 @@ internal sealed class SpreadsheetBuilder
 
         if (PrintArea is { } printArea)
         {
+            // 複数の印刷範囲は、範囲ごとにシート名を付けてカンマで連結する
+            // ("'納品書'!$A$1:$F$20,'納品書'!$A$22:$F$41" の形)。
+            var qualified = string.Join(
+                ",",
+                printArea.Split(',').Select(range => $"{quotedSheet}!{range.Trim()}"));
+
             definedNames.Append(new DefinedName
             {
                 Name = "_xlnm.Print_Area",
                 LocalSheetId = 0U,
-                Text = $"{quotedSheet}!{printArea}",
+                Text = qualified,
             });
         }
 

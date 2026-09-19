@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Utsushi.Core;
 using Utsushi.Core.Exceptions;
+using Utsushi.Layout.HeaderFooter;
 using Utsushi.Layout.Model;
 using Utsushi.Layout.Text;
 using Utsushi.Parsing.Model;
@@ -28,10 +29,17 @@ namespace Utsushi.Layout;
 public sealed class ReportLayoutEngine : IReportLayoutEngine
 {
     private readonly IFontMetricsProvider _fontMetrics;
+    private readonly Func<DateTime> _clock;
 
-    public ReportLayoutEngine(IFontMetricsProvider fontMetrics)
+    /// <param name="fontMetrics">テキスト配置に使うフォントメトリクス。</param>
+    /// <param name="clock">
+    /// ヘッダー/フッターの <c>&amp;D</c>(日付)・<c>&amp;T</c>(時刻)に使う現在時刻。
+    /// null の場合は <see cref="DateTime.Now"/>。テストで固定するために差し替えられるようにしている。
+    /// </param>
+    public ReportLayoutEngine(IFontMetricsProvider fontMetrics, Func<DateTime>? clock = null)
     {
         _fontMetrics = fontMetrics ?? throw new ArgumentNullException(nameof(fontMetrics));
+        _clock = clock ?? (() => DateTime.Now);
     }
 
     /// <inheritdoc />
@@ -45,9 +53,6 @@ public sealed class ReportLayoutEngine : IReportLayoutEngine
         var definition = report.Definition;
         var sheet = report.Sheet;
         var pageSetup = sheet.PageSetup;
-
-        var printRange = ResolvePrintRange(sheet, definition);
-        var grid = SheetGrid.Create(sheet, printRange, definition.MaxDigitWidthPx);
 
         var (paperWidthPt, paperHeightPt) = pageSetup.PaperSizePt;
         var printableWidthPt = paperWidthPt - pageSetup.Margins.LeftPt - pageSetup.Margins.RightPt;
@@ -63,6 +68,45 @@ public sealed class ReportLayoutEngine : IReportLayoutEngine
                 definition.ReportCode,
                 sheet.Name);
         }
+
+        // 複数の印刷範囲はそれぞれ独立したページ群になる(要件3.6)。
+        var printRanges = ResolvePrintRanges(sheet, definition);
+        var pages = new List<PageLayout>();
+
+        foreach (var printRange in printRanges)
+        {
+            pages.AddRange(ComputePagesForRange(
+                report, printRange, printableWidthPt, printableHeightPt, firstPageNumber: pages.Count + 1));
+        }
+
+        if (pages.Count == 0)
+        {
+            throw new LayoutComputationException(
+                $"シート '{sheet.Name}' から出力可能なページがありませんでした。",
+                definition.ReportCode,
+                sheet.Name);
+        }
+
+        // 総ページ数が確定してからでないと &N(総ページ数)を展開できないため、
+        // ヘッダー/フッターは全ページを組み立てたあとに付け足す(要件3.8)。
+        pages = AppendHeadersAndFooters(report, pages);
+
+        return new PagedLayout(pages, definition.ReportCode, sheet.Name);
+    }
+
+    /// <summary>1つの印刷範囲に対するページ群を計算する。</summary>
+    private List<PageLayout> ComputePagesForRange(
+        ReportModel report,
+        CellRange printRange,
+        double printableWidthPt,
+        double printableHeightPt,
+        int firstPageNumber)
+    {
+        var definition = report.Definition;
+        var sheet = report.Sheet;
+        var pageSetup = sheet.PageSetup;
+
+        var grid = SheetGrid.Create(sheet, printRange, definition.MaxDigitWidthPx);
 
         // 印刷タイトルは各ページの先頭に繰り返されるため、本文の流し込みからは除外する(要件3.4)。
         var titleRows = ResolveTitleRows(grid, pageSetup.PrintTitles);
@@ -98,50 +142,80 @@ public sealed class ReportLayoutEngine : IReportLayoutEngine
         var columnBands = PageBandCalculator.Split(
             bodyColumns, grid.GetColumnWidthPt, availableWidthPt, pageSetup.ManualColumnBreaks);
 
-        var pages = BuildPages(
-            report, grid, titleRows, titleColumns, rowBands, columnBands, scale, pageSetup);
-
-        return new PagedLayout(pages, definition.ReportCode, sheet.Name);
+        return BuildPages(
+            report, grid, titleRows, titleColumns, rowBands, columnBands, scale, pageSetup, firstPageNumber);
     }
 
     /// <summary>
-    /// 印刷範囲を決定する(要件3.1)。
-    /// 帳票定義の上書き > Excelの印刷範囲設定 > 使用範囲 の優先順とする。
+    /// 確定したページ群にヘッダー/フッターの描画命令を付け足す(要件3.7〜3.9)。
     /// </summary>
-    private static CellRange ResolvePrintRange(SheetModel sheet, ReportDefinition definition)
+    private List<PageLayout> AppendHeadersAndFooters(ReportModel report, List<PageLayout> pages)
+    {
+        var headerFooter = report.Sheet.PageSetup.HeaderFooter;
+        if (headerFooter.IsEmpty)
+        {
+            return pages;
+        }
+
+        var margins = report.Sheet.PageSetup.Margins;
+        var timestamp = _clock();
+        var result = new List<PageLayout>(pages.Count);
+
+        foreach (var page in pages)
+        {
+            var builder = new HeaderFooterCommandBuilder(
+                _fontMetrics, margins, page.WidthPt, page.HeightPt, page.ScaleFactor);
+
+            var context = new HeaderFooterContext(
+                page.PageNumber,
+                pages.Count,
+                report.Sheet.Name,
+                report.Definition.ReportCode,
+                timestamp,
+                report.DefaultFont);
+
+            var commands = builder.Build(headerFooter, context);
+            if (commands.Count == 0)
+            {
+                result.Add(page);
+                continue;
+            }
+
+            var merged = new List<DrawCommand>(page.Commands.Count + commands.Count);
+            merged.AddRange(page.Commands);
+            merged.AddRange(commands);
+            result.Add(page with { Commands = merged });
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 印刷範囲を決定する(要件3.1, 3.6)。
+    /// 帳票定義の上書き &gt; Excelの印刷範囲設定 &gt; 使用範囲 の優先順とする。
+    /// </summary>
+    /// <remarks>
+    /// Excel は1シートに複数の印刷範囲を設定でき、それぞれが独立したページ群として印刷される。
+    /// 範囲を包含する1つの矩形として扱うと、範囲の間にある不要なセルまで出力されてしまうため、
+    /// ここでは範囲を定義順のまま返す。
+    /// </remarks>
+    private static IReadOnlyList<CellRange> ResolvePrintRanges(SheetModel sheet, ReportDefinition definition)
     {
         if (definition.PrintAreaOverride is { } overridden)
         {
-            return overridden;
+            return new[] { overridden };
         }
 
         var printAreas = sheet.PageSetup.PrintAreas;
         if (printAreas.Count > 0)
         {
-            // 複数の印刷範囲はそれぞれ別ページになるが、対象帳票では単一範囲のみを想定する。
-            // 複数指定された場合は全体を包含する矩形として扱う。
-            var first = printAreas[0];
-            var minRow = first.FirstRow;
-            var minCol = first.FirstColumn;
-            var maxRow = first.LastRow;
-            var maxCol = first.LastColumn;
-
-            for (var i = 1; i < printAreas.Count; i++)
-            {
-                var area = printAreas[i];
-                minRow = Math.Min(minRow, area.FirstRow);
-                minCol = Math.Min(minCol, area.FirstColumn);
-                maxRow = Math.Max(maxRow, area.LastRow);
-                maxCol = Math.Max(maxCol, area.LastColumn);
-            }
-
-            return new CellRange(minRow, minCol, maxRow, maxCol);
+            return printAreas;
         }
 
         var used = sheet.GetUsedRange();
         if (used is { } usedRange)
         {
-            return usedRange;
+            return new[] { usedRange };
         }
 
         throw new LayoutComputationException(
@@ -225,7 +299,8 @@ public sealed class ReportLayoutEngine : IReportLayoutEngine
         IReadOnlyList<IReadOnlyList<int>> rowBands,
         IReadOnlyList<IReadOnlyList<int>> columnBands,
         double scale,
-        PageSetupModel pageSetup)
+        PageSetupModel pageSetup,
+        int firstPageNumber)
     {
         var pages = new List<PageLayout>();
         var (paperWidthPt, paperHeightPt) = pageSetup.PaperSizePt;
@@ -234,7 +309,7 @@ public sealed class ReportLayoutEngine : IReportLayoutEngine
             ? EnumerateOverThenDown(rowBands.Count, columnBands.Count)
             : EnumerateDownThenOver(rowBands.Count, columnBands.Count);
 
-        var pageNumber = 1;
+        var pageNumber = firstPageNumber;
         foreach (var (rowBandIndex, columnBandIndex) in order)
         {
             var bodyRows = rowBands[rowBandIndex];
@@ -264,14 +339,6 @@ public sealed class ReportLayoutEngine : IReportLayoutEngine
                 scale));
 
             pageNumber++;
-        }
-
-        if (pages.Count == 0)
-        {
-            throw new LayoutComputationException(
-                $"シート '{report.Sheet.Name}' から出力可能なページがありませんでした。",
-                report.Definition.ReportCode,
-                report.Sheet.Name);
         }
 
         return pages;

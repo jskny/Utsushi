@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -34,6 +35,12 @@ public sealed class ReportConversionGoldenTests
     /// <summary>
     /// 決定的なフォントメトリクスを使い、PDF描画の手前までを実行するコンバータ。
     /// </summary>
+    /// <summary>
+    /// ヘッダー/フッターの &amp;D(日付)・&amp;T(時刻)を固定するための時刻。
+    /// 実時刻のままではゴールデンファイルが毎日変わってしまう。
+    /// </summary>
+    private static readonly DateTime FixedTimestamp = new(2026, 4, 20, 10, 30, 0, DateTimeKind.Unspecified);
+
     private static ReportPdfConverter CreateDeterministicConverter(out FontResolver fontResolver)
     {
         fontResolver = new FontResolver(FontResolverOptions.AllowFallback());
@@ -44,7 +51,7 @@ public sealed class ReportConversionGoldenTests
             new FileSystemReportDefinitionRepository(TestPaths.SampleReportsRoot),
             new ReportModelBuilder(),
             new CellSubstitutor(),
-            new ReportLayoutEngine(new ApproximateFontMetricsProvider()),
+            new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => FixedTimestamp),
             new SkiaPdfRenderer(skiaMetrics),
             fontResolver);
     }
@@ -61,6 +68,20 @@ public sealed class ReportConversionGoldenTests
                 ["Subject"] = "件名: ゴールデンテスト用案件",
                 ["TotalAmount"] = "¥2,153,800",
                 ["Remarks"] = "備考:\nゴールデンテストで固定した値です。",
+            },
+        };
+
+        yield return new object[]
+        {
+            "receipt",
+            new Dictionary<string, string>
+            {
+                ["CustomerName"] = "株式会社テスト製作所 様",
+                ["Amount"] = "¥2,153,800",
+                ["Description"] = "サンプル案件の代金として",
+                ["CopyCustomerName"] = "株式会社テスト製作所 様",
+                ["CopyAmount"] = "¥2,153,800",
+                ["CopyDescription"] = "サンプル案件の代金として",
             },
         };
 
@@ -205,6 +226,77 @@ public sealed class ReportConversionGoldenTests
 
         Assert.Equal(InvalidExcelFileReason.NoWorksheet, ex.Reason);
         Assert.Equal("invoice", ex.ReportCode);
+    }
+
+    [Fact]
+    public void 複数の印刷範囲はそれぞれ別ページになり範囲外は出力されない()
+    {
+        // 領収書サンプルは「本紙」と「控え」を別々の印刷範囲として持つ(要件3.6)。
+        using var converter = CreateDeterministicConverter(out _);
+        using var input = File.OpenRead(TestPaths.SampleTemplate("receipt"));
+
+        var layout = converter.ComputeLayout(
+            "receipt",
+            input,
+            new Dictionary<string, string>
+            {
+                ["CustomerName"] = "株式会社テスト製作所 様",
+                ["Amount"] = "¥1,000",
+                ["CopyCustomerName"] = "株式会社テスト製作所 様",
+                ["CopyAmount"] = "¥1,000",
+            });
+
+        Assert.Equal(2, layout.PageCount);
+
+        var firstPageTexts = layout.Pages[0].Commands.OfType<TextCommand>().Select(t => t.Text).ToList();
+        var secondPageTexts = layout.Pages[1].Commands.OfType<TextCommand>().Select(t => t.Text).ToList();
+
+        Assert.Contains("領 収 書", firstPageTexts);
+        Assert.Contains("領 収 書(控)", secondPageTexts);
+        Assert.DoesNotContain("領 収 書(控)", firstPageTexts);
+
+        // 2つの印刷範囲の間にある行は、どちらの範囲にも含まれないため出力されない(要件3.1)。
+        var allTexts = firstPageTexts.Concat(secondPageTexts).ToList();
+        Assert.DoesNotContain(allTexts, t => t.Contains("印刷範囲外"));
+    }
+
+    [Fact]
+    public void ヘッダーとフッターの書式コードが展開される()
+    {
+        using var converter = CreateDeterministicConverter(out _);
+        using var input = File.OpenRead(TestPaths.SampleTemplate("delivery-note"));
+
+        var layout = converter.ComputeLayout(
+            "delivery-note",
+            input,
+            new Dictionary<string, string>
+            {
+                ["CustomerName"] = "株式会社テスト製作所 御中",
+                ["DeliveryNo"] = "DN-2026-0088",
+            });
+
+        Assert.True(layout.PageCount >= 2);
+
+        foreach (var page in layout.Pages)
+        {
+            var texts = page.Commands.OfType<TextCommand>().Select(t => t.Text).ToList();
+
+            // ヘッダー &R&A → シート名
+            Assert.Contains("納品書", texts);
+
+            // フッター &L&D → 日付(固定した時刻)
+            Assert.Contains("2026/04/20", texts);
+
+            // フッター &C&P / &N ページ → ページ番号と総ページ数
+            Assert.Contains($"{page.PageNumber} / {layout.PageCount} ページ", texts);
+
+            // フッター &R&"MS PGothic,Bold"サンプル → 太字の指定が効いている
+            var sample = texts.Contains("サンプル");
+            Assert.True(sample, "右セクションの文字列が出力されるはず");
+            Assert.Contains(
+                page.Commands.OfType<TextCommand>(),
+                t => t.Text == "サンプル" && t.Font.Bold);
+        }
     }
 
     private static PagedLayout ComputeInvoiceLayout()

@@ -123,6 +123,44 @@ public sealed class OpenXmlWorkbookReaderTests
     }
 
     [Fact]
+    public void 複数の印刷範囲を定義順に読み取る()
+    {
+        // 領収書サンプルは「本紙」と「控え」を別々の印刷範囲として持つ(要件3.6)。
+        var workbook = _reader.ReadFile(TestPaths.SampleTemplate("receipt"));
+        var sheet = Assert.Single(workbook.Sheets);
+
+        Assert.Equal(2, sheet.PageSetup.PrintAreas.Count);
+        Assert.Equal(CellRange.Parse("A1:D13"), sheet.PageSetup.PrintAreas[0]);
+        Assert.Equal(CellRange.Parse("A16:D28"), sheet.PageSetup.PrintAreas[1]);
+    }
+
+    [Fact]
+    public void ヘッダーとフッターの指定を読み取る()
+    {
+        var workbook = _reader.ReadFile(TestPaths.SampleTemplate("delivery-note"));
+        var sheet = Assert.Single(workbook.Sheets);
+        var headerFooter = sheet.PageSetup.HeaderFooter;
+
+        Assert.False(headerFooter.IsEmpty);
+        Assert.Equal("&R&A", headerFooter.OddHeader);
+        Assert.Contains("&P / &N", headerFooter.OddFooter);
+
+        // scaleWithDoc の既定は true
+        Assert.True(headerFooter.ScaleWithDocument);
+        Assert.False(headerFooter.DifferentFirst);
+        Assert.False(headerFooter.DifferentOddEven);
+    }
+
+    [Fact]
+    public void ヘッダーフッターが無いシートは空として扱う()
+    {
+        var workbook = _reader.ReadFile(TestPaths.SampleTemplate("invoice"));
+        var sheet = Assert.Single(workbook.Sheets);
+
+        Assert.True(sheet.PageSetup.HeaderFooter.IsEmpty);
+    }
+
+    [Fact]
     public void シート名で読み取り対象を絞り込める()
     {
         var workbook = _reader.ReadFile(
