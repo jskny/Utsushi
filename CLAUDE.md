@@ -38,7 +38,8 @@
 | `code-reviewer` | 実装変更が完了した直後、コミット前 |
 | `test-writer` | 新規/変更実装にテストが不足している場合 |
 | `security-reviewer` | Excelファイル入力・帳票定義・出力パスを扱う変更、新規依存ライブラリ追加時 |
-| `spec-compliance-reviewer` | requirements/design/tasksの作成・更新時、実装完了後の仕様整合性確認 |
+| `spec-compliance-reviewer` | requirements/design/tasksの作成・更新時、実装完了後の仕様整合性確認(仕様↔実装のトレーサビリティ) |
+| `doc-reviewer` | `.kiro/steering/`・`.kiro/specs/`・`docs/`・`CLAUDE.md`等の追加・更新直後。ドキュメント間の矛盾、技術的記載の裏取り、参照切れ、体裁を確認 |
 
 ## 開発コマンド(プロジェクト作成後)
 
