@@ -1,0 +1,38 @@
+namespace Utsushi.Parsing.Model;
+
+/// <summary>セルに格納されている値の型。</summary>
+public enum CellValueKind
+{
+    /// <summary>空セル(書式のみ)。</summary>
+    Blank = 0,
+    Text,
+    Number,
+    Boolean,
+    /// <summary>Excelが保持していたエラー値(#REF! 等)。</summary>
+    Error,
+}
+
+/// <summary>
+/// 1セル分の値と書式。
+/// </summary>
+/// <remarks>
+/// <paramref name="Value"/> は「Excelが保持している生の値」を文字列化したもの。
+/// 表示文字列(数値書式の適用結果)は <see cref="FormattedValue"/> に持つ。
+/// 数式セルは、OOXMLにキャッシュされている計算結果の値のみを読み取る(数式は評価しない)。
+/// </remarks>
+public sealed record CellModel(
+    string? Value,
+    CellValueKind ValueKind,
+    CellStyle Style,
+    string? FormattedValue = null,
+    bool HasFormula = false)
+{
+    /// <summary>描画に使うべき表示文字列。</summary>
+    public string? DisplayValue => FormattedValue ?? Value;
+
+    public bool IsBlank => ValueKind == CellValueKind.Blank || string.IsNullOrEmpty(DisplayValue);
+
+    /// <summary>値のみを差し替えた複製を返す(書式は変更しない。要件2.2)。</summary>
+    public CellModel WithText(string text) =>
+        this with { Value = text, ValueKind = CellValueKind.Text, FormattedValue = text, HasFormula = false };
+}

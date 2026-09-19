@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Utsushi.ReportDefinitions</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Utsushi.Core\Utsushi.Core.csproj" />
+    <ProjectReference Include="..\Utsushi.Parsing\Utsushi.Parsing.csproj" />
+  </ItemGroup>
+
+</Project>

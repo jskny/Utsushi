@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Utsushi.Parsing</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Open XML SDK (MIT)。OOXML を直接参照してよい唯一のプロジェクト -->
+    <PackageReference Include="DocumentFormat.OpenXml" Version="2.20.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Utsushi.Core\Utsushi.Core.csproj" />
+  </ItemGroup>
+
+</Project>

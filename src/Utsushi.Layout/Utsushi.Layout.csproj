@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Utsushi.Layout</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Utsushi.Substitution\Utsushi.Substitution.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -55,3 +55,6 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Utsushi: ゴールデンテストの実出力(期待値は Fixtures 配下に別途コミットする)
+tests/**/TestOutput/

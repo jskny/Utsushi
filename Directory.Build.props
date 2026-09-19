@@ -1,0 +1,21 @@
+<Project>
+
+  <!--
+    Utsushi 全プロジェクト共通のビルド設定。
+    方針の根拠は .kiro/steering/tech.md「コーディング規約」を参照。
+  -->
+  <PropertyGroup>
+    <!-- 呼び出し元プロダクトが .NET 5 のため net5.0 固定(tech.md「実行環境」) -->
+    <TargetFramework>net5.0</TargetFramework>
+    <!-- file-scoped namespace 等を使うため C# 10 を明示。生成ILは net5.0 互換のまま -->
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- net5.0 は EOL のため NETSDK1138 が必ず出る。既知・許容のため抑止する -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <NeutralLanguage>ja-JP</NeutralLanguage>
+  </PropertyGroup>
+
+</Project>
