@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Utsushi.Cli/Utsushi.Cli.csproj" />
+    <Project Path="src/Utsushi.Core/Utsushi.Core.csproj" />
+    <Project Path="src/Utsushi.Layout/Utsushi.Layout.csproj" />
+    <Project Path="src/Utsushi.Parsing/Utsushi.Parsing.csproj" />
+    <Project Path="src/Utsushi.Rendering/Utsushi.Rendering.csproj" />
+    <Project Path="src/Utsushi.ReportDefinition/Utsushi.ReportDefinition.csproj" />
+    <Project Path="src/Utsushi.Substitution/Utsushi.Substitution.csproj" />
+    <Project Path="src/Utsushi/Utsushi.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Utsushi.Golden.Tests/Utsushi.Golden.Tests.csproj" />
+    <Project Path="tests/Utsushi.Layout.Tests/Utsushi.Layout.Tests.csproj" />
+    <Project Path="tests/Utsushi.Parsing.Tests/Utsushi.Parsing.Tests.csproj" />
+    <Project Path="tests/Utsushi.Rendering.Tests/Utsushi.Rendering.Tests.csproj" />
+    <Project Path="tests/Utsushi.ReportDefinition.Tests/Utsushi.ReportDefinition.Tests.csproj" />
+    <Project Path="tests/Utsushi.Substitution.Tests/Utsushi.Substitution.Tests.csproj" />
+  </Folder>
+</Solution>

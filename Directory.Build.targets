@@ -1,0 +1,19 @@
+<Project>
+
+  <!--
+    テストプロジェクト共通設定。
+    パッケージバージョンは net5.0 世代に固定する(新しすぎるとテストが発見されない。
+    根拠: docs/開発環境メモ.md「dotnet test の動作確認」)。
+  -->
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
+    <IsPackable>false</IsPackable>
+    <RollForward>LatestMajor</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.1.0" />
+    <PackageReference Include="xunit" Version="2.4.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.3" />
+  </ItemGroup>
+
+</Project>

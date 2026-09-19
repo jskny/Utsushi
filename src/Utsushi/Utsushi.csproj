@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Utsushi</RootNamespace>
+    <AssemblyName>Utsushi</AssemblyName>
+    <Description>自社帳票(Excel)をレイアウトを崩さずPDF化するライブラリのファサード。</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Utsushi.Rendering\Utsushi.Rendering.csproj" />
+  </ItemGroup>
+
+</Project>

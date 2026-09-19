@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "reportCode": "delivery-note",
+  "sheetName": "納品書",
+  "toleranceMm": 0.5,
+  "unsupportedElements": "error",
+  "maxDigitWidthPx": 7,
+  "substitutionFields": [
+    { "key": "CustomerName", "cell": "A3", "required": true,  "overflow": "shrink" },
+    { "key": "DeliveryNo",   "cell": "E3", "required": true,  "overflow": "clip" },
+    { "key": "DeliveryDate", "cell": "E4", "required": false, "overflow": "clip" }
+  ]
+}

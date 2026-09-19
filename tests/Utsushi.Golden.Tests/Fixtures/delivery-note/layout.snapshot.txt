@@ -1,0 +1,1279 @@
+report=delivery-note sheet=納品書 pages=2
+
+## page 1 paper=A4/Portrait size=595.28x841.89 scale=1 rows=8-53 cols=1-5
+fill   rect=[50.4,149.5 26.25x13.5] color=#FFDCE6F1
+fill   rect=[76.65,149.5 178.5x13.5] color=#FFDCE6F1
+fill   rect=[255.15,149.5 47.25x13.5] color=#FFDCE6F1
+fill   rect=[302.4,149.5 36.75x13.5] color=#FFDCE6F1
+fill   rect=[339.15,149.5 73.5x13.5] color=#FFDCE6F1
+line   from=(50.4,109) to=(302.4,109) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,149.5) to=(76.65,149.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,163) to=(76.65,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,149.5) to=(50.4,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,149.5) to=(76.65,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,149.5) to=(255.15,149.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,163) to=(255.15,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,149.5) to=(255.15,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,149.5) to=(302.4,149.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,163) to=(302.4,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,149.5) to=(302.4,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,149.5) to=(339.15,149.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,163) to=(339.15,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,149.5) to=(339.15,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,149.5) to=(412.65,149.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,163) to=(412.65,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,149.5) to=(412.65,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,176.5) to=(76.65,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,163) to=(50.4,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,163) to=(76.65,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,176.5) to=(255.15,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,163) to=(255.15,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,176.5) to=(302.4,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,163) to=(302.4,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,176.5) to=(339.15,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,163) to=(339.15,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,176.5) to=(412.65,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,163) to=(412.65,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,190) to=(76.65,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,176.5) to=(50.4,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,176.5) to=(76.65,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,190) to=(255.15,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,176.5) to=(255.15,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,190) to=(302.4,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,176.5) to=(302.4,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,190) to=(339.15,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,176.5) to=(339.15,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,190) to=(412.65,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,176.5) to=(412.65,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,203.5) to=(76.65,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,190) to=(50.4,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,190) to=(76.65,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,203.5) to=(255.15,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,190) to=(255.15,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,203.5) to=(302.4,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,190) to=(302.4,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,203.5) to=(339.15,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,190) to=(339.15,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,203.5) to=(412.65,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,190) to=(412.65,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,217) to=(76.65,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,203.5) to=(50.4,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,203.5) to=(76.65,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,217) to=(255.15,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,203.5) to=(255.15,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,217) to=(302.4,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,203.5) to=(302.4,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,217) to=(339.15,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,203.5) to=(339.15,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,217) to=(412.65,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,203.5) to=(412.65,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,230.5) to=(76.65,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,217) to=(50.4,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,217) to=(76.65,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,230.5) to=(255.15,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,217) to=(255.15,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,230.5) to=(302.4,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,217) to=(302.4,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,230.5) to=(339.15,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,217) to=(339.15,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,230.5) to=(412.65,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,217) to=(412.65,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,244) to=(76.65,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,230.5) to=(50.4,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,230.5) to=(76.65,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,244) to=(255.15,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,230.5) to=(255.15,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,244) to=(302.4,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,230.5) to=(302.4,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,244) to=(339.15,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,230.5) to=(339.15,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,244) to=(412.65,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,230.5) to=(412.65,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,257.5) to=(76.65,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,244) to=(50.4,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,244) to=(76.65,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,257.5) to=(255.15,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,244) to=(255.15,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,257.5) to=(302.4,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,244) to=(302.4,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,257.5) to=(339.15,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,244) to=(339.15,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,257.5) to=(412.65,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,244) to=(412.65,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,271) to=(76.65,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,257.5) to=(50.4,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,257.5) to=(76.65,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,271) to=(255.15,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,257.5) to=(255.15,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,271) to=(302.4,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,257.5) to=(302.4,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,271) to=(339.15,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,257.5) to=(339.15,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,271) to=(412.65,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,257.5) to=(412.65,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,284.5) to=(76.65,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,271) to=(50.4,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,271) to=(76.65,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,284.5) to=(255.15,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,271) to=(255.15,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,284.5) to=(302.4,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,271) to=(302.4,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,284.5) to=(339.15,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,271) to=(339.15,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,284.5) to=(412.65,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,271) to=(412.65,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,298) to=(76.65,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,284.5) to=(50.4,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,284.5) to=(76.65,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,298) to=(255.15,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,284.5) to=(255.15,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,298) to=(302.4,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,284.5) to=(302.4,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,298) to=(339.15,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,284.5) to=(339.15,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,298) to=(412.65,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,284.5) to=(412.65,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,311.5) to=(76.65,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,298) to=(50.4,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,298) to=(76.65,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,311.5) to=(255.15,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,298) to=(255.15,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,311.5) to=(302.4,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,298) to=(302.4,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,311.5) to=(339.15,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,298) to=(339.15,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,311.5) to=(412.65,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,298) to=(412.65,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,325) to=(76.65,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,311.5) to=(50.4,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,311.5) to=(76.65,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,325) to=(255.15,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,311.5) to=(255.15,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,325) to=(302.4,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,311.5) to=(302.4,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,325) to=(339.15,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,311.5) to=(339.15,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,325) to=(412.65,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,311.5) to=(412.65,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,338.5) to=(76.65,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,325) to=(50.4,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,325) to=(76.65,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,338.5) to=(255.15,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,325) to=(255.15,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,338.5) to=(302.4,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,325) to=(302.4,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,338.5) to=(339.15,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,325) to=(339.15,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,338.5) to=(412.65,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,325) to=(412.65,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,352) to=(76.65,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,338.5) to=(50.4,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,338.5) to=(76.65,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,352) to=(255.15,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,338.5) to=(255.15,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,352) to=(302.4,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,338.5) to=(302.4,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,352) to=(339.15,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,338.5) to=(339.15,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,352) to=(412.65,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,338.5) to=(412.65,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,365.5) to=(76.65,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,352) to=(50.4,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,352) to=(76.65,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,365.5) to=(255.15,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,352) to=(255.15,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,365.5) to=(302.4,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,352) to=(302.4,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,365.5) to=(339.15,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,352) to=(339.15,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,365.5) to=(412.65,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,352) to=(412.65,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,379) to=(76.65,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,365.5) to=(50.4,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,365.5) to=(76.65,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,379) to=(255.15,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,365.5) to=(255.15,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,379) to=(302.4,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,365.5) to=(302.4,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,379) to=(339.15,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,365.5) to=(339.15,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,379) to=(412.65,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,365.5) to=(412.65,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,392.5) to=(76.65,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,379) to=(50.4,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,379) to=(76.65,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,392.5) to=(255.15,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,379) to=(255.15,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,392.5) to=(302.4,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,379) to=(302.4,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,392.5) to=(339.15,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,379) to=(339.15,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,392.5) to=(412.65,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,379) to=(412.65,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,406) to=(76.65,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,392.5) to=(50.4,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,392.5) to=(76.65,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,406) to=(255.15,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,392.5) to=(255.15,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,406) to=(302.4,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,392.5) to=(302.4,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,406) to=(339.15,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,392.5) to=(339.15,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,406) to=(412.65,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,392.5) to=(412.65,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,419.5) to=(76.65,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,406) to=(50.4,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,406) to=(76.65,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,419.5) to=(255.15,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,406) to=(255.15,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,419.5) to=(302.4,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,406) to=(302.4,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,419.5) to=(339.15,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,406) to=(339.15,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,419.5) to=(412.65,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,406) to=(412.65,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,433) to=(76.65,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,419.5) to=(50.4,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,419.5) to=(76.65,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,433) to=(255.15,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,419.5) to=(255.15,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,433) to=(302.4,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,419.5) to=(302.4,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,433) to=(339.15,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,419.5) to=(339.15,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,433) to=(412.65,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,419.5) to=(412.65,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,446.5) to=(76.65,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,433) to=(50.4,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,433) to=(76.65,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,446.5) to=(255.15,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,433) to=(255.15,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,446.5) to=(302.4,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,433) to=(302.4,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,446.5) to=(339.15,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,433) to=(339.15,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,446.5) to=(412.65,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,433) to=(412.65,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,460) to=(76.65,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,446.5) to=(50.4,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,446.5) to=(76.65,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,460) to=(255.15,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,446.5) to=(255.15,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,460) to=(302.4,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,446.5) to=(302.4,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,460) to=(339.15,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,446.5) to=(339.15,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,460) to=(412.65,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,446.5) to=(412.65,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,473.5) to=(76.65,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,460) to=(50.4,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,460) to=(76.65,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,473.5) to=(255.15,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,460) to=(255.15,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,473.5) to=(302.4,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,460) to=(302.4,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,473.5) to=(339.15,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,460) to=(339.15,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,473.5) to=(412.65,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,460) to=(412.65,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,487) to=(76.65,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,473.5) to=(50.4,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,473.5) to=(76.65,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,487) to=(255.15,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,473.5) to=(255.15,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,487) to=(302.4,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,473.5) to=(302.4,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,487) to=(339.15,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,473.5) to=(339.15,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,487) to=(412.65,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,473.5) to=(412.65,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,500.5) to=(76.65,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,487) to=(50.4,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,487) to=(76.65,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,500.5) to=(255.15,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,487) to=(255.15,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,500.5) to=(302.4,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,487) to=(302.4,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,500.5) to=(339.15,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,487) to=(339.15,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,500.5) to=(412.65,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,487) to=(412.65,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,514) to=(76.65,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,500.5) to=(50.4,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,500.5) to=(76.65,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,514) to=(255.15,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,500.5) to=(255.15,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,514) to=(302.4,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,500.5) to=(302.4,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,514) to=(339.15,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,500.5) to=(339.15,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,514) to=(412.65,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,500.5) to=(412.65,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,527.5) to=(76.65,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,514) to=(50.4,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,514) to=(76.65,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,527.5) to=(255.15,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,514) to=(255.15,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,527.5) to=(302.4,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,514) to=(302.4,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,527.5) to=(339.15,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,514) to=(339.15,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,527.5) to=(412.65,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,514) to=(412.65,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,541) to=(76.65,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,527.5) to=(50.4,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,527.5) to=(76.65,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,541) to=(255.15,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,527.5) to=(255.15,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,541) to=(302.4,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,527.5) to=(302.4,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,541) to=(339.15,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,527.5) to=(339.15,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,541) to=(412.65,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,527.5) to=(412.65,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,554.5) to=(76.65,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,541) to=(50.4,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,541) to=(76.65,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,554.5) to=(255.15,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,541) to=(255.15,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,554.5) to=(302.4,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,541) to=(302.4,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,554.5) to=(339.15,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,541) to=(339.15,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,554.5) to=(412.65,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,541) to=(412.65,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,568) to=(76.65,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,554.5) to=(50.4,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,554.5) to=(76.65,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,568) to=(255.15,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,554.5) to=(255.15,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,568) to=(302.4,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,554.5) to=(302.4,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,568) to=(339.15,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,554.5) to=(339.15,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,568) to=(412.65,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,554.5) to=(412.65,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,581.5) to=(76.65,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,568) to=(50.4,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,568) to=(76.65,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,581.5) to=(255.15,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,568) to=(255.15,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,581.5) to=(302.4,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,568) to=(302.4,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,581.5) to=(339.15,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,568) to=(339.15,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,581.5) to=(412.65,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,568) to=(412.65,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,595) to=(76.65,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,581.5) to=(50.4,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,581.5) to=(76.65,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,595) to=(255.15,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,581.5) to=(255.15,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,595) to=(302.4,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,581.5) to=(302.4,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,595) to=(339.15,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,581.5) to=(339.15,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,595) to=(412.65,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,581.5) to=(412.65,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,608.5) to=(76.65,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,595) to=(50.4,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,595) to=(76.65,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,608.5) to=(255.15,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,595) to=(255.15,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,608.5) to=(302.4,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,595) to=(302.4,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,608.5) to=(339.15,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,595) to=(339.15,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,608.5) to=(412.65,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,595) to=(412.65,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,622) to=(76.65,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,608.5) to=(50.4,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,608.5) to=(76.65,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,622) to=(255.15,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,608.5) to=(255.15,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,622) to=(302.4,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,608.5) to=(302.4,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,622) to=(339.15,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,608.5) to=(339.15,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,622) to=(412.65,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,608.5) to=(412.65,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,635.5) to=(76.65,635.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,622) to=(50.4,635.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,622) to=(76.65,635.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,635.5) to=(255.15,635.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,622) to=(255.15,635.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,635.5) to=(302.4,635.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,622) to=(302.4,635.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,635.5) to=(339.15,635.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,622) to=(339.15,635.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,635.5) to=(412.65,635.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,622) to=(412.65,635.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,649) to=(76.65,649) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,635.5) to=(50.4,649) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,635.5) to=(76.65,649) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,649) to=(255.15,649) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,635.5) to=(255.15,649) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,649) to=(302.4,649) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,635.5) to=(302.4,649) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,649) to=(339.15,649) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,635.5) to=(339.15,649) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,649) to=(412.65,649) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,635.5) to=(412.65,649) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,662.5) to=(76.65,662.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,649) to=(50.4,662.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,649) to=(76.65,662.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,662.5) to=(255.15,662.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,649) to=(255.15,662.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,662.5) to=(302.4,662.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,649) to=(302.4,662.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,662.5) to=(339.15,662.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,649) to=(339.15,662.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,662.5) to=(412.65,662.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,649) to=(412.65,662.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,676) to=(76.65,676) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,662.5) to=(50.4,676) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,662.5) to=(76.65,676) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,676) to=(255.15,676) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,662.5) to=(255.15,676) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,676) to=(302.4,676) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,662.5) to=(302.4,676) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,676) to=(339.15,676) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,662.5) to=(339.15,676) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,676) to=(412.65,676) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,662.5) to=(412.65,676) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,689.5) to=(76.65,689.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,676) to=(50.4,689.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,676) to=(76.65,689.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,689.5) to=(255.15,689.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,676) to=(255.15,689.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,689.5) to=(302.4,689.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,676) to=(302.4,689.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,689.5) to=(339.15,689.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,676) to=(339.15,689.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,689.5) to=(412.65,689.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,676) to=(412.65,689.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,703) to=(76.65,703) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,689.5) to=(50.4,703) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,689.5) to=(76.65,703) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,703) to=(255.15,703) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,689.5) to=(255.15,703) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,703) to=(302.4,703) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,689.5) to=(302.4,703) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,703) to=(339.15,703) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,689.5) to=(339.15,703) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,703) to=(412.65,703) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,689.5) to=(412.65,703) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,716.5) to=(76.65,716.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,703) to=(50.4,716.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,703) to=(76.65,716.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,716.5) to=(255.15,716.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,703) to=(255.15,716.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,716.5) to=(302.4,716.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,703) to=(302.4,716.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,716.5) to=(339.15,716.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,703) to=(339.15,716.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,716.5) to=(412.65,716.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,703) to=(412.65,716.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,730) to=(76.65,730) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,716.5) to=(50.4,730) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,716.5) to=(76.65,730) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,730) to=(255.15,730) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,716.5) to=(255.15,730) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,730) to=(302.4,730) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,716.5) to=(302.4,730) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,730) to=(339.15,730) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,716.5) to=(339.15,730) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,730) to=(412.65,730) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,716.5) to=(412.65,730) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,743.5) to=(76.65,743.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,730) to=(50.4,743.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,730) to=(76.65,743.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,743.5) to=(255.15,743.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,730) to=(255.15,743.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,743.5) to=(302.4,743.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,730) to=(302.4,743.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,743.5) to=(339.15,743.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,730) to=(339.15,743.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,743.5) to=(412.65,743.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,730) to=(412.65,743.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,757) to=(76.65,757) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,743.5) to=(50.4,757) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,743.5) to=(76.65,757) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,757) to=(255.15,757) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,743.5) to=(255.15,757) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,757) to=(302.4,757) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,743.5) to=(302.4,757) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,757) to=(339.15,757) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,743.5) to=(339.15,757) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,757) to=(412.65,757) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,743.5) to=(412.65,757) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,770.5) to=(76.65,770.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,757) to=(50.4,770.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,757) to=(76.65,770.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,770.5) to=(255.15,770.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,757) to=(255.15,770.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,770.5) to=(302.4,770.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,757) to=(302.4,770.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,770.5) to=(339.15,770.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,757) to=(339.15,770.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,770.5) to=(412.65,770.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,757) to=(412.65,770.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,784) to=(76.65,784) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,770.5) to=(50.4,784) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,770.5) to=(76.65,784) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,784) to=(255.15,784) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,770.5) to=(255.15,784) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,784) to=(302.4,784) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,770.5) to=(302.4,784) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,784) to=(339.15,784) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,770.5) to=(339.15,784) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,784) to=(412.65,784) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,770.5) to=(412.65,784) color=#FF000000 width=0.75 dash=Solid
+text   origin=(231.53,73.04) anchor=Center font=MS PGothic@18pt/#FF000000,bold clip=none value="納品書"
+text   origin=(51.9,105.48) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,95.5 252x13.5] value="株式会社テスト製作所 御中"
+text   origin=(337.65,105.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="納品番号"
+text   origin=(340.65,105.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[339.15,95.5 73.5x13.5] value="DN-2026-0088"
+text   origin=(337.65,118.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="納品日"
+text   origin=(340.65,118.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[339.15,109 73.5x13.5] value="2026年4月15日"
+text   origin=(63.53,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="No."
+text   origin=(165.9,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="品名"
+text   origin=(278.77,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="数量"
+text   origin=(320.77,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="単位"
+text   origin=(375.9,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="備考"
+text   origin=(63.53,172.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="1"
+text   origin=(78.15,172.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 001"
+text   origin=(300.9,172.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(320.77,172.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,186.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="2"
+text   origin=(78.15,186.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 002"
+text   origin=(300.9,186.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(320.77,186.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,199.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(78.15,199.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 003"
+text   origin=(300.9,199.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(320.77,199.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,213.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="4"
+text   origin=(78.15,213.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 004"
+text   origin=(300.9,213.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="12"
+text   origin=(320.77,213.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,226.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="5"
+text   origin=(78.15,226.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 005"
+text   origin=(300.9,226.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="15"
+text   origin=(320.77,226.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,240.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(78.15,240.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 006"
+text   origin=(300.9,240.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="18"
+text   origin=(320.77,240.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,253.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="7"
+text   origin=(78.15,253.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 007"
+text   origin=(300.9,253.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="21"
+text   origin=(320.77,253.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,267.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="8"
+text   origin=(78.15,267.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 008"
+text   origin=(300.9,267.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(320.77,267.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,280.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(78.15,280.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 009"
+text   origin=(300.9,280.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(320.77,280.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,294.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="10"
+text   origin=(78.15,294.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 010"
+text   origin=(300.9,294.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(320.77,294.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,307.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="11"
+text   origin=(78.15,307.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 011"
+text   origin=(300.9,307.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="12"
+text   origin=(320.77,307.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,321.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="12"
+text   origin=(78.15,321.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 012"
+text   origin=(300.9,321.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="15"
+text   origin=(320.77,321.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,334.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="13"
+text   origin=(78.15,334.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 013"
+text   origin=(300.9,334.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="18"
+text   origin=(320.77,334.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,348.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="14"
+text   origin=(78.15,348.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 014"
+text   origin=(300.9,348.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="21"
+text   origin=(320.77,348.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,361.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="15"
+text   origin=(78.15,361.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 015"
+text   origin=(300.9,361.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(320.77,361.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,375.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="16"
+text   origin=(78.15,375.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 016"
+text   origin=(300.9,375.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(320.77,375.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,388.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="17"
+text   origin=(78.15,388.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 017"
+text   origin=(300.9,388.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(320.77,388.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,402.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="18"
+text   origin=(78.15,402.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 018"
+text   origin=(300.9,402.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="12"
+text   origin=(320.77,402.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,415.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="19"
+text   origin=(78.15,415.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 019"
+text   origin=(300.9,415.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="15"
+text   origin=(320.77,415.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,429.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="20"
+text   origin=(78.15,429.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 020"
+text   origin=(300.9,429.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="18"
+text   origin=(320.77,429.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,442.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="21"
+text   origin=(78.15,442.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 021"
+text   origin=(300.9,442.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="21"
+text   origin=(320.77,442.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,456.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="22"
+text   origin=(78.15,456.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 022"
+text   origin=(300.9,456.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(320.77,456.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,469.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="23"
+text   origin=(78.15,469.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 023"
+text   origin=(300.9,469.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(320.77,469.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,483.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="24"
+text   origin=(78.15,483.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 024"
+text   origin=(300.9,483.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(320.77,483.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,496.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="25"
+text   origin=(78.15,496.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 025"
+text   origin=(300.9,496.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="12"
+text   origin=(320.77,496.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,510.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="26"
+text   origin=(78.15,510.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 026"
+text   origin=(300.9,510.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="15"
+text   origin=(320.77,510.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,523.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="27"
+text   origin=(78.15,523.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 027"
+text   origin=(300.9,523.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="18"
+text   origin=(320.77,523.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,537.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="28"
+text   origin=(78.15,537.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 028"
+text   origin=(300.9,537.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="21"
+text   origin=(320.77,537.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,550.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="29"
+text   origin=(78.15,550.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 029"
+text   origin=(300.9,550.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(320.77,550.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,564.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="30"
+text   origin=(78.15,564.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 030"
+text   origin=(300.9,564.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(320.77,564.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,577.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="31"
+text   origin=(78.15,577.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 031"
+text   origin=(300.9,577.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(320.77,577.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,591.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="32"
+text   origin=(78.15,591.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 032"
+text   origin=(300.9,591.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="12"
+text   origin=(320.77,591.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,604.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="33"
+text   origin=(78.15,604.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 033"
+text   origin=(300.9,604.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="15"
+text   origin=(320.77,604.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,618.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="34"
+text   origin=(78.15,618.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 034"
+text   origin=(300.9,618.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="18"
+text   origin=(320.77,618.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,631.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="35"
+text   origin=(78.15,631.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 035"
+text   origin=(300.9,631.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="21"
+text   origin=(320.77,631.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,645.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="36"
+text   origin=(78.15,645.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 036"
+text   origin=(300.9,645.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(320.77,645.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,658.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="37"
+text   origin=(78.15,658.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 037"
+text   origin=(300.9,658.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(320.77,658.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,672.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="38"
+text   origin=(78.15,672.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 038"
+text   origin=(300.9,672.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(320.77,672.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,685.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="39"
+text   origin=(78.15,685.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 039"
+text   origin=(300.9,685.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="12"
+text   origin=(320.77,685.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,699.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="40"
+text   origin=(78.15,699.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 040"
+text   origin=(300.9,699.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="15"
+text   origin=(320.77,699.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,712.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="41"
+text   origin=(78.15,712.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 041"
+text   origin=(300.9,712.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="18"
+text   origin=(320.77,712.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,726.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="42"
+text   origin=(78.15,726.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 042"
+text   origin=(300.9,726.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="21"
+text   origin=(320.77,726.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,739.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="43"
+text   origin=(78.15,739.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 043"
+text   origin=(300.9,739.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(320.77,739.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,753.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="44"
+text   origin=(78.15,753.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 044"
+text   origin=(300.9,753.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(320.77,753.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,766.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="45"
+text   origin=(78.15,766.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 045"
+text   origin=(300.9,766.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(320.77,766.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,780.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="46"
+text   origin=(78.15,780.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 046"
+text   origin=(300.9,780.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="12"
+text   origin=(320.77,780.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(511.88,31.28) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="納品書"
+text   origin=(50.4,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="2026/04/20"
+text   origin=(264.64,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="1 / 2 ページ"
+text   origin=(499.56,817.87) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="サンプル"
+
+## page 2 paper=A4/Portrait size=595.28x841.89 scale=1 rows=54-90 cols=1-5
+fill   rect=[50.4,149.5 26.25x13.5] color=#FFDCE6F1
+fill   rect=[76.65,149.5 178.5x13.5] color=#FFDCE6F1
+fill   rect=[255.15,149.5 47.25x13.5] color=#FFDCE6F1
+fill   rect=[302.4,149.5 36.75x13.5] color=#FFDCE6F1
+fill   rect=[339.15,149.5 73.5x13.5] color=#FFDCE6F1
+line   from=(50.4,109) to=(302.4,109) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,149.5) to=(76.65,149.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,163) to=(76.65,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,149.5) to=(50.4,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,149.5) to=(76.65,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,149.5) to=(255.15,149.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,163) to=(255.15,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,149.5) to=(255.15,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,149.5) to=(302.4,149.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,163) to=(302.4,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,149.5) to=(302.4,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,149.5) to=(339.15,149.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,163) to=(339.15,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,149.5) to=(339.15,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,149.5) to=(412.65,149.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,163) to=(412.65,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,149.5) to=(412.65,163) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,176.5) to=(76.65,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,163) to=(50.4,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,163) to=(76.65,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,176.5) to=(255.15,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,163) to=(255.15,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,176.5) to=(302.4,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,163) to=(302.4,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,176.5) to=(339.15,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,163) to=(339.15,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,176.5) to=(412.65,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,163) to=(412.65,176.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,190) to=(76.65,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,176.5) to=(50.4,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,176.5) to=(76.65,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,190) to=(255.15,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,176.5) to=(255.15,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,190) to=(302.4,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,176.5) to=(302.4,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,190) to=(339.15,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,176.5) to=(339.15,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,190) to=(412.65,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,176.5) to=(412.65,190) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,203.5) to=(76.65,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,190) to=(50.4,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,190) to=(76.65,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,203.5) to=(255.15,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,190) to=(255.15,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,203.5) to=(302.4,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,190) to=(302.4,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,203.5) to=(339.15,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,190) to=(339.15,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,203.5) to=(412.65,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,190) to=(412.65,203.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,217) to=(76.65,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,203.5) to=(50.4,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,203.5) to=(76.65,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,217) to=(255.15,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,203.5) to=(255.15,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,217) to=(302.4,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,203.5) to=(302.4,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,217) to=(339.15,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,203.5) to=(339.15,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,217) to=(412.65,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,203.5) to=(412.65,217) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,230.5) to=(76.65,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,217) to=(50.4,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,217) to=(76.65,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,230.5) to=(255.15,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,217) to=(255.15,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,230.5) to=(302.4,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,217) to=(302.4,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,230.5) to=(339.15,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,217) to=(339.15,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,230.5) to=(412.65,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,217) to=(412.65,230.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,244) to=(76.65,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,230.5) to=(50.4,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,230.5) to=(76.65,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,244) to=(255.15,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,230.5) to=(255.15,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,244) to=(302.4,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,230.5) to=(302.4,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,244) to=(339.15,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,230.5) to=(339.15,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,244) to=(412.65,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,230.5) to=(412.65,244) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,257.5) to=(76.65,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,244) to=(50.4,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,244) to=(76.65,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,257.5) to=(255.15,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,244) to=(255.15,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,257.5) to=(302.4,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,244) to=(302.4,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,257.5) to=(339.15,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,244) to=(339.15,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,257.5) to=(412.65,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,244) to=(412.65,257.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,271) to=(76.65,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,257.5) to=(50.4,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,257.5) to=(76.65,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,271) to=(255.15,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,257.5) to=(255.15,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,271) to=(302.4,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,257.5) to=(302.4,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,271) to=(339.15,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,257.5) to=(339.15,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,271) to=(412.65,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,257.5) to=(412.65,271) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,284.5) to=(76.65,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,271) to=(50.4,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,271) to=(76.65,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,284.5) to=(255.15,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,271) to=(255.15,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,284.5) to=(302.4,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,271) to=(302.4,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,284.5) to=(339.15,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,271) to=(339.15,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,284.5) to=(412.65,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,271) to=(412.65,284.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,298) to=(76.65,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,284.5) to=(50.4,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,284.5) to=(76.65,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,298) to=(255.15,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,284.5) to=(255.15,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,298) to=(302.4,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,284.5) to=(302.4,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,298) to=(339.15,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,284.5) to=(339.15,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,298) to=(412.65,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,284.5) to=(412.65,298) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,311.5) to=(76.65,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,298) to=(50.4,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,298) to=(76.65,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,311.5) to=(255.15,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,298) to=(255.15,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,311.5) to=(302.4,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,298) to=(302.4,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,311.5) to=(339.15,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,298) to=(339.15,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,311.5) to=(412.65,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,298) to=(412.65,311.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,325) to=(76.65,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,311.5) to=(50.4,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,311.5) to=(76.65,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,325) to=(255.15,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,311.5) to=(255.15,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,325) to=(302.4,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,311.5) to=(302.4,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,325) to=(339.15,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,311.5) to=(339.15,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,325) to=(412.65,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,311.5) to=(412.65,325) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,338.5) to=(76.65,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,325) to=(50.4,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,325) to=(76.65,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,338.5) to=(255.15,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,325) to=(255.15,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,338.5) to=(302.4,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,325) to=(302.4,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,338.5) to=(339.15,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,325) to=(339.15,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,338.5) to=(412.65,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,325) to=(412.65,338.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,352) to=(76.65,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,338.5) to=(50.4,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,338.5) to=(76.65,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,352) to=(255.15,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,338.5) to=(255.15,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,352) to=(302.4,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,338.5) to=(302.4,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,352) to=(339.15,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,338.5) to=(339.15,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,352) to=(412.65,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,338.5) to=(412.65,352) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,365.5) to=(76.65,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,352) to=(50.4,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,352) to=(76.65,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,365.5) to=(255.15,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,352) to=(255.15,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,365.5) to=(302.4,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,352) to=(302.4,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,365.5) to=(339.15,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,352) to=(339.15,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,365.5) to=(412.65,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,352) to=(412.65,365.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,379) to=(76.65,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,365.5) to=(50.4,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,365.5) to=(76.65,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,379) to=(255.15,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,365.5) to=(255.15,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,379) to=(302.4,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,365.5) to=(302.4,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,379) to=(339.15,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,365.5) to=(339.15,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,379) to=(412.65,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,365.5) to=(412.65,379) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,392.5) to=(76.65,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,379) to=(50.4,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,379) to=(76.65,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,392.5) to=(255.15,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,379) to=(255.15,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,392.5) to=(302.4,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,379) to=(302.4,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,392.5) to=(339.15,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,379) to=(339.15,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,392.5) to=(412.65,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,379) to=(412.65,392.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,406) to=(76.65,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,392.5) to=(50.4,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,392.5) to=(76.65,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,406) to=(255.15,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,392.5) to=(255.15,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,406) to=(302.4,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,392.5) to=(302.4,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,406) to=(339.15,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,392.5) to=(339.15,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,406) to=(412.65,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,392.5) to=(412.65,406) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,419.5) to=(76.65,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,406) to=(50.4,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,406) to=(76.65,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,419.5) to=(255.15,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,406) to=(255.15,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,419.5) to=(302.4,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,406) to=(302.4,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,419.5) to=(339.15,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,406) to=(339.15,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,419.5) to=(412.65,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,406) to=(412.65,419.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,433) to=(76.65,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,419.5) to=(50.4,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,419.5) to=(76.65,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,433) to=(255.15,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,419.5) to=(255.15,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,433) to=(302.4,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,419.5) to=(302.4,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,433) to=(339.15,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,419.5) to=(339.15,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,433) to=(412.65,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,419.5) to=(412.65,433) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,446.5) to=(76.65,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,433) to=(50.4,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,433) to=(76.65,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,446.5) to=(255.15,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,433) to=(255.15,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,446.5) to=(302.4,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,433) to=(302.4,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,446.5) to=(339.15,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,433) to=(339.15,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,446.5) to=(412.65,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,433) to=(412.65,446.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,460) to=(76.65,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,446.5) to=(50.4,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,446.5) to=(76.65,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,460) to=(255.15,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,446.5) to=(255.15,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,460) to=(302.4,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,446.5) to=(302.4,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,460) to=(339.15,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,446.5) to=(339.15,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,460) to=(412.65,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,446.5) to=(412.65,460) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,473.5) to=(76.65,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,460) to=(50.4,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,460) to=(76.65,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,473.5) to=(255.15,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,460) to=(255.15,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,473.5) to=(302.4,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,460) to=(302.4,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,473.5) to=(339.15,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,460) to=(339.15,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,473.5) to=(412.65,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,460) to=(412.65,473.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,487) to=(76.65,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,473.5) to=(50.4,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,473.5) to=(76.65,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,487) to=(255.15,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,473.5) to=(255.15,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,487) to=(302.4,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,473.5) to=(302.4,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,487) to=(339.15,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,473.5) to=(339.15,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,487) to=(412.65,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,473.5) to=(412.65,487) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,500.5) to=(76.65,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,487) to=(50.4,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,487) to=(76.65,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,500.5) to=(255.15,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,487) to=(255.15,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,500.5) to=(302.4,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,487) to=(302.4,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,500.5) to=(339.15,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,487) to=(339.15,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,500.5) to=(412.65,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,487) to=(412.65,500.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,514) to=(76.65,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,500.5) to=(50.4,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,500.5) to=(76.65,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,514) to=(255.15,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,500.5) to=(255.15,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,514) to=(302.4,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,500.5) to=(302.4,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,514) to=(339.15,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,500.5) to=(339.15,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,514) to=(412.65,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,500.5) to=(412.65,514) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,527.5) to=(76.65,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,514) to=(50.4,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,514) to=(76.65,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,527.5) to=(255.15,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,514) to=(255.15,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,527.5) to=(302.4,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,514) to=(302.4,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,527.5) to=(339.15,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,514) to=(339.15,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,527.5) to=(412.65,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,514) to=(412.65,527.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,541) to=(76.65,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,527.5) to=(50.4,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,527.5) to=(76.65,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,541) to=(255.15,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,527.5) to=(255.15,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,541) to=(302.4,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,527.5) to=(302.4,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,541) to=(339.15,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,527.5) to=(339.15,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,541) to=(412.65,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,527.5) to=(412.65,541) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,554.5) to=(76.65,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,541) to=(50.4,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,541) to=(76.65,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,554.5) to=(255.15,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,541) to=(255.15,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,554.5) to=(302.4,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,541) to=(302.4,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,554.5) to=(339.15,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,541) to=(339.15,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,554.5) to=(412.65,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,541) to=(412.65,554.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,568) to=(76.65,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,554.5) to=(50.4,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,554.5) to=(76.65,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,568) to=(255.15,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,554.5) to=(255.15,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,568) to=(302.4,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,554.5) to=(302.4,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,568) to=(339.15,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,554.5) to=(339.15,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,568) to=(412.65,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,554.5) to=(412.65,568) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,581.5) to=(76.65,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,568) to=(50.4,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,568) to=(76.65,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,581.5) to=(255.15,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,568) to=(255.15,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,581.5) to=(302.4,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,568) to=(302.4,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,581.5) to=(339.15,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,568) to=(339.15,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,581.5) to=(412.65,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,568) to=(412.65,581.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,595) to=(76.65,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,581.5) to=(50.4,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,581.5) to=(76.65,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,595) to=(255.15,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,581.5) to=(255.15,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,595) to=(302.4,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,581.5) to=(302.4,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,595) to=(339.15,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,581.5) to=(339.15,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,595) to=(412.65,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,581.5) to=(412.65,595) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,608.5) to=(76.65,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,595) to=(50.4,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,595) to=(76.65,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,608.5) to=(255.15,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,595) to=(255.15,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,608.5) to=(302.4,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,595) to=(302.4,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,608.5) to=(339.15,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,595) to=(339.15,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,608.5) to=(412.65,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,595) to=(412.65,608.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,622) to=(76.65,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,608.5) to=(50.4,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,608.5) to=(76.65,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(76.65,622) to=(255.15,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,608.5) to=(255.15,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(255.15,622) to=(302.4,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,608.5) to=(302.4,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(302.4,622) to=(339.15,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,608.5) to=(339.15,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(339.15,622) to=(412.65,622) color=#FF000000 width=0.75 dash=Solid
+line   from=(412.65,608.5) to=(412.65,622) color=#FF000000 width=0.75 dash=Solid
+text   origin=(231.53,73.04) anchor=Center font=MS PGothic@18pt/#FF000000,bold clip=none value="納品書"
+text   origin=(51.9,105.48) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,95.5 252x13.5] value="株式会社テスト製作所 御中"
+text   origin=(337.65,105.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="納品番号"
+text   origin=(340.65,105.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[339.15,95.5 73.5x13.5] value="DN-2026-0088"
+text   origin=(337.65,118.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="納品日"
+text   origin=(340.65,118.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[339.15,109 73.5x13.5] value="2026年4月15日"
+text   origin=(63.53,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="No."
+text   origin=(165.9,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="品名"
+text   origin=(278.77,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="数量"
+text   origin=(320.77,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="単位"
+text   origin=(375.9,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="備考"
+text   origin=(63.53,172.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="47"
+text   origin=(78.15,172.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 047"
+text   origin=(300.9,172.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="15"
+text   origin=(320.77,172.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,186.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="48"
+text   origin=(78.15,186.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 048"
+text   origin=(300.9,186.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="18"
+text   origin=(320.77,186.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,199.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="49"
+text   origin=(78.15,199.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 049"
+text   origin=(300.9,199.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="21"
+text   origin=(320.77,199.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,213.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="50"
+text   origin=(78.15,213.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 050"
+text   origin=(300.9,213.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(320.77,213.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,226.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="51"
+text   origin=(78.15,226.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 051"
+text   origin=(300.9,226.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(320.77,226.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,240.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="52"
+text   origin=(78.15,240.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 052"
+text   origin=(300.9,240.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(320.77,240.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,253.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="53"
+text   origin=(78.15,253.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 053"
+text   origin=(300.9,253.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="12"
+text   origin=(320.77,253.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,267.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="54"
+text   origin=(78.15,267.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 054"
+text   origin=(300.9,267.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="15"
+text   origin=(320.77,267.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,280.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="55"
+text   origin=(78.15,280.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 055"
+text   origin=(300.9,280.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="18"
+text   origin=(320.77,280.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,294.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="56"
+text   origin=(78.15,294.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 056"
+text   origin=(300.9,294.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="21"
+text   origin=(320.77,294.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,307.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="57"
+text   origin=(78.15,307.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 057"
+text   origin=(300.9,307.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(320.77,307.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,321.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="58"
+text   origin=(78.15,321.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 058"
+text   origin=(300.9,321.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(320.77,321.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,334.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="59"
+text   origin=(78.15,334.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 059"
+text   origin=(300.9,334.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(320.77,334.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,348.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="60"
+text   origin=(78.15,348.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 060"
+text   origin=(300.9,348.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="12"
+text   origin=(320.77,348.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,361.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="61"
+text   origin=(78.15,361.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 061"
+text   origin=(300.9,361.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="15"
+text   origin=(320.77,361.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,375.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="62"
+text   origin=(78.15,375.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 062"
+text   origin=(300.9,375.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="18"
+text   origin=(320.77,375.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,388.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="63"
+text   origin=(78.15,388.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 063"
+text   origin=(300.9,388.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="21"
+text   origin=(320.77,388.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,402.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="64"
+text   origin=(78.15,402.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 064"
+text   origin=(300.9,402.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(320.77,402.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,415.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="65"
+text   origin=(78.15,415.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 065"
+text   origin=(300.9,415.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(320.77,415.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,429.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="66"
+text   origin=(78.15,429.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 066"
+text   origin=(300.9,429.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(320.77,429.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,442.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="67"
+text   origin=(78.15,442.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 067"
+text   origin=(300.9,442.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="12"
+text   origin=(320.77,442.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,456.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="68"
+text   origin=(78.15,456.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 068"
+text   origin=(300.9,456.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="15"
+text   origin=(320.77,456.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,469.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="69"
+text   origin=(78.15,469.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 069"
+text   origin=(300.9,469.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="18"
+text   origin=(320.77,469.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,483.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="70"
+text   origin=(78.15,483.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 070"
+text   origin=(300.9,483.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="21"
+text   origin=(320.77,483.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,496.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="71"
+text   origin=(78.15,496.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 071"
+text   origin=(300.9,496.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(320.77,496.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,510.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="72"
+text   origin=(78.15,510.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 072"
+text   origin=(300.9,510.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(320.77,510.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,523.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="73"
+text   origin=(78.15,523.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 073"
+text   origin=(300.9,523.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(320.77,523.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,537.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="74"
+text   origin=(78.15,537.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 074"
+text   origin=(300.9,537.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="12"
+text   origin=(320.77,537.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,550.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="75"
+text   origin=(78.15,550.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 075"
+text   origin=(300.9,550.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="15"
+text   origin=(320.77,550.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,564.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="76"
+text   origin=(78.15,564.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 076"
+text   origin=(300.9,564.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="18"
+text   origin=(320.77,564.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,577.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="77"
+text   origin=(78.15,577.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 077"
+text   origin=(300.9,577.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="21"
+text   origin=(320.77,577.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,591.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="78"
+text   origin=(78.15,591.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 078"
+text   origin=(300.9,591.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(320.77,591.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,604.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="79"
+text   origin=(78.15,604.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 079"
+text   origin=(300.9,604.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="6"
+text   origin=(320.77,604.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(63.53,618.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="80"
+text   origin=(78.15,618.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル品目 080"
+text   origin=(300.9,618.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="9"
+text   origin=(320.77,618.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="個"
+text   origin=(511.88,31.28) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="納品書"
+text   origin=(50.4,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="2026/04/20"
+text   origin=(264.64,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="2 / 2 ページ"
+text   origin=(499.56,817.87) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="サンプル"
