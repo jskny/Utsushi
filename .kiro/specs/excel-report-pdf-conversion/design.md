@@ -8,6 +8,9 @@
 各レイヤーは下位レイヤーの実装詳細を知らず、内部モデル(POCO)を介してのみやり取りする。
 これにより「Excelの解析方法」や「PDFの描画方法」を後から差し替えても、帳票定義や置換ロジックに影響が及ばないようにする。
 
+すべてのレイヤーは共通基盤 `Utsushi.Core`(例外階層とレイヤーをまたぐ値型のみ)を参照してよい。
+呼び出し元プロダクトが参照するのは、5レイヤーを組み立てるファサード `Utsushi`(`ReportPdfConverter`)だけである。
+
 ```
 [.xlsx ファイル]
       │  (1) Parsing
@@ -27,6 +30,48 @@ PagedLayout (ページ分割・座標計算済みの描画命令列)
 [.pdf ファイル]
 ```
 
+## 単位と座標系
+
+内部表現の単位は **ポイント(pt、1pt = 1/72インチ)** に統一する(`.kiro/steering/tech.md`「コーディング規約」)。
+帳票定義や外部仕様がミリ単位を使う場合も、レイヤーの境界を越える前にポイントへ変換する。
+換算は `Utsushi.Core` の `Units` に集約する。
+
+- **座標系**: ページ左上が原点。X軸は右方向、Y軸は**下方向**(SkiaSharp / PDF の描画APIと一致させるため)。
+- **行高**: OOXML の `row/@ht` は元からポイント単位。換算不要。
+- **余白**: OOXML の `pageMargins` はインチ。`Units.InchesToPoints` で換算する。
+- **列幅**: OOXML の `col/@width` は「標準フォントで数字を何文字ぶん表示できるか」の単位で、
+  96dpi のピクセルを経由して換算する。詳細は次節。
+
+### 列幅のポイント換算(要件4.5)
+
+設計当初の未決事項だったフォントメトリクスとの対応関係は、以下のとおり決定した。
+
+ECMA-376 Part 1, 18.3.1.13 が定める換算式をそのまま用いる。
+
+```
+pixels = Truncate(((256 * width + Truncate(128 / MDW)) / 256) * MDW)
+points = pixels * 72 / 96
+```
+
+- `MDW`(Maximum Digit Width)は標準フォントの最大数字幅(96dpiのピクセル)。
+- `Truncate` が2回入るため、素朴な `width * MDW` とは最大1px程度ずれる。この誤差は列数ぶん累積して
+  改ページ位置に影響しうるため、式を近似せずそのまま実装する(`ExcelUnitConverter`)。
+- `MDW` はフォントとサイズに依存する。SkiaSharp のフォントメトリクスから自動導出するのではなく、
+  **帳票定義の `maxDigitWidthPx`(既定7)で明示的に与える**方式とした。理由は2つある。
+  - 実行環境にインストールされたフォントの版差で `MDW` が変わると、改ページ位置が環境依存になる。
+  - 帳票ごとに標準フォントが異なりうるため、帳票固有の値は帳票定義側へ寄せる方針と整合する。
+
+### フォントメトリクスの参照方法
+
+Layout レイヤーはテキスト配置(左右/上下揃え、縮小表示、折り返し)に実フォントのメトリクスを必要とするが、
+SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider` を **Layout 側に定義し、実装を Rendering 側に置く**
+(依存性逆転)。実装は2つある。
+
+| 実装 | 置き場所 | 用途 |
+|---|---|---|
+| `SkiaFontMetricsProvider` | Rendering | 実運用。実フォントのメトリクスを使う |
+| `ApproximateFontMetricsProvider` | Layout | テスト・ゴールデン比較。全角1em/半角0.5emの決定的な近似 |
+
 ## コンポーネントとインターフェース
 
 ### 1. Parsing レイヤー (`Utsushi.Parsing`)
@@ -43,13 +88,19 @@ PagedLayout (ページ分割・座標計算済みの描画命令列)
   ```
 - OpenXml SDK以外の型(`SpreadsheetDocument` 等)を `WorkbookModel` の外に漏らさない。上位レイヤーは `WorkbookModel` のみを参照する。
 - 取得するページ設定: 印刷範囲(`definedNames` の `_xlnm.Print_Area`)、手動改ページ(`rowBreaks`/`colBreaks`)、用紙サイズ・余白・拡大縮小(`pageSetup`)、印刷タイトル(`_xlnm.Print_Titles`)、印刷順序。
+- **数式セル**: 数式は評価せず、OOXMLにキャッシュされている計算結果の値のみを読み取る(要件1.6)。
+- **数値書式**: `numFmt` を適用した表示文字列を `CellModel.FormattedValue` に持たせる。
+  汎用の数値書式エンジンではなく、自社帳票が使う範囲(金額・数量・日付・パーセント)のサブセット実装とする。
+  解釈できない書式(指数表記・分数表記など)は例外にせず General 相当へフォールバックし、
+  表示の崩れはゴールデンテストで検出する。
 
 ### 2. ReportDefinition レイヤー (`Utsushi.ReportDefinition`)
 
 - **責務**: 帳票定義(JSON)をロードし、`WorkbookModel` と突合して `ReportModel` を構築する。帳票ごとの固有情報(置換キーとセル番地のマッピング、はみ出し時の挙動、許容誤差等)はすべてここに閉じ込める。
-- **帳票定義スキーマ(例)**:
+- **帳票定義スキーマ(例)**: 全プロパティの一覧と制約は `docs/帳票定義スキーマ.md` を参照。
   ```json
   {
+    "schemaVersion": 1,
     "reportCode": "invoice",
     "sheetName": "請求書",
     "substitutionFields": [
@@ -57,9 +108,16 @@ PagedLayout (ページ分割・座標計算済みの描画命令列)
       { "key": "IssueDate", "cell": "C4", "required": true, "overflow": "clip" }
     ],
     "toleranceMm": 0.5,
-    "unsupportedElements": "error"
+    "unsupportedElements": "error",
+    "maxDigitWidthPx": 7,
+    "printArea": "A1:F34"
   }
   ```
+- スキーマ検証には JSON Schema ライブラリを使わず、必須項目・型・値域・キー重複を明示的に検証する。
+  スキーマが小さく固定的であり、依存を1つ減らせるため(`.kiro/steering/tech.md`「依存ライブラリ追加時のルール」)。
+  検証エラーには問題のあったプロパティのパス(例: `substitutionFields[0].cell`)を含める(要件6.3)。
+- 帳票コードは呼び出し元から渡されうるため、ディレクトリ名として解決する際に
+  パス区切り文字や `..` によるルート外への脱出を拒否する。
 - **主なインターフェース**:
   ```csharp
   public interface IReportDefinitionRepository
@@ -119,22 +177,43 @@ PagedLayout (ページ分割・座標計算済みの描画命令列)
   }
   ```
 - 1ページ = 1 `SKCanvas` への描画。矩形塗りつぶし(背景)→罫線→テキストの順で描画し、Excelの重なり順を再現する。
-- フォントは埋め込み(サブセット化)を基本とし、対象帳票が使用するフォントが実行環境に存在しない場合はビルド/デプロイ時にエラーとする(実行時のフォールバックによる見た目崩れを避ける)。
+- 出力するPDFのバージョンは SkiaSharp の PDF バックエンドが生成する **PDF 1.4** とする(要件5.3)。
+- 対象帳票が使用するフォントが実行環境に存在しない場合は `FontNotAvailableException` で失敗させる
+  (`FontResolver` の既定は厳格モード)。実行時の暗黙フォールバックによる見た目崩れを避けるため。
+  検証だけを先に行いたい場合は `FontResolver.EnsureAvailable` を使う。
+- **フォント埋め込みに関する既知の制約**: SkiaSharp の PDF バックエンド(NuGetで配布されるネイティブビルド)は
+  **フォントのサブセット化を行わず、使用フォントを丸ごと埋め込む**。2.88 系・3.x 系の双方で実測確認済み。
+  日本語フォントは数MBあるため、1ページの帳票でも出力PDFが4MB前後になる。
+  配布サイズが問題になる帳票向けに、文字をベクタのアウトラインとして出力する
+  `PdfTextRendering.Outline` を用意した(同一帳票で 4.3MB → 91KB、見た目は同一)。
+  ただしPDF内の文字列検索・コピー・テキスト抽出ができなくなるため、既定は `EmbedFont` のままとする。
+- 失敗時に不完全なPDFを残さないため、いったんメモリ上に完全なPDFを作ってから出力先へ転送する。
+  ファイル出力では同一ディレクトリ上の一時ファイルへ書いてから置換する(要件5.4)。
 
 ## データモデル(概要)
 
 ```csharp
-public sealed record WorkbookModel(IReadOnlyList<SheetModel> Sheets);
+// --- Parsing レイヤー ---
+public sealed record WorkbookModel(IReadOnlyList<SheetModel> Sheets, FontStyle DefaultFont);
 
 public sealed record SheetModel(
     string Name,
     IReadOnlyDictionary<CellAddress, CellModel> Cells,
     IReadOnlyList<MergedRange> MergedRanges,
-    IReadOnlyList<double> ColumnWidths,
-    IReadOnlyList<double> RowHeights,
-    PageSetup PageSetup);
+    IReadOnlyList<double> ColumnWidths,   // 索引0が列A。単位はExcelの「文字数」
+    IReadOnlyList<double> RowHeights,     // 索引0が行1。単位はポイント
+    double DefaultColumnWidth,            // 上記リストの範囲外の列に適用する既定値
+    double DefaultRowHeight,
+    IReadOnlySet<int> HiddenColumns,      // 非表示行/列は印刷されないため保持する
+    IReadOnlySet<int> HiddenRows,
+    PageSetupModel PageSetup);
 
-public sealed record CellModel(string? Value, CellStyle Style);
+public sealed record CellModel(
+    string? Value,                        // Excelが保持している生の値
+    CellValueKind ValueKind,              // Blank/Text/Number/Boolean/Error
+    CellStyle Style,
+    string? FormattedValue = null,        // 数値書式を適用した表示文字列
+    bool HasFormula = false);
 
 public sealed record CellStyle(
     FontStyle Font,
@@ -142,38 +221,94 @@ public sealed record CellStyle(
     HorizontalAlignment HAlign,
     VerticalAlignment VAlign,
     string? NumberFormat,
-    string? BackgroundColor);
+    ArgbColor BackgroundColor,
+    bool WrapText,
+    bool ShrinkToFit,
+    int Indent);
 
+// --- ReportDefinition / Substitution レイヤー ---
 public sealed record ReportModel(
     ReportDefinition Definition,
-    SheetModel Sheet); // 置換適用後もこの型のまま(値のみ更新)
+    SheetModel Sheet,                     // 置換適用後もこの型のまま(値のみ更新)
+    IReadOnlyDictionary<CellAddress, OverflowBehavior> OverflowByCell);
 
-public sealed record PagedLayout(IReadOnlyList<PageLayout> Pages);
+// --- Layout レイヤー ---
+public sealed record PagedLayout(
+    IReadOnlyList<PageLayout> Pages, string ReportCode, string SheetName);
 
 public sealed record PageLayout(
     PaperSize Paper,
-    Orientation Orientation,
-    IReadOnlyList<DrawCommand> Commands);
+    PageOrientation Orientation,
+    double WidthPt,                       // 向きを適用した実寸
+    double HeightPt,
+    IReadOnlyList<DrawCommand> Commands,  // 背景 → 罫線 → テキストの順
+    int PageNumber,
+    (int First, int Last) RowRange,       // 診断・テスト用
+    (int First, int Last) ColumnRange,
+    double ScaleFactor);                  // 座標には適用済み。診断用に保持する
+
+// 描画命令。座標はページ左上原点のポイントで、余白・拡大縮小を適用済み。
+public abstract record DrawCommand;
+public sealed record FillRectCommand(RectPt Rect, ArgbColor Color) : DrawCommand;
+public sealed record LineCommand(
+    PointPt From, PointPt To, ArgbColor Color, double WidthPt, LineDashStyle Dash) : DrawCommand;
+public sealed record TextCommand(
+    PointPt Origin, string Text, FontStyle Font, TextAnchor Anchor, RectPt? ClipRect) : DrawCommand;
 ```
+
+`TextCommand.Origin` の X は `Anchor`(Left/Center/Right)の基準点、Y はベースライン位置を表す。
+文字列の実際の幅は描画時のフォントで決まるため、Layout は基準点だけを確定させ、
+左右揃えの最終的な字送りは Rendering が行う。
 
 ## エラーハンドリング方針
 
-- 例外階層は `UtsushiException` を基底とし、以下を派生させる。
+- 例外階層は `UtsushiException`(`Utsushi.Core.Exceptions`)を基底とし、以下を派生させる。
   - `ReportDefinitionNotFoundException`(要件1.4)
+  - `ReportStructureMismatchException`(要件1.4: シート名・セル番地の不一致)
   - `UnsupportedWorkbookElementException`(要件1.5)
   - `SubstitutionKeyNotFoundException` / `RequiredSubstitutionValueMissingException`(要件2.3, 2.4)
-  - `InvalidExcelFileException`(要件6.1, 6.2)
-  - `ReportDefinitionSchemaException`(要件6.3)
+  - `InvalidExcelFileException`(要件6.1, 6.2。`Reason` で非xlsx/破損/パスワード保護を区別する)
+  - `ReportDefinitionSchemaException`(要件6.3。問題のあったプロパティパスを保持する)
+  - `LayoutComputationException` / `PdfRenderingException` / `FontNotAvailableException`
 - すべての例外は、帳票コード・シート名・セル番地・処理段階(Parsing/Substitution/Layout/Rendering)を構造化プロパティとして保持し、ログ出力時に特定できるようにする(要件6.4)。
 - Renderingレイヤーは一時ファイル/一時ストリームに書き込み、正常終了時のみ最終出力先へ確定させる(要件5.4: 不完全PDFを残さない)。
 
 ## テスト戦略
 
 - **ユニットテスト**: 各レイヤーのインターフェース単位(特にLayoutレイヤーの改ページ計算・フォントメトリクス換算、Substitutionレイヤーの必須/未知キー判定)。
-- **ゴールデンテスト**: `samples/reports/` の帳票サンプルを実際に変換し、レビュー済みの期待出力(ページ数・各ページの主要な描画命令のスナップショット)と比較する。PDFバイナリの完全一致ではなく、意味のある差分(座標・テキスト・罫線)を検出できる比較方法を採用する。
+- **ゴールデンテスト**: `samples/reports/` の帳票サンプルを実際に変換し、レビュー済みの期待出力と比較する。
+  比較対象は **PDFバイナリではなく `PagedLayout` を行指向テキストにしたスナップショット** とする。
+  PDFバイナリは生成日時・圧縮・SkiaSharpのバージョンで変わり、意味のない差分が出るため。
+  スナップショットは1行1描画命令で、座標は0.01pt(約0.0035mm)に丸める。
+  帳票定義の許容誤差(既定0.5mm)より十分細かく、浮動小数の最下位ビットの揺れは吸収できる粒度である。
+  - 期待値の置き場所: `tests/Utsushi.Golden.Tests/Fixtures/<帳票コード>/layout.snapshot.txt`
+  - 更新方法: `UTSUSHI_UPDATE_GOLDEN=1 dotnet test`。**差分は必ずレビューしてからコミットする**。
+  - レイアウト計算には決定的な `ApproximateFontMetricsProvider` を使う。実フォントのメトリクスは
+    実行環境のフォント構成に依存し、CIとローカルでゴールデンが一致しなくなるため。
+  - 実フォントを使った経路は「PDFが生成できること」までを自動テストの範囲とし、
+    最終的な見た目のレビューは人が行う。
 - **契約テスト**: `ReportDefinition` のJSONスキーマ検証(不正な定義をロード時に検出できることを確認)。
+  `samples/reports/` 配下の実際の定義がすべてロードできることも確認する。
+
+## 決定済みの旧未決事項
+
+- ~~フォントメトリクス取得の具体的な方法~~ → 「単位と座標系」の節に記載。
+  列幅換算は ECMA-376 の式を用い、MDW は帳票定義の `maxDigitWidthPx` で与える。
+  テキスト配置用のフォントメトリクスは `IFontMetricsProvider` 越しに参照する。
+- ~~数式を含むセルの扱い~~ → 数式は評価せず、キャッシュ済みの計算結果の値のみを読み取る。
+  `requirements.md` の要件1.6 として要件化済み。
 
 ## 未決事項 / 今後の検討
 
-- フォントメトリクス取得の具体的な方法(SkiaSharpのフォントメトリクスAPIと、Excelの列幅(文字単位)換算式の対応関係)は、最初の帳票定義を実装する際にプロトタイプで検証し、本設計書を更新する。
-- 数式を含むセルの扱い(値のみ読み取るか、限定的に再計算するか)は要件化されていないため、最初の対象帳票の内容を確認した上で `requirements.md` に追記する。
+- **PDFのフォントサブセット化**: SkiaSharp のネイティブビルドがサブセット化に対応していないため、
+  現状は「フォント全体を埋め込む(大きい)」か「アウトライン化する(検索不可)」の二択になっている。
+  配布サイズと検索性を両立するには、PDF生成後にサブセット化する後処理か、別のPDFライブラリの検討が必要。
+  対象帳票の運用要件(PDF内検索が必要かどうか)を確認したうえで判断する。
+- **太字の合成(fake bold)**: 実フォントに太字の字形が無い場合、SkiaSharp は字形を合成して描画する。
+  このとき PDF には Type 3 フォントとして出力され、ファイルサイズが増える。
+  対象帳票が使うフォントに太字の字形が含まれるかを確認し、必要なら太字用フォントファイルを
+  `FontResolver` に明示登録する運用とする。
+- **複数の印刷範囲**: Excel は1シートに複数の印刷範囲を設定できるが、現状は全体を包含する矩形として扱う。
+  対象帳票で必要になった場合のみ、範囲ごとに別ページとする実装へ拡張する。
+- **ヘッダー/フッター**: `pageSetup` のヘッダー/フッター文字列は読み取っておらず、描画もしない。
+  対象帳票で必要になった時点で要件化する。

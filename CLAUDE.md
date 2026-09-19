@@ -5,14 +5,22 @@
 
 ## 現在の状態
 
-コードベースは未着手。現時点で整備済みなのは以下のみ:
+中核機能(`.kiro/specs/excel-report-pdf-conversion/`)の実装は完了している。`dotnet build` / `dotnet test` / `dotnet format` はいずれもグリーン。
 
+- `src/` — Core / Parsing / ReportDefinition / Substitution / Layout / Rendering の5レイヤー+共通基盤、ファサード `Utsushi`、CLI
+- `tests/` — 各レイヤーのユニットテストとゴールデン(回帰)テスト
+- `samples/reports/<帳票コード>/` — 帳票定義(`definition.json`)とテンプレート(`template.xlsx`)
+- `tools/Utsushi.SampleGenerator/` — サンプル帳票 `.xlsx` の生成ツール(製品コードからは参照されない)
 - `.kiro/steering/` — 常時適用される方針(製品概要・技術方針・プロジェクト構成)
 - `.kiro/specs/excel-report-pdf-conversion/` — 中核機能の要件定義書・設計書・実装タスクリスト
-- `.claude/agents/` — レビュー・テスト作成用サブエージェント
-- `docs/開発環境メモ.md` — Claude Code on the web実行環境で実際に裏取りした環境固有の注意点(SDKセットアップ、`pkill -f`の自己マッチ問題など)
+- `docs/帳票定義スキーマ.md` — `definition.json` のスキーマ
+- `docs/開発環境メモ.md` — Claude Code on the web実行環境で裏取りした環境固有の注意点(SDKセットアップ、日本語フォント、`pkill -f`の自己マッチ問題など)
 
-実装に着手する際は、`.kiro/specs/excel-report-pdf-conversion/tasks.md` のタスクを順に消化すること。実装中に環境起因と思われるエラーに遭遇したら、まず `docs/開発環境メモ.md` を確認する。
+> **サンプル帳票について**: 実運用の帳票テンプレートは社内データのためリポジトリに含められない。
+> `samples/reports/` にあるのは、実帳票と同等の構造(結合セル・罫線・数値書式・印刷範囲・印刷タイトル・複数ページ)を持つ**合成サンプル**である。
+> 実帳票を追加する際は `.kiro/steering/structure.md`「帳票の追加手順」に従う。
+
+変更に着手する前に、該当レイヤーの既存実装を `code-investigator` で確認すること。実装中に環境起因と思われるエラーに遭遇したら、まず `docs/開発環境メモ.md` を確認する。
 
 ## 開発の進め方(spec駆動)
 
@@ -43,10 +51,25 @@
 | `spec-compliance-reviewer` | requirements/design/tasksの作成・更新時、実装完了後の仕様整合性確認(仕様↔実装のトレーサビリティ) |
 | `doc-reviewer` | `.kiro/steering/`・`.kiro/specs/`・`docs/`・`CLAUDE.md`等の追加・更新直後。ドキュメント間の矛盾、技術的記載の裏取り、参照切れ、体裁を確認 |
 
-## 開発コマンド(プロジェクト作成後)
+## 開発コマンド
 
 ```bash
 dotnet build
 dotnet test
 dotnet format
+
+# 帳票サンプル(.xlsx)を再生成する
+dotnet run --project tools/Utsushi.SampleGenerator -- samples/reports
+
+# ゴールデンファイルの期待値を更新する(差分は必ずレビューしてからコミット)
+UTSUSHI_UPDATE_GOLDEN=1 dotnet test
+
+# CLIで変換を試す
+dotnet run --project src/Utsushi.Cli -- \
+  --report invoice --input samples/reports/invoice/template.xlsx \
+  --output /tmp/invoice.pdf --definitions samples/reports \
+  --set CustomerName="株式会社サンプル 御中" --set InvoiceNo="INV-0001" --set TotalAmount="¥1,000"
 ```
+
+> 開発環境に対象フォント(MS PGothic等)が無い場合、既定の厳格モードでは `FontNotAvailableException` になる。
+> 動作確認だけなら `--allow-font-fallback IPAGothic` のように代替フォントを指定する(見た目は崩れる)。
