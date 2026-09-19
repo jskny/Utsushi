@@ -23,6 +23,15 @@ namespace Utsushi.Rendering;
 /// </remarks>
 public sealed class SkiaPdfRenderer : IPdfRenderer
 {
+    /// <summary>
+    /// 太字を合成するときの輪郭の太さ(フォントサイズに対する比率)。
+    /// </summary>
+    /// <remarks>
+    /// 一般的な擬似太字(faux bold)で使われる em の3%前後に合わせている。
+    /// 大きくしすぎると字が潰れ、小さいと太字に見えない。
+    /// </remarks>
+    private const double BoldStrokeRatio = 0.03;
+
     private readonly SkiaFontMetricsProvider _fontMetrics;
     private readonly PdfRenderOptions _options;
 
@@ -235,12 +244,21 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
 
     private void DrawText(SKCanvas canvas, TextCommand text)
     {
-        using var font = _fontMetrics.CreateFont(text.Font);
+        using var font = _fontMetrics.CreateFont(text.Font, out var synthesizeBold);
         using var paint = new SKPaint
         {
             Color = ToSkColor(text.Font.Color),
             IsAntialias = true,
         };
+
+        if (synthesizeBold)
+        {
+            // 実フォントが太字の字形を持たない場合、輪郭を塗りと一緒に描いて太字を再現する。
+            // SkiaSharp に太字を合成させると PDF が Type 3 フォントになり、
+            // 文字列検索ができなくなるため、この方式で CID TrueType 埋め込みを保つ。
+            paint.Style = SKPaintStyle.StrokeAndFill;
+            paint.StrokeWidth = (float)(text.Font.SizePt * BoldStrokeRatio);
+        }
 
         var width = SkiaFontMetricsProvider.MeasureText(font, text.Text);
         var x = text.Anchor switch
@@ -261,7 +279,7 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
         {
             if (_options.TextRendering == PdfTextRendering.Outline)
             {
-                DrawTextAsOutline(canvas, text.Text, font, paint, x, text.Origin.Y);
+                DrawTextAsOutline(canvas, text.Text, font, paint, x, text.Origin.Y, synthesizeBold);
             }
             else
             {
@@ -288,7 +306,8 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
     /// PDFにフォントを埋め込まないぶんファイルサイズが小さくなる代わりに、
     /// PDF内の文字列検索・コピーはできなくなる(<see cref="PdfTextRendering"/> を参照)。
     /// </remarks>
-    private static void DrawTextAsOutline(SKCanvas canvas, string text, SKFont font, SKPaint paint, double x, double baselineY)
+    private static void DrawTextAsOutline(
+        SKCanvas canvas, string text, SKFont font, SKPaint paint, double x, double baselineY, bool synthesizeBold)
     {
         var glyphCount = font.CountGlyphs(text);
         if (glyphCount <= 0)
@@ -324,8 +343,9 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
         using var fill = new SKPaint
         {
             Color = paint.Color,
-            Style = SKPaintStyle.Fill,
+            Style = synthesizeBold ? SKPaintStyle.StrokeAndFill : SKPaintStyle.Fill,
             IsAntialias = true,
+            StrokeWidth = synthesizeBold ? paint.StrokeWidth : 0f,
         };
 
         canvas.DrawPath(combined, fill);
@@ -343,6 +363,12 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
 
         var metrics = font.Metrics;
         var thickness = metrics.UnderlineThickness ?? (float)(font_.SizePt / 14.0);
+
+        // 太字を合成している場合は、下線・取消線も同じだけ太くして字面と釣り合わせる。
+        if (paint.Style == SKPaintStyle.StrokeAndFill)
+        {
+            thickness += paint.StrokeWidth;
+        }
 
         using var linePaint = new SKPaint
         {

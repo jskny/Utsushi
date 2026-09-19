@@ -201,6 +201,47 @@ public sealed class SkiaPdfRendererTests : IDisposable
         }
     }
 
+    [Fact]
+    public void 太字を含むPDFでもType3フォントにならない()
+    {
+        // 太字の字形を持たないフォントで太字を描くと、SkiaSharp に合成させた場合は
+        // PDF が Type 3 フォントになり文字列検索ができなくなる。
+        // Utsushi は通常字形を埋め込んで描画時に輪郭を太らせるため、Type 3 にならない。
+        var renderer = new SkiaPdfRenderer(_metrics);
+        using var output = new MemoryStream();
+
+        var bold = FontStyle.Default with { Bold = true };
+        var layout = Layout(commands: new DrawCommand[]
+        {
+            new TextCommand(new PointPt(55, 70), "太字テスト Bold", bold, TextAnchor.Left, null),
+            new TextCommand(new PointPt(55, 90), "通常テスト", FontStyle.Default, TextAnchor.Left, null),
+        });
+
+        renderer.Render(layout, output);
+
+        var content = Encoding.Latin1.GetString(output.ToArray());
+        Assert.DoesNotContain("/Subtype /Type3", content);
+        Assert.Contains("/FontFile2", content);
+    }
+
+    [Fact]
+    public void 斜体を含むPDFでもType3フォントにならない()
+    {
+        var renderer = new SkiaPdfRenderer(_metrics);
+        using var output = new MemoryStream();
+
+        var italic = FontStyle.Default with { Italic = true };
+        var layout = Layout(commands: new DrawCommand[]
+        {
+            new TextCommand(new PointPt(55, 70), "斜体テスト Italic", italic, TextAnchor.Left, null),
+        });
+
+        renderer.Render(layout, output);
+
+        var content = Encoding.Latin1.GetString(output.ToArray());
+        Assert.DoesNotContain("/Subtype /Type3", content);
+    }
+
     /// <summary>Rendering が解釈できない描画命令(異常系のテスト用)。</summary>
     private sealed record UnknownCommand : DrawCommand;
 }
