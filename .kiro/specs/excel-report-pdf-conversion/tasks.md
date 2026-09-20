@@ -3,9 +3,10 @@
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
-> **状況**: 全タスク完了(2026-09-19)。`dotnet build` / `dotnet test`(177件)/ `dotnet format` がグリーン。
+> **状況**: タスク1〜11完了(2026-09-19)。`dotnet build` / `dotnet test`(177件)/ `dotnet format` がグリーン。
 > 実装時に決定した事項・判明した制約は `design.md` に反映済み。
 > タスク文面どおりに実現できなかった項目には各タスクに注記を付けた。
+> タスク12(セル番地直接指定によるオーバーライド)は2026-09-20に要件2.7/2.8として追加。
 
 - [x] 1. ソリューション基盤のセットアップ
   - `.kiro/steering/structure.md` の構成に従い、`Utsushi.sln` と各レイヤーの `.NET 5` クラスライブラリプロジェクト(Parsing/ReportDefinition/Substitution/Layout/Rendering)、および対応するテストプロジェクトを作成する
@@ -112,3 +113,15 @@
   - [x] 11.4 上記を検証するサンプル帳票(領収書: 複数印刷範囲、納品書: ヘッダー/フッター)と
         ゴールデンテストを追加する
     - _Requirements: 8.3_
+
+- [ ] 12. セル番地直接指定によるオーバーライド機能
+  - [ ] 12.1 `ICellSubstitutor` に `ApplyCellOverrides(ReportModel, IReadOnlyDictionary<string, string>)` を追加し、`CellSubstitutor` で実装する(帳票定義未登録セルへのA1形式直接指定、書式は変更しない)
+    - _Requirements: 2.7_
+  - [ ] 12.2 セル番地がA1形式として解釈できない場合の例外 `InvalidCellOverrideAddressException` を実装する
+    - _Requirements: 2.8_
+  - [ ] 12.3 `Utsushi.ReportPdfConverter` の `Convert` / `ConvertToFile` / `ComputeLayout` に任意パラメータ `cellOverrides` を追加し、`Apply` の後段で `ApplyCellOverrides` を適用する
+    - _Requirements: 2.7_
+  - [ ] 12.4 CLIに `--override <セル番地>=<値>` オプションを追加する
+    - _Requirements: 2.7_
+  - [ ] 12.5 ユニットテスト(未登録セルの上書き、既存書式の維持、不正なセル番地でのエラー)とゴールデンテスト(既存の置換キーとの併用)を追加する
+    - _Requirements: 2.7, 2.8_

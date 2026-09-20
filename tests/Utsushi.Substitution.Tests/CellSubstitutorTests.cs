@@ -171,4 +171,86 @@ public sealed class CellSubstitutorTests
         Assert.Equal(CellValueKind.Text, cell.ValueKind);
         Assert.Equal("差し込み値", cell.DisplayValue);
     }
+
+    // --- ApplyCellOverrides(セル番地直接指定、要件2.7, 2.8) ---
+
+    [Fact]
+    public void 帳票定義に未登録のセルもセル番地指定で上書きできる()
+    {
+        var definition = Definition(Field("InvoiceNo", "C3"));
+        var sheet = Sheet(("C3", "INV-0000", null), ("B5", "もとの備考", null));
+        var report = Report(definition, sheet);
+
+        var result = _substitutor.ApplyCellOverrides(
+            report, new Dictionary<string, string> { ["B5"] = "臨時の備考" });
+
+        Assert.Equal("臨時の備考", result.Sheet.GetCell(CellAddress.Parse("B5"))!.DisplayValue);
+        Assert.Equal("INV-0000", result.Sheet.GetCell(CellAddress.Parse("C3"))!.DisplayValue);
+    }
+
+    [Fact]
+    public void セル番地指定の上書きでも書式は変わらない()
+    {
+        var style = CellStyle.Default with { Font = FontStyle.Default with { Bold = true } };
+        var definition = Definition();
+        var report = Report(definition, Sheet(("D5", "0", style)));
+
+        var result = _substitutor.ApplyCellOverrides(
+            report, new Dictionary<string, string> { ["D5"] = "1,234" });
+
+        var cell = result.Sheet.GetCell(CellAddress.Parse("D5"))!;
+        Assert.Equal("1,234", cell.DisplayValue);
+        Assert.Same(style, cell.Style);
+    }
+
+    [Fact]
+    public void セル番地指定の上書きでも入力のモデルは変更されない()
+    {
+        var definition = Definition();
+        var report = Report(definition, Sheet(("A1", "もとの値", null)));
+
+        _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = "あたらしい値" });
+
+        Assert.Equal("もとの値", report.Sheet.GetCell(CellAddress.Parse("A1"))!.DisplayValue);
+    }
+
+    [Fact]
+    public void 存在しなかったセルへのセル番地指定も新規セルとして追加される()
+    {
+        var definition = Definition();
+        var report = Report(definition, Sheet());
+
+        var result = _substitutor.ApplyCellOverrides(
+            report, new Dictionary<string, string> { ["Z9"] = "新規の値" });
+
+        Assert.Equal("新規の値", result.Sheet.GetCell(CellAddress.Parse("Z9"))!.DisplayValue);
+    }
+
+    [Fact]
+    public void A1形式として解釈できないセル番地はエラーになる()
+    {
+        var definition = Definition();
+        var report = Report(definition, Sheet());
+
+        var ex = Assert.Throws<InvalidCellOverrideAddressException>(
+            () => _substitutor.ApplyCellOverrides(
+                report, new Dictionary<string, string> { ["not-a-cell"] = "v" }));
+
+        Assert.Equal("not-a-cell", ex.Address);
+        Assert.Equal("test-report", ex.ReportCode);
+        Assert.Equal(ProcessingStage.Substitution, ex.Stage);
+    }
+
+    [Fact]
+    public void 未知キー検証や必須キー検証の対象外である()
+    {
+        // 帳票定義に一切フィールドが無くても、セル番地指定の上書きはエラーにならない。
+        var definition = Definition(Field("Required", "A1", required: true));
+        var report = Report(definition, Sheet(("A1", "必須の値", null)));
+
+        var result = _substitutor.ApplyCellOverrides(
+            report, new Dictionary<string, string> { ["B2"] = "無関係な上書き" });
+
+        Assert.Equal("無関係な上書き", result.Sheet.GetCell(CellAddress.Parse("B2"))!.DisplayValue);
+    }
 }

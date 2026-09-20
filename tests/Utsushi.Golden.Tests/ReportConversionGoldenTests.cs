@@ -184,6 +184,59 @@ public sealed class ReportConversionGoldenTests
     }
 
     [Fact]
+    public void セル番地直接指定で帳票定義に未登録のセルを上書きできる()
+    {
+        // B12(明細1行目の品名セル)は invoice の definition.json に置換キーとして
+        // 登録されていない。置換キー方式(values)と併用できることも合わせて検証する。
+        using var converter = CreateDeterministicConverter(out _);
+        using var input = File.OpenRead(TestPaths.SampleTemplate("invoice"));
+
+        var layout = converter.ComputeLayout(
+            "invoice",
+            input,
+            new Dictionary<string, string>
+            {
+                ["CustomerName"] = "株式会社テスト製作所 御中",
+                ["InvoiceNo"] = "INV-2026-0417",
+                ["TotalAmount"] = "¥2,153,800",
+            },
+            new Dictionary<string, string> { ["B12"] = "臨時オプション対応費" });
+
+        var texts = layout.Pages
+            .SelectMany(p => p.Commands.OfType<TextCommand>())
+            .Select(t => t.Text)
+            .ToList();
+
+        Assert.Contains("臨時オプション対応費", texts);
+        Assert.DoesNotContain("サンプル設計費", texts);
+
+        // 置換キー方式の値も引き続き反映される。
+        Assert.Contains("株式会社テスト製作所 御中", texts);
+        Assert.Contains("INV-2026-0417", texts);
+    }
+
+    [Fact]
+    public void 不正なセル番地を直接指定するとエラーになる()
+    {
+        using var converter = CreateDeterministicConverter(out _);
+        using var input = File.OpenRead(TestPaths.SampleTemplate("invoice"));
+
+        var ex = Assert.Throws<InvalidCellOverrideAddressException>(() => converter.ComputeLayout(
+            "invoice",
+            input,
+            new Dictionary<string, string>
+            {
+                ["CustomerName"] = "株式会社テスト製作所 御中",
+                ["InvoiceNo"] = "INV-2026-0417",
+                ["TotalAmount"] = "¥2,153,800",
+            },
+            new Dictionary<string, string> { ["not-a-cell"] = "x" }));
+
+        Assert.Equal("not-a-cell", ex.Address);
+        Assert.Equal("invoice", ex.ReportCode);
+    }
+
+    [Fact]
     public void 必須の置換値が無ければ変換前に失敗する()
     {
         using var converter = CreateDeterministicConverter(out _);

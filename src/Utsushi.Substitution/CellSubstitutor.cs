@@ -67,6 +67,49 @@ public sealed class CellSubstitutor : ICellSubstitutor
         return report with { Sheet = updatedSheet, OverflowByCell = overflowByCell };
     }
 
+    /// <inheritdoc />
+    public ReportModel ApplyCellOverrides(ReportModel report, IReadOnlyDictionary<string, string> cellOverrides)
+    {
+        if (report is null)
+        {
+            throw new ArgumentNullException(nameof(report));
+        }
+
+        if (cellOverrides is null)
+        {
+            throw new ArgumentNullException(nameof(cellOverrides));
+        }
+
+        if (cellOverrides.Count == 0)
+        {
+            return report;
+        }
+
+        var definition = report.Definition;
+        var sheet = report.Sheet;
+        var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
+
+        foreach (var (addressText, replacement) in cellOverrides)
+        {
+            if (!CellAddress.TryParse(addressText, out var address))
+            {
+                throw new InvalidCellOverrideAddressException(
+                    addressText,
+                    $"セル番地 '{addressText}' はA1形式として解釈できません。",
+                    definition.ReportCode,
+                    sheet.Name);
+            }
+
+            var existing = sheet.GetCell(address);
+            cells[address] = existing is null
+                ? new CellModel(replacement, CellValueKind.Text, CellStyle.Default, replacement)
+                : existing.WithText(replacement);
+        }
+
+        var updatedSheet = sheet with { Cells = cells };
+        return report with { Sheet = updatedSheet };
+    }
+
     /// <summary>帳票定義に存在しない置換キーが渡されていないかを検証する(要件2.3)。</summary>
     private static void ValidateKnownKeys(
         ReportDefinition definition, string sheetName, IReadOnlyDictionary<string, string> values)

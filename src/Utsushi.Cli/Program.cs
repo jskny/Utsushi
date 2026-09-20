@@ -45,7 +45,8 @@ internal static class Program
 
             using var converter = ReportPdfConverter.CreateDefault(
                 options.DefinitionRoot, fontOptions, renderOptions);
-            converter.ConvertToFile(options.ReportCode, options.InputPath, options.Values, options.OutputPath);
+            converter.ConvertToFile(
+                options.ReportCode, options.InputPath, options.Values, options.OutputPath, options.CellOverrides);
 
             Console.WriteLine($"PDFを出力しました: {options.OutputPath}");
             return ExitSuccess;
@@ -76,6 +77,7 @@ internal static class Program
         Console.Error.WriteLine("使い方:");
         Console.Error.WriteLine("  utsushi --report <帳票コード> --input <xlsxパス> --output <pdfパス>");
         Console.Error.WriteLine("          [--definitions <帳票定義ルート>] [--set <キー>=<値> ...]");
+        Console.Error.WriteLine("          [--override <セル番地>=<値> ...]");
         Console.Error.WriteLine("          [--allow-font-fallback [<代替フォント名>]] [--outline-text]");
         Console.Error.WriteLine();
         Console.Error.WriteLine("オプション:");
@@ -84,6 +86,8 @@ internal static class Program
         Console.Error.WriteLine("  --output, -o        出力するPDFのパス");
         Console.Error.WriteLine("  --definitions, -d   帳票定義のルートディレクトリ(既定: ./reports)");
         Console.Error.WriteLine("  --set, -s           置換キーと値。複数指定可(例: --set InvoiceNo=A-001)");
+        Console.Error.WriteLine("  --override          セル番地と値。帳票定義への登録有無を問わず直接上書きする。");
+        Console.Error.WriteLine("                      複数指定可(例: --override B5=INV-0001)");
         Console.Error.WriteLine("  --allow-font-fallback");
         Console.Error.WriteLine("                      フォント未検出時に代替フォントを使う(見た目が崩れる可能性あり)");
         Console.Error.WriteLine("  --outline-text      文字をアウトライン化して出力する。ファイルサイズは大幅に小さくなるが");
@@ -100,6 +104,7 @@ internal static class Program
             string outputPath,
             string definitionRoot,
             IReadOnlyDictionary<string, string> values,
+            IReadOnlyDictionary<string, string> cellOverrides,
             bool allowFontFallback,
             string? fallbackFont,
             bool outlineText)
@@ -109,6 +114,7 @@ internal static class Program
             OutputPath = outputPath;
             DefinitionRoot = definitionRoot;
             Values = values;
+            CellOverrides = cellOverrides;
             AllowFontFallback = allowFontFallback;
             FallbackFont = fallbackFont;
             OutlineText = outlineText;
@@ -124,6 +130,8 @@ internal static class Program
 
         public IReadOnlyDictionary<string, string> Values { get; }
 
+        public IReadOnlyDictionary<string, string> CellOverrides { get; }
+
         public bool AllowFontFallback { get; }
 
         public string? FallbackFont { get; }
@@ -138,6 +146,7 @@ internal static class Program
             string? reportCode = null, inputPath = null, outputPath = null;
             var definitionRoot = Path.Combine(Directory.GetCurrentDirectory(), "reports");
             var values = new Dictionary<string, string>(StringComparer.Ordinal);
+            var cellOverrides = new Dictionary<string, string>(StringComparer.Ordinal);
             var allowFallback = false;
             string? fallbackFont = null;
             var outlineText = false;
@@ -186,6 +195,21 @@ internal static class Program
                             break;
                         }
 
+                    case "--override":
+                        {
+                            if (!TryTakeValue(args, ref i, "--override", out var pair, out error)) { return null; }
+
+                            var separator = pair!.IndexOf('=');
+                            if (separator <= 0)
+                            {
+                                error = $"--override の指定は <セル番地>=<値> の形式で指定してください: '{pair}'";
+                                return null;
+                            }
+
+                            cellOverrides[pair.Substring(0, separator)] = pair.Substring(separator + 1);
+                            break;
+                        }
+
                     case "--allow-font-fallback":
                         allowFallback = true;
 
@@ -226,7 +250,8 @@ internal static class Program
             }
 
             return new CommandLineOptions(
-                reportCode!, inputPath!, outputPath!, definitionRoot, values, allowFallback, fallbackFont, outlineText);
+                reportCode!, inputPath!, outputPath!, definitionRoot, values, cellOverrides,
+                allowFallback, fallbackFont, outlineText);
         }
 
         private static bool TryTakeValue(

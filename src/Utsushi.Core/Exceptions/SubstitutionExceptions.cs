@@ -34,3 +34,23 @@ public sealed class RequiredSubstitutionValueMissingException : UtsushiException
     /// <summary>値が渡されなかった必須の置換キー。</summary>
     public string Key { get; }
 }
+
+/// <summary>
+/// セル番地を直接指定した上書き(帳票定義の置換キーを経由しない経路)で、
+/// 指定された文字列がA1形式のセル番地として解釈できない。要件2.8。
+/// </summary>
+public sealed class InvalidCellOverrideAddressException : UtsushiException
+{
+    public InvalidCellOverrideAddressException(
+        string address,
+        string message,
+        string? reportCode = null,
+        string? sheetName = null)
+        : base(message, ProcessingStage.Substitution, reportCode, sheetName)
+    {
+        Address = address;
+    }
+
+    /// <summary>A1形式として解釈できなかった、指定されたセル番地の文字列。</summary>
+    public string Address { get; }
+}
