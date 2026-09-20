@@ -46,8 +46,9 @@ public sealed class ReportStructureMismatchException : UtsushiException
         string message,
         string? reportCode = null,
         string? sheetName = null,
-        CellAddress? cellAddress = null)
-        : base(message, ProcessingStage.ReportDefinition, reportCode, sheetName, cellAddress)
+        CellAddress? cellAddress = null,
+        Exception? innerException = null)
+        : base(message, ProcessingStage.ReportDefinition, reportCode, sheetName, cellAddress, innerException)
     {
     }
 }

@@ -94,6 +94,7 @@ public sealed class OpenXmlWorkbookReader : IWorkbookReader
             var definedNames = ReadDefinedNames(workbookPart);
 
             var sheets = new List<SheetModel>();
+            var allSheetNames = new List<string>();
             foreach (var sheet in workbookPart.Workbook.Sheets?.Elements<X.Sheet>() ?? Enumerable.Empty<X.Sheet>())
             {
                 var name = sheet.Name?.Value;
@@ -101,6 +102,8 @@ public sealed class OpenXmlWorkbookReader : IWorkbookReader
                 {
                     continue;
                 }
+
+                allSheetNames.Add(name!);
 
                 if (options.SheetNameFilter is { } filter && !string.Equals(name, filter, StringComparison.Ordinal))
                 {
@@ -117,10 +120,22 @@ public sealed class OpenXmlWorkbookReader : IWorkbookReader
 
             if (sheets.Count == 0)
             {
+                if (options.SheetNameFilter is { } filter)
+                {
+                    // フィルタで指定したシート名が一致しない場合。ファイル自体が壊れているのではなく
+                    // 帳票定義が期待するシート構成と実際のブックが一致しないだけのため、原因を
+                    // 特定できるよう実在するシート名を含める(呼び出し元がReportDefinition段階の
+                    // エラーへ読み替える際に利用する)。
+                    var available = string.Join(", ", allSheetNames.Select(n => "'" + n + "'"));
+                    throw new InvalidExcelFileException(
+                        $"シート '{filter}' が見つかりません。"
+                        + $"ブック内のシート: {(available.Length == 0 ? "(なし)" : available)}",
+                        InvalidExcelFileReason.NoWorksheet,
+                        options.ReportCode);
+                }
+
                 throw new InvalidExcelFileException(
-                    options.SheetNameFilter is { } filter
-                        ? $"シート '{filter}' が見つかりません。"
-                        : "ワークシートが1つも含まれていません。",
+                    "ワークシートが1つも含まれていません。",
                     InvalidExcelFileReason.NoWorksheet,
                     options.ReportCode);
             }

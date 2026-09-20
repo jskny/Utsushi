@@ -94,58 +94,8 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
         using var buffer = new MemoryStream();
         Render(layout, buffer);
 
-        var fullPath = Path.GetFullPath(path);
-        var directory = Path.GetDirectoryName(fullPath);
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory!);
-        }
-
-        // 同一ディレクトリ上の一時ファイルへ書いてから置き換える。
-        // 書き込み途中で異常終了しても、出力先には旧ファイル(または何も)が残る。
-        var temporaryPath = fullPath + ".utsushi-tmp";
-        try
-        {
-            using (var file = new FileStream(temporaryPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                buffer.Position = 0;
-                buffer.CopyTo(file);
-                file.Flush(flushToDisk: true);
-            }
-
-            if (File.Exists(fullPath))
-            {
-                File.Delete(fullPath);
-            }
-
-            File.Move(temporaryPath, fullPath);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            TryDelete(temporaryPath);
-            throw new PdfRenderingException(
-                $"PDFの書き出しに失敗しました: {fullPath}", layout.ReportCode, layout.SheetName, ex);
-        }
-        catch
-        {
-            TryDelete(temporaryPath);
-            throw;
-        }
-    }
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // 後始末の失敗は元のエラーを覆い隠さないよう無視する。
-        }
+        buffer.Position = 0;
+        AtomicFileWriter.Write(path, buffer, layout.ReportCode, layout.SheetName);
     }
 
     private void RenderToStream(PagedLayout layout, Stream target)

@@ -198,6 +198,42 @@ public sealed class HeaderFooterTests
     }
 
     [Fact]
+    public void 文書と一緒に拡大縮小してもヘッダーフッターの余白位置は変わらない()
+    {
+        // Excelの「文書と一緒に拡大縮小する」はヘッダー/フッターの文字サイズだけを本文の
+        // 縮小率に合わせるものであり、ヘッダー/フッター領域の物理的な余白位置(用紙端からの
+        // 距離)自体は動かさない。
+        var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => Timestamp);
+
+        var pageSetup = NoMarginA4(scaling: new PageScaling(50, null, null)) with
+        {
+            Margins = new PageMargins(0, 0, 60, 60, 40, 40),
+            HeaderFooter = new HeaderFooterModel(
+                "&Cヘッダー", "&Cフッター", null, null, null, null, false, false, ScaleWithDocument: true),
+        };
+
+        var sheet = UniformSheet(rows: 2, columns: 2, pageSetup: pageSetup);
+        var layout = engine.Compute(ReportModel.Create(Definition(), sheet));
+
+        var page = Assert.Single(layout.Pages);
+        Assert.Equal(0.5, page.ScaleFactor);
+
+        var header = page.Commands.OfType<TextCommand>().Single(t => t.Text == "ヘッダー");
+        var footer = page.Commands.OfType<TextCommand>().Single(t => t.Text == "フッター");
+
+        // ヘッダーのベースラインは、上余白(60pt、未縮小)より下にあるはず。
+        // 余白まで0.5倍されるバグがあると、ベースラインが余白の途中(30pt付近)に来てしまう。
+        Assert.True(
+            header.Origin.Y >= pageSetup.Margins.HeaderPt,
+            $"ヘッダーの余白は縮小されないはず (Y={header.Origin.Y}, 余白={pageSetup.Margins.HeaderPt})");
+
+        // フッターのベースラインは、下余白(40pt、未縮小)の外に出てはいけない。
+        Assert.True(
+            footer.Origin.Y <= page.HeightPt - pageSetup.Margins.FooterPt,
+            $"フッターの余白は縮小されないはず (Y={footer.Origin.Y}, 用紙高さ={page.HeightPt}, 余白={pageSetup.Margins.FooterPt})");
+    }
+
+    [Fact]
     public void ヘッダーフッターは全ページに出力され総ページ数が展開される()
     {
         var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => Timestamp);

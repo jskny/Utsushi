@@ -71,6 +71,8 @@ public sealed class ReportLayoutEngine : IReportLayoutEngine
 
         // 複数の印刷範囲はそれぞれ独立したページ群になる(要件3.6)。
         var printRanges = ResolvePrintRanges(sheet, definition);
+        ValidateRequiredFieldsAreInPrintRanges(definition, sheet, printRanges, pageSetup.PrintTitles);
+
         var pages = new List<PageLayout>();
 
         foreach (var printRange in printRanges)
@@ -106,7 +108,7 @@ public sealed class ReportLayoutEngine : IReportLayoutEngine
         var sheet = report.Sheet;
         var pageSetup = sheet.PageSetup;
 
-        var grid = SheetGrid.Create(sheet, printRange, definition.MaxDigitWidthPx);
+        var grid = SheetGrid.Create(sheet, printRange, definition.MaxDigitWidthPx, pageSetup.PrintTitles);
 
         // 印刷タイトルは各ページの先頭に繰り返されるため、本文の流し込みからは除外する(要件3.4)。
         var titleRows = ResolveTitleRows(grid, pageSetup.PrintTitles);
@@ -222,6 +224,62 @@ public sealed class ReportLayoutEngine : IReportLayoutEngine
             $"シート '{sheet.Name}' に印刷対象のセルがありません。",
             definition.ReportCode,
             sheet.Name);
+    }
+
+    /// <summary>
+    /// 必須の置換フィールドが、実際に出力される印刷範囲(印刷タイトルを含む)の内側にあることを
+    /// 確認する(要件2.4, 3.1, 3.4)。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Substitution.ICellSubstitutor"/> は印刷範囲を考慮せず値をセルにセットするため、
+    /// 必須フィールドのセルが印刷範囲の外にあると、値は正しくセットされたのにPDFには出力されない
+    /// という静かなデータ欠落が起こり得る。ReportDefinitionレイヤーの検証(使用範囲内かどうか)では
+    /// 印刷範囲(Excel側の設定に従う場合はここで初めて解決される)まではわからないため、
+    /// 印刷範囲が確定するこのタイミングで検証する。
+    /// </para>
+    /// <para>
+    /// 印刷タイトルの行/列は印刷範囲の外でも各ページに出力される(<see cref="SheetGrid.Create"/>参照)ため、
+    /// 印刷範囲だけでなく印刷タイトルの行/列も「実際に出力される」対象に含めて判定する。
+    /// </para>
+    /// </remarks>
+    private static void ValidateRequiredFieldsAreInPrintRanges(
+        ReportDefinition definition, SheetModel sheet, IReadOnlyList<CellRange> printRanges, PrintTitles titles)
+    {
+        foreach (var field in definition.SubstitutionFields)
+        {
+            if (!field.Required)
+            {
+                continue;
+            }
+
+            if (printRanges.Any(range => IsRenderedByRange(field.Cell, range, titles)))
+            {
+                continue;
+            }
+
+            throw new LayoutComputationException(
+                $"必須の置換キー '{field.Key}' の対象セル {field.Cell} が印刷範囲の外にあるため、"
+                + "値を設定してもPDFに出力されません。帳票定義の印刷範囲またはセル番地を見直してください。",
+                definition.ReportCode,
+                sheet.Name,
+                field.Cell);
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="cell"/> が、<paramref name="printRange"/> と印刷タイトルを合わせた
+    /// 出力対象(行・列それぞれ独立に判定)に含まれるかどうかを返す(<see cref="SheetGrid.Create"/>と対応)。
+    /// </summary>
+    private static bool IsRenderedByRange(CellAddress cell, CellRange printRange, PrintTitles titles)
+    {
+        var rowIncluded = (cell.Row >= printRange.FirstRow && cell.Row <= printRange.LastRow)
+            || (titles.HasRows && cell.Row >= titles.FirstRow!.Value && cell.Row <= titles.LastRow!.Value);
+
+        var columnIncluded = (cell.Column >= printRange.FirstColumn && cell.Column <= printRange.LastColumn)
+            || (titles.HasColumns && cell.Column >= titles.FirstColumn!.Value && cell.Column <= titles.LastColumn!.Value);
+
+        return rowIncluded && columnIncluded;
     }
 
     private static List<int> ResolveTitleRows(SheetGrid grid, PrintTitles titles)

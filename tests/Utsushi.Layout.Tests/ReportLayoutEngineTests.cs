@@ -56,6 +56,48 @@ public sealed class ReportLayoutEngineTests
     }
 
     [Fact]
+    public void 必須の置換フィールドが印刷範囲外を指す場合はエラーになる()
+    {
+        // 置換値自体は正しくセットされても、印刷範囲外のためPDFには出力されず
+        // 静かにデータが欠落する。要件2.4(必須値)と要件3.1(印刷範囲)の組み合わせで
+        // 帳票定義の設定ミスを早期に検出できるようにする。
+        var sheet = UniformSheet(
+            rows: 10, columns: 6,
+            pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("B2:C4") }));
+
+        var definition = Definition(fields: new[]
+        {
+            new SubstitutionFieldDefinition("Foo", new CellAddress(1, 1), Required: true, Overflow: null),
+        });
+
+        var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet, definition));
+
+        Assert.Equal(ProcessingStage.Layout, ex.Stage);
+        Assert.Equal(new CellAddress(1, 1), ex.CellAddress);
+    }
+
+    [Fact]
+    public void 必須の置換フィールドが印刷タイトルの行を指す場合はエラーにならない()
+    {
+        // 印刷タイトルの行/列は印刷範囲の外でも各ページに出力されるため(要件3.4)、
+        // 必須フィールドがタイトル行を指していても値は出力される。誤検知してはならない。
+        var sheet = UniformSheet(
+            rows: 20, columns: 1, rowHeightPt: 100.0,
+            pageSetup: NoMarginA4(
+                printAreas: new[] { CellRange.Parse("A5:A20") },
+                printTitles: new PrintTitles(1, 2, null, null)));
+
+        var definition = Definition(fields: new[]
+        {
+            new SubstitutionFieldDefinition("TitleField", new CellAddress(1, 1), Required: true, Overflow: null),
+        });
+
+        // 例外にならないこと(以前は印刷タイトルを考慮せず誤って例外になっていた)
+        var layout = Compute(sheet, definition);
+        Assert.True(layout.PageCount > 0);
+    }
+
+    [Fact]
     public void 複数の印刷範囲はそれぞれ別のページ群になる()
     {
         // 要件3.6: 範囲を包含する矩形にまとめず、定義順に独立したページ群として出力する。
@@ -215,6 +257,32 @@ public sealed class ReportLayoutEngineTests
     }
 
     [Fact]
+    public void 印刷タイトルが印刷範囲外の行でも各ページに繰り返される()
+    {
+        // Excelの印刷タイトルは印刷範囲(Print_Area)と独立に指定でき、印刷範囲に含まれない
+        // 行/列であっても各ページ先頭に繰り返し出力される(タイトル行が見出し専用で本文の
+        // 印刷範囲には含めない、という一般的な帳票構成)。
+        var sheet = UniformSheet(
+            rows: 20, columns: 1, rowHeightPt: 100.0,
+            pageSetup: NoMarginA4(
+                printAreas: new[] { CellRange.Parse("A5:A20") },
+                printTitles: new PrintTitles(1, 2, null, null)));
+
+        var layout = Compute(sheet);
+
+        Assert.True(layout.PageCount > 1, $"複数ページになるはず (実際: {layout.PageCount})");
+        foreach (var page in layout.Pages)
+        {
+            var texts = Texts(page).Select(t => t.Text).ToList();
+            Assert.Contains("A1", texts);
+            Assert.Contains("A2", texts);
+        }
+
+        // 本文は印刷範囲の先頭(5行目)から始まり、タイトル行(1,2)は含まない
+        Assert.Equal(5, layout.Pages[0].RowRange.First);
+    }
+
+    [Fact]
     public void 印刷タイトルは2ページ目以降でページ先頭に配置される()
     {
         var sheet = UniformSheet(
@@ -331,6 +399,104 @@ public sealed class ReportLayoutEngineTests
         var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(10.0, 7.0);
         var mergedFill = Fills(page).Single(f => f.Rect.Top == 0.0 && f.Rect.Left == 0.0);
         Assert.Equal(columnWidthPt * 3, mergedFill.Rect.Width, precision: 6);
+    }
+
+    [Fact]
+    public void 結合範囲の右端と下端の罫線は右端列下端行のセルからも合成される()
+    {
+        // Excelで結合範囲(A1:C1)に格子/外枠を設定すると、右端の罫線はC1のRight、
+        // 下端の罫線はA1〜C1各セルのBottomに保持される(アンカーA1だけには無い場合がある)。
+        var thin = new BorderEdge(BorderLineStyle.Thin, ArgbColor.Black);
+        var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(10.0, 7.0);
+        var rowHeightPt = 20.0;
+
+        var cells = new Dictionary<CellAddress, CellModel>
+        {
+            [new CellAddress(1, 1)] = new(
+                "A1",
+                CellValueKind.Text,
+                CellStyle.Default with { Borders = new BorderSet(thin, BorderEdge.None, BorderEdge.None, BorderEdge.None, BorderEdge.None, BorderEdge.None) },
+                "A1"),
+            [new CellAddress(1, 2)] = new("B1", CellValueKind.Text, CellStyle.Default, "B1"),
+            [new CellAddress(1, 3)] = new(
+                "C1",
+                CellValueKind.Text,
+                CellStyle.Default with { Borders = new BorderSet(BorderEdge.None, thin, BorderEdge.None, thin, BorderEdge.None, BorderEdge.None) },
+                "C1"),
+        };
+
+        var sheet = new SheetModel(
+            "テストシート",
+            cells,
+            new List<MergedRange> { new(CellRange.Parse("A1:C1")) },
+            new List<double> { 10.0, 10.0, 10.0 },
+            new List<double> { rowHeightPt },
+            10.0,
+            rowHeightPt,
+            new HashSet<int>(),
+            new HashSet<int>(),
+            NoMarginA4());
+
+        var lines = Lines(Assert.Single(Compute(sheet).Pages)).ToList();
+
+        // 左端(A1のLeft)
+        Assert.Contains(lines, l => l.From.X == 0.0 && l.To.X == 0.0);
+        // 右端(C1のRight)。アンカーA1だけを見ていると欠落する。
+        Assert.Contains(lines, l => l.From.X == columnWidthPt * 3 && l.To.X == columnWidthPt * 3);
+        // 下端(C1のBottom)。3列ぶんの幅で1本になる。アンカーA1だけを見ていると欠落する。
+        Assert.Contains(lines, l => l.From.Y == rowHeightPt && l.To.Y == rowHeightPt && l.To.X - l.From.X == columnWidthPt * 3);
+        // 上端はどのセルにも設定していないため出力されない
+        Assert.DoesNotContain(lines, l => l.From.Y == 0.0 && l.To.Y == 0.0);
+    }
+
+    [Fact]
+    public void 改ページをまたぐ結合セルは各ページの切れ目に本来無い罫線を描かない()
+    {
+        // A1:A2を結合し、A1にTop・A2にBottomの罫線を設定したうえで、A1とA2の間で改ページする。
+        // 結合範囲全体からTop/Bottomを合成すると、本来は改ページの切れ目でしかない位置にも
+        // 誤って罫線が出力されてしまう(ページ1にBottom、ページ2にTopが出るのは誤り)。
+        var thin = new BorderEdge(BorderLineStyle.Thin, ArgbColor.Black);
+        var rowHeightPt = 20.0;
+
+        var cells = new Dictionary<CellAddress, CellModel>
+        {
+            [new CellAddress(1, 1)] = new(
+                "A1",
+                CellValueKind.Text,
+                CellStyle.Default with { Borders = new BorderSet(BorderEdge.None, BorderEdge.None, thin, BorderEdge.None, BorderEdge.None, BorderEdge.None) },
+                "A1"),
+            [new CellAddress(2, 1)] = new(
+                "A2",
+                CellValueKind.Text,
+                CellStyle.Default with { Borders = new BorderSet(BorderEdge.None, BorderEdge.None, BorderEdge.None, thin, BorderEdge.None, BorderEdge.None) },
+                "A2"),
+        };
+
+        var sheet = new SheetModel(
+            "テストシート",
+            cells,
+            new List<MergedRange> { new(CellRange.Parse("A1:A2")) },
+            new List<double> { 10.0 },
+            new List<double> { rowHeightPt, rowHeightPt },
+            10.0,
+            rowHeightPt,
+            new HashSet<int>(),
+            new HashSet<int>(),
+            NoMarginA4(rowBreaks: new[] { 2 }));
+
+        var layout = Compute(sheet);
+        Assert.Equal(2, layout.PageCount);
+
+        var page1Lines = Lines(layout.Pages[0]).ToList();
+        var page2Lines = Lines(layout.Pages[1]).ToList();
+
+        // ページ1: 本当の上端(Top)は出るが、改ページの切れ目(このページの下端)にBottomは出ない
+        Assert.Contains(page1Lines, l => l.From.Y == 0.0 && l.To.Y == 0.0);
+        Assert.DoesNotContain(page1Lines, l => l.From.Y == rowHeightPt && l.To.Y == rowHeightPt);
+
+        // ページ2: 改ページの切れ目(このページの上端)にTopは出ないが、本当の下端(Bottom)は出る
+        Assert.DoesNotContain(page2Lines, l => l.From.Y == 0.0 && l.To.Y == 0.0);
+        Assert.Contains(page2Lines, l => l.From.Y == rowHeightPt && l.To.Y == rowHeightPt);
     }
 
     [Fact]

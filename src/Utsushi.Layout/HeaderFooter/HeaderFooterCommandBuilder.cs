@@ -99,9 +99,11 @@ internal sealed class HeaderFooterCommandBuilder
             maxDescent = Math.Max(maxDescent, metrics.DescentPt);
         }
 
+        // 余白(用紙端からの物理的な距離)は「文書と一緒に拡大縮小する」の対象外。
+        // 対象はヘッダー/フッターの文字サイズ(fontScaleは_fontMetricsに渡すFontStyle.SizePtにのみ適用済み)。
         var baselineY = isHeader
-            ? (_margins.HeaderPt * fontScale) + maxAscent
-            : _pageHeightPt - (_margins.FooterPt * fontScale) - maxDescent;
+            ? _margins.HeaderPt + maxAscent
+            : _pageHeightPt - _margins.FooterPt - maxDescent;
 
         var startX = ResolveStartX(part.Section, totalWidth);
 
