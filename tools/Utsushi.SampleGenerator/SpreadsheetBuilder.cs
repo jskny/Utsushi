@@ -5,8 +5,8 @@ using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 
-namespace Utsushi.SampleGenerator;
-
+namespace Utsushi.SampleGenerator
+{
 /// <summary>
 /// 帳票サンプル用の .xlsx を組み立てる薄いビルダー。
 /// </summary>
@@ -349,4 +349,5 @@ internal sealed class SpreadsheetBuilder
 
     private static string QuoteSheetName(string name) =>
         name.Any(c => char.IsWhiteSpace(c) || c > 0x7F) ? "'" + name.Replace("'", "''") + "'" : name;
+}
 }

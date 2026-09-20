@@ -3,8 +3,8 @@ using System.Globalization;
 using System.IO;
 using static Utsushi.SampleGenerator.SampleStyles;
 
-namespace Utsushi.SampleGenerator;
-
+namespace Utsushi.SampleGenerator
+{
 /// <summary>
 /// テスト用の帳票サンプル(.xlsx)を生成する。
 /// </summary>
@@ -296,4 +296,5 @@ internal static class Program
         var epoch = new DateTime(1899, 12, 30);
         return (date - epoch).TotalDays;
     }
+}
 }

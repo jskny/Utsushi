@@ -6,530 +6,531 @@ using Utsushi.Layout.Text;
 using Utsushi.Parsing.Model;
 using Utsushi.ReportDefinitions.Model;
 
-namespace Utsushi.Layout;
-
-/// <summary>
-/// 1ページ分の描画命令(背景 → 罫線 → テキスト)を組み立てる。
-/// </summary>
-/// <remarks>
-/// ページに含まれる行/列の並びを受け取り、セルごとの矩形を割り当てたうえで
-/// 結合セルの統合(要件4.3)、罫線・背景(要件4.2)、テキスト配置(要件4.1, 4.4, 2.5)を計算する。
-/// 座標は用紙左上原点で、余白と拡大縮小率を適用済みの最終値として出力する。
-/// </remarks>
-internal sealed class PageCommandBuilder
+namespace Utsushi.Layout
 {
-    private readonly ReportModel _report;
-    private readonly SheetModel _sheet;
-    private readonly SheetGrid _grid;
-    private readonly IFontMetricsProvider _fontMetrics;
-    private readonly double _scale;
-    private readonly PageMargins _margins;
-
-    private readonly List<DrawCommand> _fills = new();
-    private readonly List<DrawCommand> _borders = new();
-    private readonly List<DrawCommand> _texts = new();
-    private readonly HashSet<string> _emittedBorders = new(StringComparer.Ordinal);
-
-    public PageCommandBuilder(
-        ReportModel report,
-        SheetGrid grid,
-        IFontMetricsProvider fontMetrics,
-        double scale,
-        PageMargins margins)
+    /// <summary>
+    /// 1ページ分の描画命令(背景 → 罫線 → テキスト)を組み立てる。
+    /// </summary>
+    /// <remarks>
+    /// ページに含まれる行/列の並びを受け取り、セルごとの矩形を割り当てたうえで
+    /// 結合セルの統合(要件4.3)、罫線・背景(要件4.2)、テキスト配置(要件4.1, 4.4, 2.5)を計算する。
+    /// 座標は用紙左上原点で、余白と拡大縮小率を適用済みの最終値として出力する。
+    /// </remarks>
+    internal sealed class PageCommandBuilder
     {
-        _report = report;
-        _sheet = report.Sheet;
-        _grid = grid;
-        _fontMetrics = fontMetrics;
-        _scale = scale;
-        _margins = margins;
-    }
+        private readonly ReportModel _report;
+        private readonly SheetModel _sheet;
+        private readonly SheetGrid _grid;
+        private readonly IFontMetricsProvider _fontMetrics;
+        private readonly double _scale;
+        private readonly PageMargins _margins;
 
-    /// <summary>ページに含まれる行・列からの描画命令を生成する。</summary>
-    public IReadOnlyList<DrawCommand> Build(IReadOnlyList<int> rows, IReadOnlyList<int> columns)
-    {
-        var columnOffsets = BuildOffsets(columns, _grid.GetColumnWidthPt);
-        var rowOffsets = BuildOffsets(rows, _grid.GetRowHeightPt);
+        private readonly List<DrawCommand> _fills = new();
+        private readonly List<DrawCommand> _borders = new();
+        private readonly List<DrawCommand> _texts = new();
+        private readonly HashSet<string> _emittedBorders = new(StringComparer.Ordinal);
 
-        var columnIndex = BuildIndex(columns);
-        var rowIndex = BuildIndex(rows);
-
-        // 同一ページ上で同じ結合範囲を二重に描かないための記録。
-        var emittedMergedRanges = new HashSet<CellRange>();
-
-        foreach (var row in rows)
+        public PageCommandBuilder(
+            ReportModel report,
+            SheetGrid grid,
+            IFontMetricsProvider fontMetrics,
+            double scale,
+            PageMargins margins)
         {
-            foreach (var column in columns)
-            {
-                var address = new CellAddress(row, column);
-                var merged = _sheet.FindMergedRange(address);
+            _report = report;
+            _sheet = report.Sheet;
+            _grid = grid;
+            _fontMetrics = fontMetrics;
+            _scale = scale;
+            _margins = margins;
+        }
 
-                if (merged is not null)
+        /// <summary>ページに含まれる行・列からの描画命令を生成する。</summary>
+        public IReadOnlyList<DrawCommand> Build(IReadOnlyList<int> rows, IReadOnlyList<int> columns)
+        {
+            var columnOffsets = BuildOffsets(columns, _grid.GetColumnWidthPt);
+            var rowOffsets = BuildOffsets(rows, _grid.GetRowHeightPt);
+
+            var columnIndex = BuildIndex(columns);
+            var rowIndex = BuildIndex(rows);
+
+            // 同一ページ上で同じ結合範囲を二重に描かないための記録。
+            var emittedMergedRanges = new HashSet<CellRange>();
+
+            foreach (var row in rows)
+            {
+                foreach (var column in columns)
                 {
-                    if (!emittedMergedRanges.Add(merged.Range))
+                    var address = new CellAddress(row, column);
+                    var merged = _sheet.FindMergedRange(address);
+
+                    if (merged is not null)
                     {
+                        if (!emittedMergedRanges.Add(merged.Range))
+                        {
+                            continue;
+                        }
+
+                        // 結合範囲がページをまたぐ場合、このページに見えている部分だけを描画する。
+                        var mergedRect = TryGetMergedRect(
+                            merged.Range, rowIndex, columnIndex, rowOffsets, columnOffsets);
+                        if (mergedRect is null)
+                        {
+                            continue;
+                        }
+
+                        var anchorCell = _sheet.GetCell(merged.Anchor);
+                        var borders = ResolveMergedBorders(
+                            merged.Range, anchorCell?.Style.Borders ?? BorderSet.None, rowIndex, columnIndex);
+                        EmitCell(merged.Anchor, anchorCell, mergedRect.Value, borders);
                         continue;
                     }
 
-                    // 結合範囲がページをまたぐ場合、このページに見えている部分だけを描画する。
-                    var mergedRect = TryGetMergedRect(
-                        merged.Range, rowIndex, columnIndex, rowOffsets, columnOffsets);
-                    if (mergedRect is null)
+                    var cell = _sheet.GetCell(address);
+                    var rect = CellRect(row, column, rowIndex, columnIndex, rowOffsets, columnOffsets);
+                    EmitCell(address, cell, rect);
+                }
+            }
+
+            var commands = new List<DrawCommand>(_fills.Count + _borders.Count + _texts.Count);
+            commands.AddRange(_fills);
+            commands.AddRange(_borders);
+            commands.AddRange(_texts);
+            return commands;
+        }
+
+        private void EmitCell(CellAddress address, CellModel? cell, RectPt rect, BorderSet? bordersOverride = null)
+        {
+            if (rect.IsEmpty)
+            {
+                return;
+            }
+
+            var style = cell?.Style ?? CellStyle.Default;
+
+            if (!style.BackgroundColor.IsTransparent)
+            {
+                _fills.Add(new FillRectCommand(rect, style.BackgroundColor));
+            }
+
+            EmitBorders(rect, bordersOverride ?? style.Borders);
+
+            var text = cell?.DisplayValue;
+            if (!string.IsNullOrEmpty(text))
+            {
+                EmitText(address, cell!, style, rect, text!);
+            }
+        }
+
+        /// <summary>
+        /// 結合範囲の外周4辺の罫線を、範囲を構成する各セルから辺ごとに合成する。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Excelで結合範囲に外枠/格子を設定すると、右端の罫線は右端列の各セルのRight、
+        /// 下端の罫線は下端行の各セルのBottomに保持される。アンカー(左上)セルの罫線だけを
+        /// 見ると、アンカー以外にしか設定されていない罫線(右端・下端など)が欠落する。
+        /// </para>
+        /// <para>
+        /// 結合範囲が改ページをまたぐ場合、このページに見えているのは範囲の一部だけである。
+        /// 範囲の本当の上端/下端/左端/右端がこのページに含まれていない辺は、
+        /// 単なる改ページの切れ目でしかないため罫線を出さない(<paramref name="rowIndex"/>/
+        /// <paramref name="columnIndex"/> で判定する)。
+        /// </para>
+        /// 斜め罫線はExcel上もアンカーセルのものしか意味を持たないため、そのまま使う。
+        /// </remarks>
+        private BorderSet ResolveMergedBorders(
+            CellRange range,
+            BorderSet anchorBorders,
+            IReadOnlyDictionary<int, int> rowIndex,
+            IReadOnlyDictionary<int, int> columnIndex)
+        {
+            var left = columnIndex.ContainsKey(range.FirstColumn)
+                ? ResolveColumnEdge(range.FirstColumn, range.FirstRow, range.LastRow, b => b.Left)
+                : BorderEdge.None;
+            var right = columnIndex.ContainsKey(range.LastColumn)
+                ? ResolveColumnEdge(range.LastColumn, range.FirstRow, range.LastRow, b => b.Right)
+                : BorderEdge.None;
+            var top = rowIndex.ContainsKey(range.FirstRow)
+                ? ResolveRowEdge(range.FirstRow, range.FirstColumn, range.LastColumn, b => b.Top)
+                : BorderEdge.None;
+            var bottom = rowIndex.ContainsKey(range.LastRow)
+                ? ResolveRowEdge(range.LastRow, range.FirstColumn, range.LastColumn, b => b.Bottom)
+                : BorderEdge.None;
+
+            return new BorderSet(left, right, top, bottom, anchorBorders.DiagonalDown, anchorBorders.DiagonalUp);
+        }
+
+        private BorderEdge ResolveColumnEdge(int column, int firstRow, int lastRow, Func<BorderSet, BorderEdge> selector)
+        {
+            for (var row = firstRow; row <= lastRow; row++)
+            {
+                var edge = selector(_sheet.GetCell(new CellAddress(row, column))?.Style.Borders ?? BorderSet.None);
+                if (edge.IsVisible)
+                {
+                    return edge;
+                }
+            }
+
+            return BorderEdge.None;
+        }
+
+        private BorderEdge ResolveRowEdge(int row, int firstColumn, int lastColumn, Func<BorderSet, BorderEdge> selector)
+        {
+            for (var column = firstColumn; column <= lastColumn; column++)
+            {
+                var edge = selector(_sheet.GetCell(new CellAddress(row, column))?.Style.Borders ?? BorderSet.None);
+                if (edge.IsVisible)
+                {
+                    return edge;
+                }
+            }
+
+            return BorderEdge.None;
+        }
+
+        // ---------------------------------------------------------------------
+        // 罫線(要件4.2)
+        // ---------------------------------------------------------------------
+
+        private void EmitBorders(RectPt rect, BorderSet borders)
+        {
+            if (!borders.HasAnyVisibleEdge)
+            {
+                return;
+            }
+
+            EmitEdge(borders.Top, new PointPt(rect.Left, rect.Top), new PointPt(rect.Right, rect.Top), horizontal: true);
+            EmitEdge(borders.Bottom, new PointPt(rect.Left, rect.Bottom), new PointPt(rect.Right, rect.Bottom), horizontal: true);
+            EmitEdge(borders.Left, new PointPt(rect.Left, rect.Top), new PointPt(rect.Left, rect.Bottom), horizontal: false);
+            EmitEdge(borders.Right, new PointPt(rect.Right, rect.Top), new PointPt(rect.Right, rect.Bottom), horizontal: false);
+
+            if (borders.DiagonalDown.IsVisible)
+            {
+                EmitEdge(
+                    borders.DiagonalDown,
+                    new PointPt(rect.Left, rect.Top),
+                    new PointPt(rect.Right, rect.Bottom),
+                    horizontal: false);
+            }
+
+            if (borders.DiagonalUp.IsVisible)
+            {
+                EmitEdge(
+                    borders.DiagonalUp,
+                    new PointPt(rect.Left, rect.Bottom),
+                    new PointPt(rect.Right, rect.Top),
+                    horizontal: false);
+            }
+        }
+
+        private void EmitEdge(BorderEdge edge, PointPt from, PointPt to, bool horizontal)
+        {
+            if (!edge.IsVisible)
+            {
+                return;
+            }
+
+            var width = BorderMetrics.GetWidthPt(edge.Style) * _scale;
+            var dash = BorderMetrics.GetDash(edge.Style);
+
+            if (BorderMetrics.IsDouble(edge.Style))
+            {
+                // 二重線は細線2本で表現する。罫線が属するセル境界の内外へ等距離に振り分ける。
+                var offset = BorderMetrics.DoubleLineGapPt * _scale / 2.0;
+                var (dx, dy) = horizontal ? (0.0, offset) : (offset, 0.0);
+                AddLine(Offset(from, -dx, -dy), Offset(to, -dx, -dy), edge.Color, width, dash);
+                AddLine(Offset(from, dx, dy), Offset(to, dx, dy), edge.Color, width, dash);
+                return;
+            }
+
+            AddLine(from, to, edge.Color, width, dash);
+        }
+
+        private static PointPt Offset(PointPt point, double dx, double dy) => new(point.X + dx, point.Y + dy);
+
+        /// <summary>
+        /// 罫線を追加する。隣接セルが同じ境界に同一の罫線を持つ場合、描画命令が重複するため取り除く。
+        /// </summary>
+        private void AddLine(PointPt from, PointPt to, ArgbColor color, double widthPt, LineDashStyle dash)
+        {
+            var key = string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "{0:0.###},{1:0.###},{2:0.###},{3:0.###},{4},{5:0.###},{6}",
+                from.X, from.Y, to.X, to.Y, color, widthPt, dash);
+
+            if (!_emittedBorders.Add(key))
+            {
+                return;
+            }
+
+            _borders.Add(new LineCommand(from, to, color, widthPt, dash));
+        }
+
+        // ---------------------------------------------------------------------
+        // テキスト(要件4.1, 4.4, 2.5)
+        // ---------------------------------------------------------------------
+
+        private void EmitText(CellAddress address, CellModel cell, CellStyle style, RectPt rect, string text)
+        {
+            var maxDigitWidthPx = _report.Definition.MaxDigitWidthPx;
+            var paddingPt = ExcelUnitConverter.CellPaddingPoints * _scale;
+            var indentPt = ExcelUnitConverter.IndentWidthToPoints(style.Indent, maxDigitWidthPx) * _scale;
+
+            var contentRect = RectPt.FromBounds(
+                rect.Left + paddingPt + indentPt,
+                rect.Top,
+                rect.Right - paddingPt,
+                rect.Bottom);
+
+            if (contentRect.Width <= 0)
+            {
+                return;
+            }
+
+            var hAlign = ResolveHorizontalAlignment(style.HAlign, cell.ValueKind);
+            var overflow = ResolveOverflow(address, style);
+
+            // 拡大縮小率はフォントサイズにも適用する(座標だけを縮めると文字が収まらなくなるため)。
+            var scaledFont = style.Font with { SizePt = style.Font.SizePt * _scale };
+
+            var lines = overflow == OverflowBehavior.Wrap
+                ? WrapLines(scaledFont, text, contentRect.Width)
+                : new List<string> { text };
+
+            if (overflow == OverflowBehavior.Shrink && lines.Count == 1)
+            {
+                scaledFont = ShrinkToFit(scaledFont, lines[0], contentRect.Width);
+            }
+
+            var metrics = _fontMetrics.GetMetrics(scaledFont);
+            var totalHeight = metrics.LineSpacingPt * lines.Count;
+            var firstBaselineY = ResolveFirstBaselineY(style.VAlign, rect, metrics, totalHeight);
+
+            RectPt? clipRect = overflow is OverflowBehavior.Clip or OverflowBehavior.Wrap or OverflowBehavior.Shrink
+                ? rect
+                : null;
+
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var baselineY = firstBaselineY + (metrics.LineSpacingPt * i);
+                var (x, anchor) = ResolveTextOrigin(hAlign, contentRect);
+                _texts.Add(new TextCommand(new PointPt(x, baselineY), lines[i], scaledFont, anchor, clipRect));
+            }
+        }
+
+        /// <summary>
+        /// 水平配置を決定する。<see cref="HorizontalAlignment.General"/> は値の型で既定が変わる。
+        /// </summary>
+        private static HorizontalAlignment ResolveHorizontalAlignment(HorizontalAlignment align, CellValueKind kind)
+        {
+            if (align != HorizontalAlignment.General)
+            {
+                return align;
+            }
+
+            return kind switch
+            {
+                CellValueKind.Number => HorizontalAlignment.Right,
+                CellValueKind.Boolean => HorizontalAlignment.Center,
+                CellValueKind.Error => HorizontalAlignment.Center,
+                _ => HorizontalAlignment.Left,
+            };
+        }
+
+        private static (double X, TextAnchor Anchor) ResolveTextOrigin(HorizontalAlignment align, RectPt contentRect) =>
+            align switch
+            {
+                HorizontalAlignment.Right => (contentRect.Right, TextAnchor.Right),
+                HorizontalAlignment.Center or HorizontalAlignment.CenterContinuous =>
+                    (contentRect.Left + (contentRect.Width / 2.0), TextAnchor.Center),
+                _ => (contentRect.Left, TextAnchor.Left),
+            };
+
+        private static double ResolveFirstBaselineY(
+            VerticalAlignment align, RectPt rect, FontMetrics metrics, double totalHeight)
+        {
+            // Excel は行の下端にテキストの下端を合わせるのが既定。
+            return align switch
+            {
+                VerticalAlignment.Top => rect.Top + metrics.AscentPt,
+                VerticalAlignment.Center or VerticalAlignment.Distributed or VerticalAlignment.Justify =>
+                    rect.Top + ((rect.Height - totalHeight) / 2.0) + metrics.AscentPt,
+                _ => rect.Bottom - totalHeight + metrics.AscentPt,
+            };
+        }
+
+        /// <summary>
+        /// はみ出し時の挙動を決定する。帳票定義で置換対象に指定された挙動が、セル書式より優先される。
+        /// </summary>
+        private OverflowBehavior ResolveOverflow(CellAddress address, CellStyle style)
+        {
+            if (_report.GetOverflowBehavior(address) is { } fromDefinition)
+            {
+                return fromDefinition;
+            }
+
+            if (style.WrapText)
+            {
+                return OverflowBehavior.Wrap;
+            }
+
+            return style.ShrinkToFit ? OverflowBehavior.Shrink : OverflowBehavior.Overflow;
+        }
+
+        /// <summary>
+        /// セル幅に収まるようフォントサイズを縮める(Excel の「縮小して全体を表示する」相当)。
+        /// </summary>
+        private FontStyle ShrinkToFit(FontStyle font, string text, double availableWidthPt)
+        {
+            var width = _fontMetrics.MeasureTextWidth(font, text);
+            if (width <= availableWidthPt || width <= 0)
+            {
+                return font;
+            }
+
+            // Excel は整数ポイント単位ではなく連続的に縮小する。下限は1ptとする。
+            var shrunkSize = Math.Max(1.0, font.SizePt * availableWidthPt / width);
+            return font with { SizePt = shrunkSize };
+        }
+
+        /// <summary>セル幅に合わせてテキストを折り返す。</summary>
+        private List<string> WrapLines(FontStyle font, string text, double availableWidthPt)
+        {
+            var lines = new List<string>();
+
+            foreach (var paragraph in text.Split('\n'))
+            {
+                var normalized = paragraph.TrimEnd('\r');
+                if (normalized.Length == 0)
+                {
+                    lines.Add(string.Empty);
+                    continue;
+                }
+
+                var current = string.Empty;
+                foreach (var c in normalized)
+                {
+                    var candidate = current + c;
+                    if (current.Length > 0 && _fontMetrics.MeasureTextWidth(font, candidate) > availableWidthPt)
                     {
+                        lines.Add(current);
+                        current = c.ToString();
                         continue;
                     }
 
-                    var anchorCell = _sheet.GetCell(merged.Anchor);
-                    var borders = ResolveMergedBorders(
-                        merged.Range, anchorCell?.Style.Borders ?? BorderSet.None, rowIndex, columnIndex);
-                    EmitCell(merged.Anchor, anchorCell, mergedRect.Value, borders);
-                    continue;
+                    current = candidate;
                 }
 
-                var cell = _sheet.GetCell(address);
-                var rect = CellRect(row, column, rowIndex, columnIndex, rowOffsets, columnOffsets);
-                EmitCell(address, cell, rect);
-            }
-        }
-
-        var commands = new List<DrawCommand>(_fills.Count + _borders.Count + _texts.Count);
-        commands.AddRange(_fills);
-        commands.AddRange(_borders);
-        commands.AddRange(_texts);
-        return commands;
-    }
-
-    private void EmitCell(CellAddress address, CellModel? cell, RectPt rect, BorderSet? bordersOverride = null)
-    {
-        if (rect.IsEmpty)
-        {
-            return;
-        }
-
-        var style = cell?.Style ?? CellStyle.Default;
-
-        if (!style.BackgroundColor.IsTransparent)
-        {
-            _fills.Add(new FillRectCommand(rect, style.BackgroundColor));
-        }
-
-        EmitBorders(rect, bordersOverride ?? style.Borders);
-
-        var text = cell?.DisplayValue;
-        if (!string.IsNullOrEmpty(text))
-        {
-            EmitText(address, cell!, style, rect, text!);
-        }
-    }
-
-    /// <summary>
-    /// 結合範囲の外周4辺の罫線を、範囲を構成する各セルから辺ごとに合成する。
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Excelで結合範囲に外枠/格子を設定すると、右端の罫線は右端列の各セルのRight、
-    /// 下端の罫線は下端行の各セルのBottomに保持される。アンカー(左上)セルの罫線だけを
-    /// 見ると、アンカー以外にしか設定されていない罫線(右端・下端など)が欠落する。
-    /// </para>
-    /// <para>
-    /// 結合範囲が改ページをまたぐ場合、このページに見えているのは範囲の一部だけである。
-    /// 範囲の本当の上端/下端/左端/右端がこのページに含まれていない辺は、
-    /// 単なる改ページの切れ目でしかないため罫線を出さない(<paramref name="rowIndex"/>/
-    /// <paramref name="columnIndex"/> で判定する)。
-    /// </para>
-    /// 斜め罫線はExcel上もアンカーセルのものしか意味を持たないため、そのまま使う。
-    /// </remarks>
-    private BorderSet ResolveMergedBorders(
-        CellRange range,
-        BorderSet anchorBorders,
-        IReadOnlyDictionary<int, int> rowIndex,
-        IReadOnlyDictionary<int, int> columnIndex)
-    {
-        var left = columnIndex.ContainsKey(range.FirstColumn)
-            ? ResolveColumnEdge(range.FirstColumn, range.FirstRow, range.LastRow, b => b.Left)
-            : BorderEdge.None;
-        var right = columnIndex.ContainsKey(range.LastColumn)
-            ? ResolveColumnEdge(range.LastColumn, range.FirstRow, range.LastRow, b => b.Right)
-            : BorderEdge.None;
-        var top = rowIndex.ContainsKey(range.FirstRow)
-            ? ResolveRowEdge(range.FirstRow, range.FirstColumn, range.LastColumn, b => b.Top)
-            : BorderEdge.None;
-        var bottom = rowIndex.ContainsKey(range.LastRow)
-            ? ResolveRowEdge(range.LastRow, range.FirstColumn, range.LastColumn, b => b.Bottom)
-            : BorderEdge.None;
-
-        return new BorderSet(left, right, top, bottom, anchorBorders.DiagonalDown, anchorBorders.DiagonalUp);
-    }
-
-    private BorderEdge ResolveColumnEdge(int column, int firstRow, int lastRow, Func<BorderSet, BorderEdge> selector)
-    {
-        for (var row = firstRow; row <= lastRow; row++)
-        {
-            var edge = selector(_sheet.GetCell(new CellAddress(row, column))?.Style.Borders ?? BorderSet.None);
-            if (edge.IsVisible)
-            {
-                return edge;
-            }
-        }
-
-        return BorderEdge.None;
-    }
-
-    private BorderEdge ResolveRowEdge(int row, int firstColumn, int lastColumn, Func<BorderSet, BorderEdge> selector)
-    {
-        for (var column = firstColumn; column <= lastColumn; column++)
-        {
-            var edge = selector(_sheet.GetCell(new CellAddress(row, column))?.Style.Borders ?? BorderSet.None);
-            if (edge.IsVisible)
-            {
-                return edge;
-            }
-        }
-
-        return BorderEdge.None;
-    }
-
-    // ---------------------------------------------------------------------
-    // 罫線(要件4.2)
-    // ---------------------------------------------------------------------
-
-    private void EmitBorders(RectPt rect, BorderSet borders)
-    {
-        if (!borders.HasAnyVisibleEdge)
-        {
-            return;
-        }
-
-        EmitEdge(borders.Top, new PointPt(rect.Left, rect.Top), new PointPt(rect.Right, rect.Top), horizontal: true);
-        EmitEdge(borders.Bottom, new PointPt(rect.Left, rect.Bottom), new PointPt(rect.Right, rect.Bottom), horizontal: true);
-        EmitEdge(borders.Left, new PointPt(rect.Left, rect.Top), new PointPt(rect.Left, rect.Bottom), horizontal: false);
-        EmitEdge(borders.Right, new PointPt(rect.Right, rect.Top), new PointPt(rect.Right, rect.Bottom), horizontal: false);
-
-        if (borders.DiagonalDown.IsVisible)
-        {
-            EmitEdge(
-                borders.DiagonalDown,
-                new PointPt(rect.Left, rect.Top),
-                new PointPt(rect.Right, rect.Bottom),
-                horizontal: false);
-        }
-
-        if (borders.DiagonalUp.IsVisible)
-        {
-            EmitEdge(
-                borders.DiagonalUp,
-                new PointPt(rect.Left, rect.Bottom),
-                new PointPt(rect.Right, rect.Top),
-                horizontal: false);
-        }
-    }
-
-    private void EmitEdge(BorderEdge edge, PointPt from, PointPt to, bool horizontal)
-    {
-        if (!edge.IsVisible)
-        {
-            return;
-        }
-
-        var width = BorderMetrics.GetWidthPt(edge.Style) * _scale;
-        var dash = BorderMetrics.GetDash(edge.Style);
-
-        if (BorderMetrics.IsDouble(edge.Style))
-        {
-            // 二重線は細線2本で表現する。罫線が属するセル境界の内外へ等距離に振り分ける。
-            var offset = BorderMetrics.DoubleLineGapPt * _scale / 2.0;
-            var (dx, dy) = horizontal ? (0.0, offset) : (offset, 0.0);
-            AddLine(Offset(from, -dx, -dy), Offset(to, -dx, -dy), edge.Color, width, dash);
-            AddLine(Offset(from, dx, dy), Offset(to, dx, dy), edge.Color, width, dash);
-            return;
-        }
-
-        AddLine(from, to, edge.Color, width, dash);
-    }
-
-    private static PointPt Offset(PointPt point, double dx, double dy) => new(point.X + dx, point.Y + dy);
-
-    /// <summary>
-    /// 罫線を追加する。隣接セルが同じ境界に同一の罫線を持つ場合、描画命令が重複するため取り除く。
-    /// </summary>
-    private void AddLine(PointPt from, PointPt to, ArgbColor color, double widthPt, LineDashStyle dash)
-    {
-        var key = string.Format(
-            System.Globalization.CultureInfo.InvariantCulture,
-            "{0:0.###},{1:0.###},{2:0.###},{3:0.###},{4},{5:0.###},{6}",
-            from.X, from.Y, to.X, to.Y, color, widthPt, dash);
-
-        if (!_emittedBorders.Add(key))
-        {
-            return;
-        }
-
-        _borders.Add(new LineCommand(from, to, color, widthPt, dash));
-    }
-
-    // ---------------------------------------------------------------------
-    // テキスト(要件4.1, 4.4, 2.5)
-    // ---------------------------------------------------------------------
-
-    private void EmitText(CellAddress address, CellModel cell, CellStyle style, RectPt rect, string text)
-    {
-        var maxDigitWidthPx = _report.Definition.MaxDigitWidthPx;
-        var paddingPt = ExcelUnitConverter.CellPaddingPoints * _scale;
-        var indentPt = ExcelUnitConverter.IndentWidthToPoints(style.Indent, maxDigitWidthPx) * _scale;
-
-        var contentRect = RectPt.FromBounds(
-            rect.Left + paddingPt + indentPt,
-            rect.Top,
-            rect.Right - paddingPt,
-            rect.Bottom);
-
-        if (contentRect.Width <= 0)
-        {
-            return;
-        }
-
-        var hAlign = ResolveHorizontalAlignment(style.HAlign, cell.ValueKind);
-        var overflow = ResolveOverflow(address, style);
-
-        // 拡大縮小率はフォントサイズにも適用する(座標だけを縮めると文字が収まらなくなるため)。
-        var scaledFont = style.Font with { SizePt = style.Font.SizePt * _scale };
-
-        var lines = overflow == OverflowBehavior.Wrap
-            ? WrapLines(scaledFont, text, contentRect.Width)
-            : new List<string> { text };
-
-        if (overflow == OverflowBehavior.Shrink && lines.Count == 1)
-        {
-            scaledFont = ShrinkToFit(scaledFont, lines[0], contentRect.Width);
-        }
-
-        var metrics = _fontMetrics.GetMetrics(scaledFont);
-        var totalHeight = metrics.LineSpacingPt * lines.Count;
-        var firstBaselineY = ResolveFirstBaselineY(style.VAlign, rect, metrics, totalHeight);
-
-        RectPt? clipRect = overflow is OverflowBehavior.Clip or OverflowBehavior.Wrap or OverflowBehavior.Shrink
-            ? rect
-            : null;
-
-        for (var i = 0; i < lines.Count; i++)
-        {
-            var baselineY = firstBaselineY + (metrics.LineSpacingPt * i);
-            var (x, anchor) = ResolveTextOrigin(hAlign, contentRect);
-            _texts.Add(new TextCommand(new PointPt(x, baselineY), lines[i], scaledFont, anchor, clipRect));
-        }
-    }
-
-    /// <summary>
-    /// 水平配置を決定する。<see cref="HorizontalAlignment.General"/> は値の型で既定が変わる。
-    /// </summary>
-    private static HorizontalAlignment ResolveHorizontalAlignment(HorizontalAlignment align, CellValueKind kind)
-    {
-        if (align != HorizontalAlignment.General)
-        {
-            return align;
-        }
-
-        return kind switch
-        {
-            CellValueKind.Number => HorizontalAlignment.Right,
-            CellValueKind.Boolean => HorizontalAlignment.Center,
-            CellValueKind.Error => HorizontalAlignment.Center,
-            _ => HorizontalAlignment.Left,
-        };
-    }
-
-    private static (double X, TextAnchor Anchor) ResolveTextOrigin(HorizontalAlignment align, RectPt contentRect) =>
-        align switch
-        {
-            HorizontalAlignment.Right => (contentRect.Right, TextAnchor.Right),
-            HorizontalAlignment.Center or HorizontalAlignment.CenterContinuous =>
-                (contentRect.Left + (contentRect.Width / 2.0), TextAnchor.Center),
-            _ => (contentRect.Left, TextAnchor.Left),
-        };
-
-    private static double ResolveFirstBaselineY(
-        VerticalAlignment align, RectPt rect, FontMetrics metrics, double totalHeight)
-    {
-        // Excel は行の下端にテキストの下端を合わせるのが既定。
-        return align switch
-        {
-            VerticalAlignment.Top => rect.Top + metrics.AscentPt,
-            VerticalAlignment.Center or VerticalAlignment.Distributed or VerticalAlignment.Justify =>
-                rect.Top + ((rect.Height - totalHeight) / 2.0) + metrics.AscentPt,
-            _ => rect.Bottom - totalHeight + metrics.AscentPt,
-        };
-    }
-
-    /// <summary>
-    /// はみ出し時の挙動を決定する。帳票定義で置換対象に指定された挙動が、セル書式より優先される。
-    /// </summary>
-    private OverflowBehavior ResolveOverflow(CellAddress address, CellStyle style)
-    {
-        if (_report.GetOverflowBehavior(address) is { } fromDefinition)
-        {
-            return fromDefinition;
-        }
-
-        if (style.WrapText)
-        {
-            return OverflowBehavior.Wrap;
-        }
-
-        return style.ShrinkToFit ? OverflowBehavior.Shrink : OverflowBehavior.Overflow;
-    }
-
-    /// <summary>
-    /// セル幅に収まるようフォントサイズを縮める(Excel の「縮小して全体を表示する」相当)。
-    /// </summary>
-    private FontStyle ShrinkToFit(FontStyle font, string text, double availableWidthPt)
-    {
-        var width = _fontMetrics.MeasureTextWidth(font, text);
-        if (width <= availableWidthPt || width <= 0)
-        {
-            return font;
-        }
-
-        // Excel は整数ポイント単位ではなく連続的に縮小する。下限は1ptとする。
-        var shrunkSize = Math.Max(1.0, font.SizePt * availableWidthPt / width);
-        return font with { SizePt = shrunkSize };
-    }
-
-    /// <summary>セル幅に合わせてテキストを折り返す。</summary>
-    private List<string> WrapLines(FontStyle font, string text, double availableWidthPt)
-    {
-        var lines = new List<string>();
-
-        foreach (var paragraph in text.Split('\n'))
-        {
-            var normalized = paragraph.TrimEnd('\r');
-            if (normalized.Length == 0)
-            {
-                lines.Add(string.Empty);
-                continue;
+                lines.Add(current);
             }
 
-            var current = string.Empty;
-            foreach (var c in normalized)
+            return lines.Count == 0 ? new List<string> { string.Empty } : lines;
+        }
+
+        // ---------------------------------------------------------------------
+        // 座標計算
+        // ---------------------------------------------------------------------
+
+        /// <summary>ページ内の各行/列の開始オフセット(論理座標、ポイント)を求める。</summary>
+        private static double[] BuildOffsets(IReadOnlyList<int> indices, Func<int, double> sizeOf)
+        {
+            var offsets = new double[indices.Count + 1];
+            for (var i = 0; i < indices.Count; i++)
             {
-                var candidate = current + c;
-                if (current.Length > 0 && _fontMetrics.MeasureTextWidth(font, candidate) > availableWidthPt)
+                offsets[i + 1] = offsets[i] + sizeOf(indices[i]);
+            }
+
+            return offsets;
+        }
+
+        private static Dictionary<int, int> BuildIndex(IReadOnlyList<int> indices)
+        {
+            var map = new Dictionary<int, int>(indices.Count);
+            for (var i = 0; i < indices.Count; i++)
+            {
+                map[indices[i]] = i;
+            }
+
+            return map;
+        }
+
+        /// <summary>論理座標を、余白と拡大縮小率を適用した用紙座標へ変換する。</summary>
+        private RectPt ToPageRect(double left, double top, double right, double bottom) =>
+            RectPt.FromBounds(
+                _margins.LeftPt + (left * _scale),
+                _margins.TopPt + (top * _scale),
+                _margins.LeftPt + (right * _scale),
+                _margins.TopPt + (bottom * _scale));
+
+        private RectPt CellRect(
+            int row,
+            int column,
+            IReadOnlyDictionary<int, int> rowIndex,
+            IReadOnlyDictionary<int, int> columnIndex,
+            double[] rowOffsets,
+            double[] columnOffsets)
+        {
+            var r = rowIndex[row];
+            var c = columnIndex[column];
+            return ToPageRect(columnOffsets[c], rowOffsets[r], columnOffsets[c + 1], rowOffsets[r + 1]);
+        }
+
+        /// <summary>
+        /// 結合範囲のうち、このページに見えている部分の矩形を返す。
+        /// ページ上に1行/1列も含まれない場合は null。
+        /// </summary>
+        private RectPt? TryGetMergedRect(
+            CellRange range,
+            IReadOnlyDictionary<int, int> rowIndex,
+            IReadOnlyDictionary<int, int> columnIndex,
+            double[] rowOffsets,
+            double[] columnOffsets)
+        {
+            var (firstRowPos, lastRowPos) = FindVisibleSpan(range.FirstRow, range.LastRow, rowIndex);
+            if (firstRowPos < 0)
+            {
+                return null;
+            }
+
+            var (firstColPos, lastColPos) = FindVisibleSpan(range.FirstColumn, range.LastColumn, columnIndex);
+            if (firstColPos < 0)
+            {
+                return null;
+            }
+
+            return ToPageRect(
+                columnOffsets[firstColPos],
+                rowOffsets[firstRowPos],
+                columnOffsets[lastColPos + 1],
+                rowOffsets[lastRowPos + 1]);
+        }
+
+        /// <summary>
+        /// 範囲 [first, last] のうち、ページ上に存在する指標の位置(連番)の最小・最大を返す。
+        /// </summary>
+        /// <remarks>
+        /// 印刷タイトルの繰り返しにより、ページ上の指標は必ずしも連続しない。
+        /// 結合範囲が非連続な位置にまたがる場合は、見えている範囲全体を1つの矩形として扱う。
+        /// </remarks>
+        private static (int First, int Last) FindVisibleSpan(
+            int first, int last, IReadOnlyDictionary<int, int> index)
+        {
+            var minPos = int.MaxValue;
+            var maxPos = -1;
+
+            for (var value = first; value <= last; value++)
+            {
+                if (!index.TryGetValue(value, out var pos))
                 {
-                    lines.Add(current);
-                    current = c.ToString();
                     continue;
                 }
 
-                current = candidate;
+                if (pos < minPos) { minPos = pos; }
+                if (pos > maxPos) { maxPos = pos; }
             }
 
-            lines.Add(current);
+            return maxPos < 0 ? (-1, -1) : (minPos, maxPos);
         }
-
-        return lines.Count == 0 ? new List<string> { string.Empty } : lines;
-    }
-
-    // ---------------------------------------------------------------------
-    // 座標計算
-    // ---------------------------------------------------------------------
-
-    /// <summary>ページ内の各行/列の開始オフセット(論理座標、ポイント)を求める。</summary>
-    private static double[] BuildOffsets(IReadOnlyList<int> indices, Func<int, double> sizeOf)
-    {
-        var offsets = new double[indices.Count + 1];
-        for (var i = 0; i < indices.Count; i++)
-        {
-            offsets[i + 1] = offsets[i] + sizeOf(indices[i]);
-        }
-
-        return offsets;
-    }
-
-    private static Dictionary<int, int> BuildIndex(IReadOnlyList<int> indices)
-    {
-        var map = new Dictionary<int, int>(indices.Count);
-        for (var i = 0; i < indices.Count; i++)
-        {
-            map[indices[i]] = i;
-        }
-
-        return map;
-    }
-
-    /// <summary>論理座標を、余白と拡大縮小率を適用した用紙座標へ変換する。</summary>
-    private RectPt ToPageRect(double left, double top, double right, double bottom) =>
-        RectPt.FromBounds(
-            _margins.LeftPt + (left * _scale),
-            _margins.TopPt + (top * _scale),
-            _margins.LeftPt + (right * _scale),
-            _margins.TopPt + (bottom * _scale));
-
-    private RectPt CellRect(
-        int row,
-        int column,
-        IReadOnlyDictionary<int, int> rowIndex,
-        IReadOnlyDictionary<int, int> columnIndex,
-        double[] rowOffsets,
-        double[] columnOffsets)
-    {
-        var r = rowIndex[row];
-        var c = columnIndex[column];
-        return ToPageRect(columnOffsets[c], rowOffsets[r], columnOffsets[c + 1], rowOffsets[r + 1]);
-    }
-
-    /// <summary>
-    /// 結合範囲のうち、このページに見えている部分の矩形を返す。
-    /// ページ上に1行/1列も含まれない場合は null。
-    /// </summary>
-    private RectPt? TryGetMergedRect(
-        CellRange range,
-        IReadOnlyDictionary<int, int> rowIndex,
-        IReadOnlyDictionary<int, int> columnIndex,
-        double[] rowOffsets,
-        double[] columnOffsets)
-    {
-        var (firstRowPos, lastRowPos) = FindVisibleSpan(range.FirstRow, range.LastRow, rowIndex);
-        if (firstRowPos < 0)
-        {
-            return null;
-        }
-
-        var (firstColPos, lastColPos) = FindVisibleSpan(range.FirstColumn, range.LastColumn, columnIndex);
-        if (firstColPos < 0)
-        {
-            return null;
-        }
-
-        return ToPageRect(
-            columnOffsets[firstColPos],
-            rowOffsets[firstRowPos],
-            columnOffsets[lastColPos + 1],
-            rowOffsets[lastRowPos + 1]);
-    }
-
-    /// <summary>
-    /// 範囲 [first, last] のうち、ページ上に存在する指標の位置(連番)の最小・最大を返す。
-    /// </summary>
-    /// <remarks>
-    /// 印刷タイトルの繰り返しにより、ページ上の指標は必ずしも連続しない。
-    /// 結合範囲が非連続な位置にまたがる場合は、見えている範囲全体を1つの矩形として扱う。
-    /// </remarks>
-    private static (int First, int Last) FindVisibleSpan(
-        int first, int last, IReadOnlyDictionary<int, int> index)
-    {
-        var minPos = int.MaxValue;
-        var maxPos = -1;
-
-        for (var value = first; value <= last; value++)
-        {
-            if (!index.TryGetValue(value, out var pos))
-            {
-                continue;
-            }
-
-            if (pos < minPos) { minPos = pos; }
-            if (pos > maxPos) { maxPos = pos; }
-        }
-
-        return maxPos < 0 ? (-1, -1) : (minPos, maxPos);
     }
 }

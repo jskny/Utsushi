@@ -1,8 +1,8 @@
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Spreadsheet;
 
-namespace Utsushi.SampleGenerator;
-
+namespace Utsushi.SampleGenerator
+{
 /// <summary>
 /// 帳票サンプルが使う書式(スタイルシート)を組み立てる。
 /// </summary>
@@ -185,4 +185,5 @@ internal static class SampleStyles
         format.ApplyAlignment = true;
         return format;
     }
+}
 }
