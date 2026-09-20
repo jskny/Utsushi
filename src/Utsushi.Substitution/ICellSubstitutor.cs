@@ -35,5 +35,10 @@ public interface ICellSubstitutor
     /// <exception cref="InvalidCellOverrideAddressException">
     /// セル番地がA1形式として解釈できない場合(要件2.8)。
     /// </exception>
+    /// <exception cref="NonAnchorMergedCellOverrideException">
+    /// 指定したセルが結合セル範囲内にあり、かつ先頭(アンカー)セルではない場合(要件2.9)。
+    /// Layoutレイヤーは結合範囲のアンカーセルの値しか描画しないため、アンカー以外を
+    /// 指定すると値がモデルには反映されてもPDFには一切出力されない静かなデータ欠落になる。
+    /// </exception>
     ReportModel ApplyCellOverrides(ReportModel report, IReadOnlyDictionary<string, string> cellOverrides);
 }

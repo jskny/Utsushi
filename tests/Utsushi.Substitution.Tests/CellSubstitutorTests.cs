@@ -253,4 +253,56 @@ public sealed class CellSubstitutorTests
 
         Assert.Equal("無関係な上書き", result.Sheet.GetCell(CellAddress.Parse("B2"))!.DisplayValue);
     }
+
+    [Fact]
+    public void 結合セルのアンカーへの上書きはできる()
+    {
+        var definition = Definition();
+        var sheet = Sheet(("B5", "もとの値", null)) with
+        {
+            MergedRanges = new List<MergedRange> { new(CellRange.Parse("B5:D5")) },
+        };
+        var report = Report(definition, sheet);
+
+        var result = _substitutor.ApplyCellOverrides(
+            report, new Dictionary<string, string> { ["B5"] = "上書き後" });
+
+        Assert.Equal("上書き後", result.Sheet.GetCell(CellAddress.Parse("B5"))!.DisplayValue);
+    }
+
+    [Fact]
+    public void 結合セルの非アンカーへの直接指定はエラーになる()
+    {
+        var definition = Definition();
+        var sheet = Sheet(("B5", "もとの値", null)) with
+        {
+            MergedRanges = new List<MergedRange> { new(CellRange.Parse("B5:D5")) },
+        };
+        var report = Report(definition, sheet);
+
+        var ex = Assert.Throws<NonAnchorMergedCellOverrideException>(
+            () => _substitutor.ApplyCellOverrides(
+                report, new Dictionary<string, string> { ["D5"] = "見えなくなる値" }));
+
+        Assert.Equal(CellAddress.Parse("D5"), ex.CellAddress);
+        Assert.Equal(CellAddress.Parse("B5"), ex.AnchorAddress);
+        Assert.Equal("test-report", ex.ReportCode);
+    }
+
+    [Fact]
+    public void セル番地指定の上書きは同じセルの帳票定義のはみ出し指定を打ち消す()
+    {
+        // 同一セルが名前付きキーにも登録されoverflowが明示されている場合、
+        // ApplyCellOverridesで上書きするとその指定は取り消され、Excel側の書式に従う扱いに戻る。
+        var definition = Definition(Field("Key", "A1", overflow: OverflowBehavior.Shrink));
+        var report = Report(definition, Sheet(("A1", "a", null)));
+
+        var afterApply = _substitutor.Apply(report, new Dictionary<string, string> { ["Key"] = "x" });
+        Assert.Equal(OverflowBehavior.Shrink, afterApply.GetOverflowBehavior(CellAddress.Parse("A1")));
+
+        var result = _substitutor.ApplyCellOverrides(
+            afterApply, new Dictionary<string, string> { ["A1"] = "上書き" });
+
+        Assert.Null(result.GetOverflowBehavior(CellAddress.Parse("A1")));
+    }
 }

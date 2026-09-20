@@ -216,6 +216,29 @@ public sealed class ReportConversionGoldenTests
     }
 
     [Fact]
+    public void 結合セルの非アンカーを直接指定するとエラーになる()
+    {
+        // A3:C3(CustomerNameのセル)は結合セルであり、B3・C3はアンカーではない。
+        using var converter = CreateDeterministicConverter(out _);
+        using var input = File.OpenRead(TestPaths.SampleTemplate("invoice"));
+
+        var ex = Assert.Throws<NonAnchorMergedCellOverrideException>(() => converter.ComputeLayout(
+            "invoice",
+            input,
+            new Dictionary<string, string>
+            {
+                ["CustomerName"] = "株式会社テスト製作所 御中",
+                ["InvoiceNo"] = "INV-2026-0417",
+                ["TotalAmount"] = "¥2,153,800",
+            },
+            new Dictionary<string, string> { ["B3"] = "見えなくなる値" }));
+
+        Assert.Equal(CellAddress.Parse("B3"), ex.CellAddress);
+        Assert.Equal(CellAddress.Parse("A3"), ex.AnchorAddress);
+        Assert.Equal("invoice", ex.ReportCode);
+    }
+
+    [Fact]
     public void 不正なセル番地を直接指定するとエラーになる()
     {
         using var converter = CreateDeterministicConverter(out _);

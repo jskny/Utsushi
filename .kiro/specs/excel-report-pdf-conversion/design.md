@@ -148,9 +148,11 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
 - はみ出し時の挙動(`overflow: shrink|clip|wrap`)は帳票定義の値をそのままLayoutレイヤーに引き渡すためのフラグとして `ReportModel` に保持する(実際の折り返し/縮小計算はLayoutレイヤーの責務)。
 - `ApplyCellOverrides` は、帳票定義の置換キー(`SubstitutionFields`)を経由せず、セル番地(A1形式の文字列。キーは `CellAddress.TryParse` で解釈する)を直接指定して値を書き換える第二の経路(要件2.7, 2.8)。
   - `Apply` と同じく `CellModel.WithText` で値のみを差し替え、書式には触れない。対象セルが未存在(空セル)の場合は既定スタイルの新規セルを作る点も `Apply` と同一。
+  - `Apply` と同様、全入力を検証してから一括で書き換える二段階構成(`ParseAndValidateAddresses` → 書き換え)を取る。
   - `Apply` の未知キー検証(要件2.3)・必須キー検証(要件2.4)の対象外。帳票定義に登録の無いセルも指定できる。
   - セル番地がA1形式として解釈できない場合は `InvalidCellOverrideAddressException`(Stage=Substitution)を送出する(要件2.8)。
-  - `OverflowByCell` へは書き込まない。はみ出し時は常にExcel側のセル書式に従う(帳票定義でのはみ出し挙動指定は、この経路では行えない)。
+  - 指定したセルが結合セル範囲内にあり、かつ先頭(アンカー)セルでない場合は `NonAnchorMergedCellOverrideException` を送出する(要件2.9)。Layoutレイヤー(`PageCommandBuilder`)は結合範囲のアンカーセルの値のみを描画するため、アンカー以外への上書きは値がモデルには反映されてもPDFに一切出力されない静かなデータ欠落になる。これを防ぐため、Substitutionレイヤーの時点で検出する。
+  - `OverflowByCell` には書き込まず、かつ上書き対象セルの既存エントリ(名前付きキー方式`Apply`が同じセルに残した`overflow`指定)があれば削除する。これにより、同じセルを`Apply`と`ApplyCellOverrides`の両方で扱った場合でも、はみ出し時は常にExcel側のセル書式(`wrapText`/`shrinkToFit`)に従う(帳票定義でのはみ出し挙動指定は、この経路では行えない)。
   - `Utsushi.ReportPdfConverter` は `Convert` / `ConvertToFile` / `ComputeLayout` に任意パラメータ `IReadOnlyDictionary<string, string>? cellOverrides = null` を追加し、`Apply` の後に `ApplyCellOverrides` を適用する(名前付きキーでの必須値検証を経てから、セル直接指定で上書きできるようにするため)。CLIは `--override <セル番地>=<値>` オプションでこれを渡す。
 
 ### 4. Layout レイヤー (`Utsushi.Layout`)
@@ -293,6 +295,7 @@ public sealed record TextCommand(
   - `UnsupportedWorkbookElementException`(要件1.5)
   - `SubstitutionKeyNotFoundException` / `RequiredSubstitutionValueMissingException`(要件2.3, 2.4)
   - `InvalidCellOverrideAddressException`(要件2.8。セル番地直接指定がA1形式として解釈できない場合)
+  - `NonAnchorMergedCellOverrideException`(要件2.9。セル番地直接指定の対象が結合セル範囲の非アンカー位置の場合)
   - `InvalidExcelFileException`(要件6.1, 6.2。`Reason` で非xlsx/破損/パスワード保護を区別する)
   - `ReportDefinitionSchemaException`(要件6.3。問題のあったプロパティパスを保持する)
   - `LayoutComputationException` / `PdfRenderingException` / `FontNotAvailableException`
