@@ -7,8 +7,8 @@
   <PropertyGroup>
     <!-- 呼び出し元プロダクトが .NET 5 のため net5.0 固定(tech.md「実行環境」) -->
     <TargetFramework>net5.0</TargetFramework>
-    <!-- file-scoped namespace 等を使うため C# 10 を明示。生成ILは net5.0 互換のまま -->
-    <LangVersion>10.0</LangVersion>
+    <!-- 呼び出し元プロダクトの開発環境(Visual Studio 2019)が C# 9.0 までしかサポートしないため明示(tech.md「実行環境」) -->
+    <LangVersion>9.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>

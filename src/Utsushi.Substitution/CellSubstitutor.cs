@@ -5,184 +5,185 @@ using Utsushi.Core.Exceptions;
 using Utsushi.Parsing.Model;
 using Utsushi.ReportDefinitions.Model;
 
-namespace Utsushi.Substitution;
-
-/// <summary>
-/// 帳票定義に基づくセル値置換の既定実装。
-/// </summary>
-/// <remarks>
-/// <para>書式(フォント・配置・罫線・数値書式)には一切触れない(要件2.2)。</para>
-/// <para>
-/// はみ出し時の挙動(shrink/clip/wrap/overflow)はここでは計算せず、
-/// 帳票定義の指定値を <see cref="ReportModel.OverflowByCell"/> に載せて
-/// Layout レイヤーへ引き渡すのみとする(要件2.5、design.md「Substitution レイヤー」)。
-/// </para>
-/// </remarks>
-public sealed class CellSubstitutor : ICellSubstitutor
+namespace Utsushi.Substitution
 {
-    /// <inheritdoc />
-    public ReportModel Apply(ReportModel report, IReadOnlyDictionary<string, string> values)
-    {
-        if (report is null)
-        {
-            throw new ArgumentNullException(nameof(report));
-        }
-
-        if (values is null)
-        {
-            throw new ArgumentNullException(nameof(values));
-        }
-
-        var definition = report.Definition;
-        var sheet = report.Sheet;
-
-        ValidateKnownKeys(definition, sheet.Name, values);
-        ValidateRequiredValues(definition, sheet.Name, values);
-
-        var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
-        var overflowByCell = new Dictionary<CellAddress, OverflowBehavior>(report.OverflowByCell);
-
-        foreach (var field in definition.SubstitutionFields)
-        {
-            // 任意フィールドで値が渡されていない場合は、テンプレートの既存値をそのまま残す。
-            if (!values.TryGetValue(field.Key, out var replacement))
-            {
-                continue;
-            }
-
-            var existing = sheet.GetCell(field.Cell);
-            cells[field.Cell] = existing is null
-                ? new CellModel(replacement, CellValueKind.Text, CellStyle.Default, replacement)
-                : existing.WithText(replacement);
-
-            // 帳票定義がはみ出し挙動を明示している場合だけ Layout レイヤーへ伝える(要件2.5)。
-            // 未指定(null)のときは記録せず、Excel 側のセル書式を Layout がそのまま使う。
-            if (field.Overflow is { } overflow)
-            {
-                overflowByCell[field.Cell] = overflow;
-            }
-        }
-
-        var updatedSheet = sheet with { Cells = cells };
-        return report with { Sheet = updatedSheet, OverflowByCell = overflowByCell };
-    }
-
-    /// <inheritdoc />
-    public ReportModel ApplyCellOverrides(ReportModel report, IReadOnlyDictionary<string, string> cellOverrides)
-    {
-        if (report is null)
-        {
-            throw new ArgumentNullException(nameof(report));
-        }
-
-        if (cellOverrides is null)
-        {
-            throw new ArgumentNullException(nameof(cellOverrides));
-        }
-
-        if (cellOverrides.Count == 0)
-        {
-            return report;
-        }
-
-        var definition = report.Definition;
-        var sheet = report.Sheet;
-
-        // Apply と同様、まず全入力を検証してから一括で書き換える(要件2.8, 2.9)。
-        var parsed = ParseAndValidateAddresses(definition, sheet, cellOverrides);
-
-        var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
-        var overflowByCell = new Dictionary<CellAddress, OverflowBehavior>(report.OverflowByCell);
-
-        foreach (var (address, replacement) in parsed)
-        {
-            var existing = sheet.GetCell(address);
-            cells[address] = existing is null
-                ? new CellModel(replacement, CellValueKind.Text, CellStyle.Default, replacement)
-                : existing.WithText(replacement);
-
-            // この経路は帳票定義のoverflow指定を経由しないため、名前付きキー方式(Apply)が
-            // 同じセルに残した指定があれば取り除き、常にExcel側のセル書式に従わせる(design.md)。
-            overflowByCell.Remove(address);
-        }
-
-        var updatedSheet = sheet with { Cells = cells };
-        return report with { Sheet = updatedSheet, OverflowByCell = overflowByCell };
-    }
-
     /// <summary>
-    /// セル番地文字列をパースし、結合セル範囲内の非アンカー位置を指定していないかを検証する(要件2.8, 2.9)。
+    /// 帳票定義に基づくセル値置換の既定実装。
     /// </summary>
-    private static List<(CellAddress Address, string Replacement)> ParseAndValidateAddresses(
-        ReportDefinition definition, SheetModel sheet, IReadOnlyDictionary<string, string> cellOverrides)
+    /// <remarks>
+    /// <para>書式(フォント・配置・罫線・数値書式)には一切触れない(要件2.2)。</para>
+    /// <para>
+    /// はみ出し時の挙動(shrink/clip/wrap/overflow)はここでは計算せず、
+    /// 帳票定義の指定値を <see cref="ReportModel.OverflowByCell"/> に載せて
+    /// Layout レイヤーへ引き渡すのみとする(要件2.5、design.md「Substitution レイヤー」)。
+    /// </para>
+    /// </remarks>
+    public sealed class CellSubstitutor : ICellSubstitutor
     {
-        var parsed = new List<(CellAddress, string)>(cellOverrides.Count);
-
-        foreach (var (addressText, replacement) in cellOverrides)
+        /// <inheritdoc />
+        public ReportModel Apply(ReportModel report, IReadOnlyDictionary<string, string> values)
         {
-            if (!CellAddress.TryParse(addressText, out var address))
+            if (report is null)
             {
-                throw new InvalidCellOverrideAddressException(
-                    addressText,
-                    $"セル番地 '{addressText}' はA1形式として解釈できません。",
-                    definition.ReportCode,
-                    sheet.Name);
+                throw new ArgumentNullException(nameof(report));
             }
 
-            var merged = sheet.FindMergedRange(address);
-            if (merged is not null && merged.Anchor != address)
+            if (values is null)
             {
-                throw new NonAnchorMergedCellOverrideException(
-                    address,
-                    merged.Anchor,
-                    $"セル '{address}' は結合セル範囲の先頭(アンカー: '{merged.Anchor}')ではないため、"
-                        + "直接指定して上書きすることはできません。アンカーのセル番地を指定してください。",
-                    definition.ReportCode,
-                    sheet.Name);
+                throw new ArgumentNullException(nameof(values));
             }
 
-            parsed.Add((address, replacement));
+            var definition = report.Definition;
+            var sheet = report.Sheet;
+
+            ValidateKnownKeys(definition, sheet.Name, values);
+            ValidateRequiredValues(definition, sheet.Name, values);
+
+            var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
+            var overflowByCell = new Dictionary<CellAddress, OverflowBehavior>(report.OverflowByCell);
+
+            foreach (var field in definition.SubstitutionFields)
+            {
+                // 任意フィールドで値が渡されていない場合は、テンプレートの既存値をそのまま残す。
+                if (!values.TryGetValue(field.Key, out var replacement))
+                {
+                    continue;
+                }
+
+                var existing = sheet.GetCell(field.Cell);
+                cells[field.Cell] = existing is null
+                    ? new CellModel(replacement, CellValueKind.Text, CellStyle.Default, replacement)
+                    : existing.WithText(replacement);
+
+                // 帳票定義がはみ出し挙動を明示している場合だけ Layout レイヤーへ伝える(要件2.5)。
+                // 未指定(null)のときは記録せず、Excel 側のセル書式を Layout がそのまま使う。
+                if (field.Overflow is { } overflow)
+                {
+                    overflowByCell[field.Cell] = overflow;
+                }
+            }
+
+            var updatedSheet = sheet with { Cells = cells };
+            return report with { Sheet = updatedSheet, OverflowByCell = overflowByCell };
         }
 
-        return parsed;
-    }
-
-    /// <summary>帳票定義に存在しない置換キーが渡されていないかを検証する(要件2.3)。</summary>
-    private static void ValidateKnownKeys(
-        ReportDefinition definition, string sheetName, IReadOnlyDictionary<string, string> values)
-    {
-        foreach (var key in values.Keys)
+        /// <inheritdoc />
+        public ReportModel ApplyCellOverrides(ReportModel report, IReadOnlyDictionary<string, string> cellOverrides)
         {
-            if (definition.TryGetField(key, out _))
+            if (report is null)
             {
-                continue;
+                throw new ArgumentNullException(nameof(report));
             }
 
-            throw new SubstitutionKeyNotFoundException(
-                key,
-                $"置換キー '{key}' は帳票 '{definition.ReportCode}' の帳票定義に存在しません。",
-                definition.ReportCode,
-                sheetName);
+            if (cellOverrides is null)
+            {
+                throw new ArgumentNullException(nameof(cellOverrides));
+            }
+
+            if (cellOverrides.Count == 0)
+            {
+                return report;
+            }
+
+            var definition = report.Definition;
+            var sheet = report.Sheet;
+
+            // Apply と同様、まず全入力を検証してから一括で書き換える(要件2.8, 2.9)。
+            var parsed = ParseAndValidateAddresses(definition, sheet, cellOverrides);
+
+            var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
+            var overflowByCell = new Dictionary<CellAddress, OverflowBehavior>(report.OverflowByCell);
+
+            foreach (var (address, replacement) in parsed)
+            {
+                var existing = sheet.GetCell(address);
+                cells[address] = existing is null
+                    ? new CellModel(replacement, CellValueKind.Text, CellStyle.Default, replacement)
+                    : existing.WithText(replacement);
+
+                // この経路は帳票定義のoverflow指定を経由しないため、名前付きキー方式(Apply)が
+                // 同じセルに残した指定があれば取り除き、常にExcel側のセル書式に従わせる(design.md)。
+                overflowByCell.Remove(address);
+            }
+
+            var updatedSheet = sheet with { Cells = cells };
+            return report with { Sheet = updatedSheet, OverflowByCell = overflowByCell };
         }
-    }
 
-    /// <summary>必須の置換キーに値が渡されているかを検証する(要件2.4)。</summary>
-    private static void ValidateRequiredValues(
-        ReportDefinition definition, string sheetName, IReadOnlyDictionary<string, string> values)
-    {
-        foreach (var field in definition.RequiredFields)
+        /// <summary>
+        /// セル番地文字列をパースし、結合セル範囲内の非アンカー位置を指定していないかを検証する(要件2.8, 2.9)。
+        /// </summary>
+        private static List<(CellAddress Address, string Replacement)> ParseAndValidateAddresses(
+            ReportDefinition definition, SheetModel sheet, IReadOnlyDictionary<string, string> cellOverrides)
         {
-            if (values.ContainsKey(field.Key))
+            var parsed = new List<(CellAddress, string)>(cellOverrides.Count);
+
+            foreach (var (addressText, replacement) in cellOverrides)
             {
-                continue;
+                if (!CellAddress.TryParse(addressText, out var address))
+                {
+                    throw new InvalidCellOverrideAddressException(
+                        addressText,
+                        $"セル番地 '{addressText}' はA1形式として解釈できません。",
+                        definition.ReportCode,
+                        sheet.Name);
+                }
+
+                var merged = sheet.FindMergedRange(address);
+                if (merged is not null && merged.Anchor != address)
+                {
+                    throw new NonAnchorMergedCellOverrideException(
+                        address,
+                        merged.Anchor,
+                        $"セル '{address}' は結合セル範囲の先頭(アンカー: '{merged.Anchor}')ではないため、"
+                            + "直接指定して上書きすることはできません。アンカーのセル番地を指定してください。",
+                        definition.ReportCode,
+                        sheet.Name);
+                }
+
+                parsed.Add((address, replacement));
             }
 
-            throw new RequiredSubstitutionValueMissingException(
-                field.Key,
-                $"必須の置換キー '{field.Key}'(セル {field.Cell})に対応する値が渡されていません。",
-                definition.ReportCode,
-                sheetName,
-                field.Cell);
+            return parsed;
+        }
+
+        /// <summary>帳票定義に存在しない置換キーが渡されていないかを検証する(要件2.3)。</summary>
+        private static void ValidateKnownKeys(
+            ReportDefinition definition, string sheetName, IReadOnlyDictionary<string, string> values)
+        {
+            foreach (var key in values.Keys)
+            {
+                if (definition.TryGetField(key, out _))
+                {
+                    continue;
+                }
+
+                throw new SubstitutionKeyNotFoundException(
+                    key,
+                    $"置換キー '{key}' は帳票 '{definition.ReportCode}' の帳票定義に存在しません。",
+                    definition.ReportCode,
+                    sheetName);
+            }
+        }
+
+        /// <summary>必須の置換キーに値が渡されているかを検証する(要件2.4)。</summary>
+        private static void ValidateRequiredValues(
+            ReportDefinition definition, string sheetName, IReadOnlyDictionary<string, string> values)
+        {
+            foreach (var field in definition.RequiredFields)
+            {
+                if (values.ContainsKey(field.Key))
+                {
+                    continue;
+                }
+
+                throw new RequiredSubstitutionValueMissingException(
+                    field.Key,
+                    $"必須の置換キー '{field.Key}'(セル {field.Cell})に対応する値が渡されていません。",
+                    definition.ReportCode,
+                    sheetName,
+                    field.Cell);
+            }
         }
     }
 }

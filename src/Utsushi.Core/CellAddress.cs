@@ -2,131 +2,132 @@ using System;
 using System.Globalization;
 using System.Text;
 
-namespace Utsushi.Core;
-
-/// <summary>
-/// A1形式のセル番地。行・列ともに1始まり。
-/// </summary>
-public readonly struct CellAddress : IEquatable<CellAddress>, IComparable<CellAddress>
+namespace Utsushi.Core
 {
-    /// <summary>扱える最大列番号(Excel の XFD 列)。</summary>
-    public const int MaxColumn = 16384;
-
-    /// <summary>扱える最大行番号。</summary>
-    public const int MaxRow = 1048576;
-
-    public CellAddress(int row, int column)
+    /// <summary>
+    /// A1形式のセル番地。行・列ともに1始まり。
+    /// </summary>
+    public readonly struct CellAddress : IEquatable<CellAddress>, IComparable<CellAddress>
     {
-        if (row < 1 || row > MaxRow)
+        /// <summary>扱える最大列番号(Excel の XFD 列)。</summary>
+        public const int MaxColumn = 16384;
+
+        /// <summary>扱える最大行番号。</summary>
+        public const int MaxRow = 1048576;
+
+        public CellAddress(int row, int column)
         {
-            throw new ArgumentOutOfRangeException(nameof(row), row, "行番号は1以上 " + MaxRow + " 以下である必要があります。");
+            if (row < 1 || row > MaxRow)
+            {
+                throw new ArgumentOutOfRangeException(nameof(row), row, "行番号は1以上 " + MaxRow + " 以下である必要があります。");
+            }
+
+            if (column < 1 || column > MaxColumn)
+            {
+                throw new ArgumentOutOfRangeException(nameof(column), column, "列番号は1以上 " + MaxColumn + " 以下である必要があります。");
+            }
+
+            Row = row;
+            Column = column;
         }
 
-        if (column < 1 || column > MaxColumn)
+        /// <summary>1始まりの行番号。</summary>
+        public int Row { get; }
+
+        /// <summary>1始まりの列番号(A=1)。</summary>
+        public int Column { get; }
+
+        /// <summary>"C3" のようなA1形式の文字列を解釈する。絶対参照記号($)は無視する。</summary>
+        public static CellAddress Parse(string text)
         {
-            throw new ArgumentOutOfRangeException(nameof(column), column, "列番号は1以上 " + MaxColumn + " 以下である必要があります。");
+            if (!TryParse(text, out var address))
+            {
+                throw new FormatException($"セル番地として解釈できません: '{text}'");
+            }
+
+            return address;
         }
 
-        Row = row;
-        Column = column;
-    }
-
-    /// <summary>1始まりの行番号。</summary>
-    public int Row { get; }
-
-    /// <summary>1始まりの列番号(A=1)。</summary>
-    public int Column { get; }
-
-    /// <summary>"C3" のようなA1形式の文字列を解釈する。絶対参照記号($)は無視する。</summary>
-    public static CellAddress Parse(string text)
-    {
-        if (!TryParse(text, out var address))
+        /// <summary>"C3" のようなA1形式の文字列の解釈を試みる。</summary>
+        public static bool TryParse(string? text, out CellAddress address)
         {
-            throw new FormatException($"セル番地として解釈できません: '{text}'");
-        }
-
-        return address;
-    }
-
-    /// <summary>"C3" のようなA1形式の文字列の解釈を試みる。</summary>
-    public static bool TryParse(string? text, out CellAddress address)
-    {
-        address = default;
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return false;
-        }
-
-        var s = text!.Trim().Replace("$", string.Empty);
-        var i = 0;
-        var column = 0;
-        while (i < s.Length && char.IsLetter(s[i]))
-        {
-            var c = char.ToUpperInvariant(s[i]);
-            column = (column * 26) + (c - 'A' + 1);
-            if (column > MaxColumn)
+            address = default;
+            if (string.IsNullOrWhiteSpace(text))
             {
                 return false;
             }
 
-            i++;
+            var s = text!.Trim().Replace("$", string.Empty);
+            var i = 0;
+            var column = 0;
+            while (i < s.Length && char.IsLetter(s[i]))
+            {
+                var c = char.ToUpperInvariant(s[i]);
+                column = (column * 26) + (c - 'A' + 1);
+                if (column > MaxColumn)
+                {
+                    return false;
+                }
+
+                i++;
+            }
+
+            if (i == 0 || i == s.Length)
+            {
+                return false;
+            }
+
+            if (!int.TryParse(s.Substring(i), NumberStyles.None, CultureInfo.InvariantCulture, out var row))
+            {
+                return false;
+            }
+
+            if (row < 1 || row > MaxRow)
+            {
+                return false;
+            }
+
+            address = new CellAddress(row, column);
+            return true;
         }
 
-        if (i == 0 || i == s.Length)
+        /// <summary>1始まりの列番号を "A", "Z", "AA" 形式の列名に変換する。</summary>
+        public static string ColumnName(int column)
         {
-            return false;
+            if (column < 1 || column > MaxColumn)
+            {
+                throw new ArgumentOutOfRangeException(nameof(column), column, "列番号が範囲外です。");
+            }
+
+            var sb = new StringBuilder(3);
+            var n = column;
+            while (n > 0)
+            {
+                var rem = (n - 1) % 26;
+                sb.Insert(0, (char)('A' + rem));
+                n = (n - 1) / 26;
+            }
+
+            return sb.ToString();
         }
 
-        if (!int.TryParse(s.Substring(i), NumberStyles.None, CultureInfo.InvariantCulture, out var row))
+        public override string ToString() => ColumnName(Column) + Row.ToString(CultureInfo.InvariantCulture);
+
+        public bool Equals(CellAddress other) => Row == other.Row && Column == other.Column;
+
+        public override bool Equals(object? obj) => obj is CellAddress other && Equals(other);
+
+        public override int GetHashCode() => (Row * 397) ^ Column;
+
+        /// <summary>行優先(上から下、同一行では左から右)で比較する。</summary>
+        public int CompareTo(CellAddress other)
         {
-            return false;
+            var byRow = Row.CompareTo(other.Row);
+            return byRow != 0 ? byRow : Column.CompareTo(other.Column);
         }
 
-        if (row < 1 || row > MaxRow)
-        {
-            return false;
-        }
+        public static bool operator ==(CellAddress left, CellAddress right) => left.Equals(right);
 
-        address = new CellAddress(row, column);
-        return true;
+        public static bool operator !=(CellAddress left, CellAddress right) => !left.Equals(right);
     }
-
-    /// <summary>1始まりの列番号を "A", "Z", "AA" 形式の列名に変換する。</summary>
-    public static string ColumnName(int column)
-    {
-        if (column < 1 || column > MaxColumn)
-        {
-            throw new ArgumentOutOfRangeException(nameof(column), column, "列番号が範囲外です。");
-        }
-
-        var sb = new StringBuilder(3);
-        var n = column;
-        while (n > 0)
-        {
-            var rem = (n - 1) % 26;
-            sb.Insert(0, (char)('A' + rem));
-            n = (n - 1) / 26;
-        }
-
-        return sb.ToString();
-    }
-
-    public override string ToString() => ColumnName(Column) + Row.ToString(CultureInfo.InvariantCulture);
-
-    public bool Equals(CellAddress other) => Row == other.Row && Column == other.Column;
-
-    public override bool Equals(object? obj) => obj is CellAddress other && Equals(other);
-
-    public override int GetHashCode() => (Row * 397) ^ Column;
-
-    /// <summary>行優先(上から下、同一行では左から右)で比較する。</summary>
-    public int CompareTo(CellAddress other)
-    {
-        var byRow = Row.CompareTo(other.Row);
-        return byRow != 0 ? byRow : Column.CompareTo(other.Column);
-    }
-
-    public static bool operator ==(CellAddress left, CellAddress right) => left.Equals(right);
-
-    public static bool operator !=(CellAddress left, CellAddress right) => !left.Equals(right);
 }

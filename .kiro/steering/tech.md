@@ -11,13 +11,15 @@ inclusion: always
 
 > **.NET 5固定の理由**: 本ライブラリを利用する予定の呼び出し元プロダクトが .NET 5 上で動作しており、そのプロセスに読み込まれる(同一プロセス内でアセンブリとして参照される)ことを前提とするため、`net5.0` をターゲットフレームワークとして固定する。呼び出し元の .NET バージョンが上がらない限り、Utsushi側だけを新しいTFMに上げることはできない。
 
+> **Visual Studio 2019 対応**: 呼び出し元プロダクトの開発環境が Visual Studio 2019 であるため、Utsushi側も VS2019 でビルドできる必要がある。VS2019(最終版16.11)がバンドルするC#コンパイラは **C# 9.0 までしかサポートしない**(C# 10はVS2022以降が必要。これは一般に知られている事実であり、この開発環境〔Claude Code on the web〕にはVisual Studio自体が無いため実機検証はできていない)。TFMが`net5.0`であることとC#の言語バージョンは別軸のため、`net5.0`自体はVS2019で問題なくビルドできても、`LangVersion`を10以上にするとVS2019ではコンパイルエラーになる。このためLangVersionは`9.0`に固定し、file-scoped namespaceやrecord struct等C# 10以降の構文は使用しない。加えてVS2019は新しいXML形式のソリューションファイル(`.slnx`)を認識できないため、`vs2019/Utsushi.sln`(classic形式)を`Utsushi.slnx`と並行して維持する(ルート直下に置くと`.slnx`と衝突し`dotnet build`等の引数なし実行が壊れるため`vs2019/`配下に置く。詳細は`structure.md`「ソリューション構成」参照)。
+
 > **注記(既知のリスク)**: .NET 5 は Microsoft のサポートが終了(EOL)しており、セキュリティパッチは提供されない。この点は呼び出し元プロダクトの制約に起因する既知のリスクとして許容し、呼び出し元が .NET 8 以降へ移行した際にはUtsushi側のTFMも追随できるよう、特定バージョンのランタイムAPIに過度に依存しない実装を心掛ける。
 
 > **開発環境での .NET 5 SDKの扱い(重要)**: Claude Code on the webの実行環境(Ubuntu 24.04)のaptリポジトリには `dotnet-sdk-5.0` パッケージ自体が存在しない(`dotnet-sdk-8.0` / `dotnet-sdk-10.0` のみ)。ただし、**.NET 5 SDK/ランタイムを別途インストールする必要はない**。新しいSDK(検証時は `dotnet-sdk-10.0`)だけで `net5.0` をターゲットにしたビルド・テスト実行が問題なく行えることを実機検証済み。手順・根拠は `docs/開発環境メモ.md` の「.NET SDK」節を参照。要点のみ以下に記す。
 >
 > - `TargetFramework` を `net5.0` にしたクラスライブラリ/テストプロジェクトは、新しいSDKでも `net5.0` 用の参照アセンブリがNuGetから自動取得されビルドが通る(`dotnet build` 実測確認済み)。
 > - `dotnet test` 等で実際に **実行** するプロジェクト(テストプロジェクト、CLI/APIのエントリーポイント等。参照専用のクラスライブラリには不要)には `<RollForward>LatestMajor</RollForward>` を追加すること。これによりインストール済みの新しいランタイム(例: .NET 10)にロールフォワードして実行できる(`dotnet test` が実際にグリーンになることを確認済み)。
-> - 既定の `LangVersion` は `net5.0` の場合 C# 9 相当であり、file-scoped namespace 等の新しい構文は使えない。file-scoped namespaceを使う場合は `<LangVersion>10.0</LangVersion>` 以上を明示すること(コンパイル時の言語機能の話であり、生成されるILは引き続き `net5.0` 互換で、呼び出し元プロダクトとの互換性には影響しない。実機確認済み)。
+> - 既定の `LangVersion` は `net5.0` の場合 C# 9 相当。Utsushiは上記「Visual Studio 2019 対応」の理由により `<LangVersion>9.0</LangVersion>` を明示しており、file-scoped namespace・record struct等C# 10以降の構文は使わない(この制約はVS2019固有のもので、この開発環境〔Claude Code on the web〕自体には起因しない)。
 
 ## ライセンス制約
 
@@ -75,9 +77,10 @@ dotnet format        # コードスタイル整形
 - 各プロジェクト(`.csproj`)共通で以下を設定する。
   - `<TargetFramework>net5.0</TargetFramework>`
   - `<Nullable>enable</Nullable>`
-  - `<LangVersion>10.0</LangVersion>`(file-scoped namespace等C# 9以降の構文を使うため。net5.0ランタイムとの互換性には影響しない)
+  - `<LangVersion>9.0</LangVersion>`(呼び出し元プロダクトの開発環境がVisual Studio 2019であるため。上記「Visual Studio 2019 対応」を参照)
   - テストプロジェクト・実行可能プロジェクト(参照専用のクラスライブラリを除く)には `<RollForward>LatestMajor</RollForward>` を追加する(この開発環境に.NET 5ランタイムが無くても実行できるようにするため。詳細は上記「開発環境での .NET 5 SDKの扱い」を参照)。
-- ファイルスコープ名前空間を使用する(上記の通り `LangVersion` を明示すれば net5.0 でも利用可能)。
+- 名前空間は従来のブロック形式(`namespace X { ... }`)を使用する。file-scoped namespace(`namespace X;`)はC# 10以降の構文でありVS2019では使えないため使用しない。
+- `record` / `record class`(positional record・`with`式含む)はC# 9の機能でありVS2019でも使用可。ただし **`record struct` はC# 10の機能のため使用しない**。値の等価性を持つ構造体が必要な場合は `readonly struct` + `IEquatable<T>` を手書きする(`src/Utsushi.Core/ArgbColor.cs` を参照)。
 - レイヤー間の依存方向を一方向に保つ(下記 `structure.md` の依存ルールを参照)。境界を越えた参照(例: PDF描画レイヤーが直接OpenXmlの型を参照する等)を作らない。
 - 帳票ごとの個別分岐(`if (帳票名 == "請求書") { ... }` のようなコード)は「帳票定義データ」側に寄せ、レイアウト計算・描画ロジックには帳票固有のハードコードを持ち込まない。
 - 座標・寸法計算はミリ単位/ポイント単位の混在を避け、内部表現の単位を design.md に定義し統一する。
