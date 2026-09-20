@@ -67,6 +67,86 @@ public sealed class CellSubstitutor : ICellSubstitutor
         return report with { Sheet = updatedSheet, OverflowByCell = overflowByCell };
     }
 
+    /// <inheritdoc />
+    public ReportModel ApplyCellOverrides(ReportModel report, IReadOnlyDictionary<string, string> cellOverrides)
+    {
+        if (report is null)
+        {
+            throw new ArgumentNullException(nameof(report));
+        }
+
+        if (cellOverrides is null)
+        {
+            throw new ArgumentNullException(nameof(cellOverrides));
+        }
+
+        if (cellOverrides.Count == 0)
+        {
+            return report;
+        }
+
+        var definition = report.Definition;
+        var sheet = report.Sheet;
+
+        // Apply と同様、まず全入力を検証してから一括で書き換える(要件2.8, 2.9)。
+        var parsed = ParseAndValidateAddresses(definition, sheet, cellOverrides);
+
+        var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
+        var overflowByCell = new Dictionary<CellAddress, OverflowBehavior>(report.OverflowByCell);
+
+        foreach (var (address, replacement) in parsed)
+        {
+            var existing = sheet.GetCell(address);
+            cells[address] = existing is null
+                ? new CellModel(replacement, CellValueKind.Text, CellStyle.Default, replacement)
+                : existing.WithText(replacement);
+
+            // この経路は帳票定義のoverflow指定を経由しないため、名前付きキー方式(Apply)が
+            // 同じセルに残した指定があれば取り除き、常にExcel側のセル書式に従わせる(design.md)。
+            overflowByCell.Remove(address);
+        }
+
+        var updatedSheet = sheet with { Cells = cells };
+        return report with { Sheet = updatedSheet, OverflowByCell = overflowByCell };
+    }
+
+    /// <summary>
+    /// セル番地文字列をパースし、結合セル範囲内の非アンカー位置を指定していないかを検証する(要件2.8, 2.9)。
+    /// </summary>
+    private static List<(CellAddress Address, string Replacement)> ParseAndValidateAddresses(
+        ReportDefinition definition, SheetModel sheet, IReadOnlyDictionary<string, string> cellOverrides)
+    {
+        var parsed = new List<(CellAddress, string)>(cellOverrides.Count);
+
+        foreach (var (addressText, replacement) in cellOverrides)
+        {
+            if (!CellAddress.TryParse(addressText, out var address))
+            {
+                throw new InvalidCellOverrideAddressException(
+                    addressText,
+                    $"セル番地 '{addressText}' はA1形式として解釈できません。",
+                    definition.ReportCode,
+                    sheet.Name);
+            }
+
+            var merged = sheet.FindMergedRange(address);
+            if (merged is not null && merged.Anchor != address)
+            {
+                throw new NonAnchorMergedCellOverrideException(
+                    address,
+                    merged.Anchor,
+                    $"セル '{address}' は結合セル範囲の先頭(アンカー: '{merged.Anchor}')ではないため、"
+                        + "直接指定して上書きすることはできません。アンカーのセル番地を指定してください。",
+                    definition.ReportCode,
+                    sheet.Name);
+            }
+
+            parsed.Add((address, replacement));
+        }
+
+        return parsed;
+    }
+
     /// <summary>帳票定義に存在しない置換キーが渡されていないかを検証する(要件2.3)。</summary>
     private static void ValidateKnownKeys(
         ReportDefinition definition, string sheetName, IReadOnlyDictionary<string, string> values)

@@ -92,6 +92,10 @@ public sealed class ReportPdfConverter : IDisposable
     /// <param name="xlsxStream">入力となるExcelテンプレートのストリーム。</param>
     /// <param name="values">置換キー → 置換後の文字列。</param>
     /// <param name="output">PDFの出力先。</param>
+    /// <param name="cellOverrides">
+    /// セル番地(A1形式) → 上書き後の文字列。帳票定義への登録有無に関わらず直接指定できる(要件2.7)。
+    /// 指定不要な場合は null または空でよい。
+    /// </param>
     /// <exception cref="UtsushiException">
     /// 帳票定義・入力ファイル・置換値・レイアウト・描画のいずれかで失敗した場合。
     /// どの段階で失敗したかは <see cref="UtsushiException.Stage"/> で判別できる(要件6.4)。
@@ -100,9 +104,10 @@ public sealed class ReportPdfConverter : IDisposable
         string reportCode,
         Stream xlsxStream,
         IReadOnlyDictionary<string, string> values,
-        Stream output)
+        Stream output,
+        IReadOnlyDictionary<string, string>? cellOverrides = null)
     {
-        var layout = ComputeLayout(reportCode, xlsxStream, values);
+        var layout = ComputeLayout(reportCode, xlsxStream, values, cellOverrides);
         _renderer.Render(layout, output);
     }
 
@@ -111,10 +116,11 @@ public sealed class ReportPdfConverter : IDisposable
         string reportCode,
         string xlsxPath,
         IReadOnlyDictionary<string, string> values,
-        string outputPath)
+        string outputPath,
+        IReadOnlyDictionary<string, string>? cellOverrides = null)
     {
         using var input = File.OpenRead(xlsxPath);
-        var layout = ComputeLayout(reportCode, input, values);
+        var layout = ComputeLayout(reportCode, input, values, cellOverrides);
 
         if (_renderer is SkiaPdfRenderer skia)
         {
@@ -139,7 +145,8 @@ public sealed class ReportPdfConverter : IDisposable
     public PagedLayout ComputeLayout(
         string reportCode,
         Stream xlsxStream,
-        IReadOnlyDictionary<string, string> values)
+        IReadOnlyDictionary<string, string> values,
+        IReadOnlyDictionary<string, string>? cellOverrides = null)
     {
         if (reportCode is null)
         {
@@ -168,6 +175,12 @@ public sealed class ReportPdfConverter : IDisposable
         var workbook = ReadWorkbook(xlsxStream, readOptions, definition);
         var report = _modelBuilder.Build(workbook, definition);
         var substituted = _substitutor.Apply(report, values);
+
+        if (cellOverrides is { Count: > 0 })
+        {
+            substituted = _substitutor.ApplyCellOverrides(substituted, cellOverrides);
+        }
+
         return _layoutEngine.Compute(substituted);
     }
 
