@@ -148,17 +148,23 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     マッピングする静的な辞書と突き合わせる。一致しない場合(星形・フローチャート記号・
     自由曲線 `custGeom` 等)は要件10.7により「サポート外要素」として扱う
     (`ElementKind = "UnsupportedShapePreset"`)。
-  - **既存の`DetectUnsupportedElements`/`HasNonPictureDrawingObject`との整合**: 画像対応時に
-    「`xdr:pic` 以外が1つでもあれば `Drawing` として例外化」としていた判定を、
-    「`xdr:pic` および `xdr:sp`(シェイプ)以外(接続線`xdr:cxnSp`、グループ`xdr:grpSp`、
-    図表枠は別途検出済み)が1つでもあれば `Drawing` として例外化」に拡張する。
-    ここでの`xdr:sp`の判定は**構造的**(要素の種類がシェイプかどうか)であり、
-    プリセットが対応済み一覧に含まれるかどうかは問わない。プリセットの対応可否は
-    画像の`ContentType`許可リスト判定(要件9.4)と同じ位置付けで、後段の図形読み取り
-    (`ReadShape`)が個別に検証し、非対応プリセットは`ElementKind = "UnsupportedShapePreset"`
-    として`unsupportedElements`ポリシーに従う(下記「プリセットの判定と非対応プリセットの扱い」)。
+  - **既存の`DetectUnsupportedElements`/`HasUnsupportedDrawingObject`との整合(接続線・グループ対応で再拡張)**:
+    シェイプ対応時に「`xdr:pic` および `xdr:sp`(シェイプ)以外が1つでもあれば `Drawing` として
+    例外化」としていた構造判定(`HasUnsupportedDrawingObject`。旧名`HasNonPictureDrawingObject`)を、
+    「`xdr:pic`/`xdr:sp`/`xdr:cxnSp`(接続線)/`xdr:grpSp`(グループ)のいずれでもない描画
+    オブジェクト(図表枠は別途検出済み)が1つでもあれば `Drawing` として例外化」にさらに拡張する。
+    `xdr:grpSp`はグループ内部を再帰的に列挙する必要はなく、グループ要素自身の種類のみで
+    構造的に許容する(内部要素の再帰検証は本節ではなく`ReadGroupShape`が担う。後述)。
+    この構造判定は要素の種類のみを見ており、プリセットが対応済み一覧に含まれるかどうかは
+    問わない。プリセットの対応可否(シェイプ・接続線それぞれ)は画像の`ContentType`許可リスト
+    判定(要件9.4)と同じ位置付けで、後段の個別読み取り(`ReadShape`/`ReadConnector`)が
+    検証し、非対応プリセットは`ElementKind = "UnsupportedShapePreset"`として
+    `unsupportedElements`ポリシーに従う(下記「プリセットの判定と非対応プリセットの扱い」)。
     この2段構えにより、`UnsupportedShapePreset`が「画像の`UnsupportedImageFormat`」と
     同じ経路(`DetectUnsupportedElements`を通過した後の個別検証)で意味を持つ。
+    グループ内部に非対応プリセット・非対応の描画オブジェクトが1つでもある場合は、
+    `ReadGroupShape`が子要素を再帰的に検証したうえでグループ全体を`UnsupportedShapePreset`と
+    して扱う(要件10.7・10.10、後述「グループ(要件10.10)」節)。
   - **幾何情報**: プリセット種別に加え、`a:avLst/a:gd`(調整ガイド)の `name`/`fmla="val N"`
     を `name → N/100000.0` の辞書として読み取り、`ShapePresetType` ごとに定義した
     ガイド名の並び順(例: `rightArrow` なら `["adj1", "adj2"]`)で `IReadOnlyList<double>`
@@ -413,9 +419,13 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       折れ線(引き出し線)を追加する汎用の「N本引き出し線」生成ロジックとして実装する
       (N=1,2,3をパラメータ化。三角形の塗りつぶしではなく線のみの点でwedge系と異なる)。
     - `star4`/`star5`/`star6`/`star8`(星形): 外接円の半径`R`(=`min(幅,高さ)/2`)と、
-      内側の頂点の半径比`adj1`(既定0.38前後。星の「尖り具合」)から、外側の頂点と
+      内側の頂点の半径比(ECMA-376既定の調整ガイド名は`adj1`ではなく単一の`adj`。
+      既定値はプリセットごとに実装時にPowerPoint/Excelの目視確認で決定する。
+      0.38前後を暫定値とするが、ECMA-376仕様書の一次資料でプリセットごとの正確な
+      既定`avLst`値を裏取りできていない点に注意。実装時に要確認)から、外側の頂点と
       内側の頂点を交互に結ぶ`2 * N`角形を組む(`N`=4/5/6/8)。頂点の回転オフセットは
-      `star4`/`star8`は真上から、`star5`/`star6`はECMA-376の既定角度に合わせる。
+      `star4`/`star8`は真上から、`star5`/`star6`はECMA-376の既定角度に合わせる
+      (これも同様に未検証。目視確認で微調整すること)。
     - `flowChartProcess`(処理): `rect`と同じ矩形。
     - `flowChartDecision`(判断): 矩形の上下左右の中点を結んだ菱形。
     - `flowChartTerminator`(端子): 左右端を半円にした「スタジアム」形状
@@ -474,8 +484,9 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   `DrawCommand`を(`FillRectCommand`等を除く、`ShapeCommand`/`ImageCommand`/
   `ConnectorCommand`/入れ子の`GroupCommand`を対象に)既存のコマンド振り分けロジックを
   再帰的に呼び出して描画 → `canvas.Restore()`。`DrawPage`内のコマンド振り分け
-  (`switch`文)を`DrawCommand(SKCanvas, DrawCommand, reportCode, sheetName)`という
-  1コマンド分の描画ヘルパーへ切り出し、`DrawPage`の`foreach`と`GroupCommand`の内部
+  (`switch`文)を`DrawSingleCommand(SKCanvas, DrawCommand, reportCode, sheetName)`という
+  1コマンド分の描画ヘルパーへ切り出す(抽象レコード型`DrawCommand`と紛らわしくなるため、
+  メソッド名は型名とは別の`DrawSingleCommand`とする)。`DrawPage`の`foreach`と`GroupCommand`の内部
   展開の両方から呼べるようにする。子要素自身の回転(`ShapeCommand.RotationDegrees`等)は、
   この`canvas`変換がすでに適用された座標系の内側でさらに`Save`/`RotateDegrees`/`Restore`
   するため、グループの回転と子要素個別の回転が正しく合成される(`canvas`の変換行列の
@@ -558,9 +569,9 @@ public enum ShapePresetType
     WedgeRectCallout, WedgeRoundRectCallout, WedgeEllipseCallout,
     CloudCallout, Callout1, Callout2, Callout3,             // 追加(拡張フェーズ)
     Star4, Star5, Star6, Star8,                             // 追加(拡張フェーズ)
-    FlowChartProcess, FlowChartDecision, FlowChartTerminator,
-    FlowChartInputOutput, FlowChartDocument,
-    FlowChartPredefinedProcess, FlowChartConnector,          // 追加(拡張フェーズ)
+    FlowChartProcess, FlowChartDecision, FlowChartTerminator, // 追加(拡張フェーズ)
+    FlowChartInputOutput, FlowChartDocument,                  // 追加(拡張フェーズ)
+    FlowChartPredefinedProcess, FlowChartConnector,           // 追加(拡張フェーズ)
 }
 
 public abstract record ShapeFill;

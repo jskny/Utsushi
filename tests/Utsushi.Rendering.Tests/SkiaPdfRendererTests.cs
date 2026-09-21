@@ -398,7 +398,8 @@ namespace Utsushi.Rendering.Tests
                     ShapePresetType.Rect,
                     Array.Empty<double>(),
                     RotationDegrees: 0,
-                    Fill: new LinearGradientShapeFill(ArgbColor.Black, ArgbColor.White, 45.0),
+                    Fill: new LinearGradientShapeFill(
+                        new[] { new GradientStop(0.0, ArgbColor.Black), new GradientStop(1.0, ArgbColor.White) }, 45.0),
                     Outline: null,
                     TextLines: Array.Empty<ShapeTextLine>()),
             });

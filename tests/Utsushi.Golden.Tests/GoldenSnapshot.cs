@@ -95,9 +95,14 @@ namespace Utsushi.Golden.Tests
         {
             SolidShapeFill solid => $"solid:{solid.Color}",
             LinearGradientShapeFill gradient =>
-                $"gradient:{gradient.StartColor}->{gradient.EndColor}@{N(gradient.AngleDegrees)}",
+                $"linGradient:{GradientStops(gradient.Stops)}@{N(gradient.AngleDegrees)}",
+            RadialGradientShapeFill radial =>
+                $"radGradient:{GradientStops(radial.Stops)}@center({N(radial.CenterFraction.X)},{N(radial.CenterFraction.Y)})",
             _ => "none",
         };
+
+        private static string GradientStops(IReadOnlyList<GradientStop> stops) =>
+            string.Join(",", stops.Select(s => $"{N(s.Position)}:{s.Color}"));
 
         private static string Outline(ShapeOutline? outline) =>
             outline is { } o ? $"{o.Color}/{N(o.WidthPt)}pt" : "none";

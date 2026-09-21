@@ -4,10 +4,13 @@
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
 > **状況**: タスク1〜14完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21、
-> タスク14: 2026-09-21)。`dotnet build` / `dotnet test`(311件、2026-09-21時点)/ `dotnet format`
-> はグリーン。タスク15(接続線・グループ・追加プリセット・多段階/放射状グラデーション)は
-> 要件10拡張・設計を確定し、実装に着手する段階。実装時に決定した事項・判明した制約は
-> `design.md` に反映済み。タスク文面どおりに実現できなかった項目には各タスクに注記を付けた。
+> タスク14: 2026-09-21)。タスク15(接続線・グループ・追加プリセット・多段階/放射状グラデーション)は
+> 実装中。15.1〜15.5・15.17(データモデル定義・追加プリセットのマッピング表・多段階/放射状
+> グラデーションの読み取りと描画)完了、`dotnet build` / `dotnet test`(326件、2026-09-21時点)/
+> `dotnet format` はグリーン。15.6以降(接続線・グループの読み取り、レイアウト変換、
+> 星形/フローチャート/吹き出しのジオメトリ描画、サンプル・テスト追加)は未着手。
+> 実装時に決定した事項・判明した制約は `design.md` に反映済み。タスク文面どおりに
+> 実現できなかった項目には各タスクに注記を付けた。
 
 - [x] 1. ソリューション基盤のセットアップ
   - `.kiro/steering/structure.md` の構成に従い、`Utsushi.sln` と各レイヤーの `.NET 5` クラスライブラリプロジェクト(Parsing/ReportDefinition/Substitution/Layout/Rendering)、および対応するテストプロジェクトを作成する
@@ -378,21 +381,25 @@
     - _Requirements: 10.7, 10.8, 6.4_
 
 - [ ] 15. 図形対応の拡張(接続線・グループ・追加プリセット・多段階/放射状グラデーション)
-  - [ ] 15.1 Parsingレイヤー: 接続線のデータモデル(`ConnectorModel` / `ConnectorPresetType`)を定義する
+  - [x] 15.1 Parsingレイヤー: 接続線のデータモデル(`ConnectorModel` / `ConnectorPresetType`)を定義する
     - _Requirements: 10.9_
-  - [ ] 15.2 Parsingレイヤー: グループのデータモデル(`GroupShapeModel` / `GroupChildModel`
+  - [x] 15.2 Parsingレイヤー: グループのデータモデル(`GroupShapeModel` / `GroupChildModel`
         階層: `GroupChildShape`/`GroupChildImage`/`GroupChildConnector`/`GroupChildGroup`)を定義する
     - _Requirements: 10.10_
-  - [ ] 15.3 Parsingレイヤー: グラデーションのデータモデルを拡張する(`GradientStop`,
+  - [x] 15.3 Parsingレイヤー: グラデーションのデータモデルを拡張する(`GradientStop`,
         `LinearGradientShapeFill`を複数ストップ対応に変更, `RadialGradientShapeFill`を追加)
     - 既存の`LinearGradientShapeFill(StartColor, EndColor, AngleDegrees)`を
-      `LinearGradientShapeFill(IReadOnlyList<GradientStop> Stops, AngleDegrees)`に変更するため、
-      既存の呼び出し箇所(Rendering層の`CreateShapeFillPaint`等)・テストの追随が必要
+      `LinearGradientShapeFill(IReadOnlyList<GradientStop> Stops, AngleDegrees)`に変更したため、
+      既存の呼び出し箇所(Rendering層の`CreateShapeFillPaint`等)・テストを追随修正した
     - _Requirements: 10.6_
-  - [ ] 15.4 Parsingレイヤー: 追加プリセット(星形4種・フローチャート記号7種・
+  - [x] 15.4 Parsingレイヤー: 追加プリセット(星形4種・フローチャート記号7種・
         追加吹き出し4種)を`ShapePresetType`と`SupportedShapePresets`マッピング表に追加する
+    - 星形4種の調整ガイド名はECMA-376既定で`adj1`ではなく単一の`adj`であることを
+      SDKの`Dr.ShapeTypeValues`一覧で裏取りして採用した。フローチャート記号・
+      cloudCallout・callout1-3は固定比率/固定形状として描画するため調整ガイドを
+      読み取らない(`ShapeAdjustmentGuideNames`は空配列。design.md参照)
     - _Requirements: 10.1_
-  - [ ] 15.5 Parsingレイヤー: 多段階・放射状グラデーションを読み取る
+  - [x] 15.5 Parsingレイヤー: 多段階・放射状グラデーションを読み取る
     - `a:gsLst`内の全`a:gs`(位置・色)を`GradientStop`のリストとして読み取り、
       `a:lin`/`a:path`(`@path="circle"`のみ厳密対応、`"rect"`/`"shape"`は放射状に
       フォールバック)を判別して`LinearGradientShapeFill`/`RadialGradientShapeFill`を
@@ -402,7 +409,7 @@
     - 対応済みプリセット(`straightConnector1`/`bentConnector2`/`bentConnector3`/
       `curvedConnector2`/`curvedConnector3`)の判定、反転(`flipH`/`flipV`)・回転・枠線の
       読み取りを行う。非対応プリセットは`UnsupportedShapePreset`として扱う
-    - _Requirements: 10.9_
+    - _Requirements: 10.7, 10.9_
   - [ ] 15.7 Parsingレイヤー: グループ(`xdr:grpSp`)を読み取る(`ReadGroupShape`)
     - `grpSpPr/a:xfrm`から`ChildOffset`/`ChildExtent`/回転を読み取り、直接の子要素
       (`xdr:sp`/`xdr:pic`/`xdr:cxnSp`/入れ子の`xdr:grpSp`)を出現順に`GroupChildModel`へ
@@ -447,9 +454,9 @@
         パス生成を実装する
     - 雲形は円弧の和集合、引き出し線付き吹き出しはN本の折れ線を汎用ロジックで生成する
     - _Requirements: 10.1_
-  - [ ] 15.17 Renderingレイヤー: 多段階・放射状グラデーションの描画を実装する
+  - [x] 15.17 Renderingレイヤー: 多段階・放射状グラデーションの描画を実装する
     - `SKShader.CreateLinearGradient`/`CreateRadialGradient`に複数ストップを渡すよう
-      `CreateShapeFillPaint`を拡張する
+      `CreateShapeFillPaint`を拡張した(`ToShaderStops`ヘルパーで位置昇順にソート)
     - _Requirements: 10.6_
   - [ ] 15.18 Renderingレイヤー: 接続線のパス生成(`ConnectorGeometryBuilder`)と描画を実装する
     - _Requirements: 10.9_

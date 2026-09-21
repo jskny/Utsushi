@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using SkiaSharp;
 using Utsushi.Core;
 using Utsushi.Core.Exceptions;
@@ -286,17 +288,41 @@ namespace Utsushi.Rendering
                     break;
 
                 case LinearGradientShapeFill gradient:
+                    var (colors, positions) = ToShaderStops(gradient.Stops);
                     var (start, end) = GradientEndpoints(rect, gradient.AngleDegrees);
-                    paint.Shader = SKShader.CreateLinearGradient(
-                        start,
-                        end,
-                        new[] { ToSkColor(gradient.StartColor), ToSkColor(gradient.EndColor) },
-                        null,
-                        SKShaderTileMode.Clamp);
+                    paint.Shader = SKShader.CreateLinearGradient(start, end, colors, positions, SKShaderTileMode.Clamp);
+                    break;
+
+                case RadialGradientShapeFill radial:
+                    var (radialColors, radialPositions) = ToShaderStops(radial.Stops);
+                    var center = new SKPoint(
+                        rect.Left + (rect.Width * (float)radial.CenterFraction.X),
+                        rect.Top + (rect.Height * (float)radial.CenterFraction.Y));
+                    var radius = (float)(Math.Sqrt((rect.Width * rect.Width) + (rect.Height * rect.Height)) / 2.0);
+                    paint.Shader = SKShader.CreateRadialGradient(center, radius, radialColors, radialPositions, SKShaderTileMode.Clamp);
                     break;
             }
 
             return paint;
+        }
+
+        /// <summary>
+        /// <see cref="GradientStop"/>のリストを、位置の昇順に並べたSkiaSharpのシェーダー引数
+        /// (色配列・位置配列)に変換する。<c>a:gsLst</c>の並び順はファイルの記述順であり
+        /// 昇順とは限らないため、ここで並べ替える(SkiaSharpは昇順を前提とするため)。
+        /// </summary>
+        private static (SKColor[] Colors, float[] Positions) ToShaderStops(IReadOnlyList<GradientStop> stops)
+        {
+            var sorted = stops.OrderBy(s => s.Position).ToList();
+            var colors = new SKColor[sorted.Count];
+            var positions = new float[sorted.Count];
+            for (var i = 0; i < sorted.Count; i++)
+            {
+                colors[i] = ToSkColor(sorted[i].Color);
+                positions[i] = (float)sorted[i].Position;
+            }
+
+            return (colors, positions);
         }
 
         /// <summary>

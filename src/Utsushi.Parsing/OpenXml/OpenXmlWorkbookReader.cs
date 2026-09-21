@@ -402,6 +402,33 @@ namespace Utsushi.Parsing.OpenXml
             [Dr.ShapeTypeValues.WedgeRectangleCallout] = ShapePresetType.WedgeRectCallout,
             [Dr.ShapeTypeValues.WedgeRoundRectangleCallout] = ShapePresetType.WedgeRoundRectCallout,
             [Dr.ShapeTypeValues.WedgeEllipseCallout] = ShapePresetType.WedgeEllipseCallout,
+            [Dr.ShapeTypeValues.CloudCallout] = ShapePresetType.CloudCallout,
+            [Dr.ShapeTypeValues.Callout1] = ShapePresetType.Callout1,
+            [Dr.ShapeTypeValues.Callout2] = ShapePresetType.Callout2,
+            [Dr.ShapeTypeValues.Callout3] = ShapePresetType.Callout3,
+            [Dr.ShapeTypeValues.Star4] = ShapePresetType.Star4,
+            [Dr.ShapeTypeValues.Star5] = ShapePresetType.Star5,
+            [Dr.ShapeTypeValues.Star6] = ShapePresetType.Star6,
+            [Dr.ShapeTypeValues.Star8] = ShapePresetType.Star8,
+            [Dr.ShapeTypeValues.FlowChartProcess] = ShapePresetType.FlowChartProcess,
+            [Dr.ShapeTypeValues.FlowChartDecision] = ShapePresetType.FlowChartDecision,
+            [Dr.ShapeTypeValues.FlowChartTerminator] = ShapePresetType.FlowChartTerminator,
+            [Dr.ShapeTypeValues.FlowChartInputOutput] = ShapePresetType.FlowChartInputOutput,
+            [Dr.ShapeTypeValues.FlowChartDocument] = ShapePresetType.FlowChartDocument,
+            [Dr.ShapeTypeValues.FlowChartPredefinedProcess] = ShapePresetType.FlowChartPredefinedProcess,
+            [Dr.ShapeTypeValues.FlowChartConnector] = ShapePresetType.FlowChartConnector,
+        };
+
+        /// <summary>
+        /// 対応済み接続線(<c>xdr:cxnSp</c>)プリセット一覧(要件10.9)。同じくキュレーション方式。
+        /// </summary>
+        private static readonly Dictionary<Dr.ShapeTypeValues, ConnectorPresetType> SupportedConnectorPresets = new()
+        {
+            [Dr.ShapeTypeValues.StraightConnector1] = ConnectorPresetType.Straight,
+            [Dr.ShapeTypeValues.BentConnector2] = ConnectorPresetType.Bent2Segment,
+            [Dr.ShapeTypeValues.BentConnector3] = ConnectorPresetType.Bent3Segment,
+            [Dr.ShapeTypeValues.CurvedConnector2] = ConnectorPresetType.Curved2Segment,
+            [Dr.ShapeTypeValues.CurvedConnector3] = ConnectorPresetType.Curved3Segment,
         };
 
         /// <summary>
@@ -424,6 +451,24 @@ namespace Utsushi.Parsing.OpenXml
             [ShapePresetType.WedgeRectCallout] = new[] { "adj1", "adj2" },
             [ShapePresetType.WedgeRoundRectCallout] = new[] { "adj1", "adj2" },
             [ShapePresetType.WedgeEllipseCallout] = new[] { "adj1", "adj2" },
+            // cloudCallout/callout1-3は固定形状として近似描画し、ファイルの調整ガイド値は読み取らない(design.md参照)。
+            [ShapePresetType.CloudCallout] = Array.Empty<string>(),
+            [ShapePresetType.Callout1] = Array.Empty<string>(),
+            [ShapePresetType.Callout2] = Array.Empty<string>(),
+            [ShapePresetType.Callout3] = Array.Empty<string>(),
+            // star4/5/6/8はECMA-376既定で単一の調整ガイド"adj"(内側頂点の半径比)を持つ。
+            [ShapePresetType.Star4] = new[] { "adj" },
+            [ShapePresetType.Star5] = new[] { "adj" },
+            [ShapePresetType.Star6] = new[] { "adj" },
+            [ShapePresetType.Star8] = new[] { "adj" },
+            // フローチャート記号は本プロダクトでは固定比率の形状として描画し、調整ガイド値は読み取らない(design.md参照)。
+            [ShapePresetType.FlowChartProcess] = Array.Empty<string>(),
+            [ShapePresetType.FlowChartDecision] = Array.Empty<string>(),
+            [ShapePresetType.FlowChartTerminator] = Array.Empty<string>(),
+            [ShapePresetType.FlowChartInputOutput] = Array.Empty<string>(),
+            [ShapePresetType.FlowChartDocument] = Array.Empty<string>(),
+            [ShapePresetType.FlowChartPredefinedProcess] = Array.Empty<string>(),
+            [ShapePresetType.FlowChartConnector] = Array.Empty<string>(),
         };
 
         /// <summary>
@@ -768,16 +813,25 @@ namespace Utsushi.Parsing.OpenXml
 
             if (shapeProperties.GetFirstChild<Dr.GradientFill>() is { } gradientFill)
             {
-                var stops = gradientFill.GradientStopList?.Elements<Dr.GradientStop>().ToList();
-                if (stops is { Count: > 0 }
-                    && TryReadColor(stops[0], out var startColor)
-                    && TryReadColor(stops[stops.Count - 1], out var endColor))
+                var stops = ReadGradientStops(gradientFill.GradientStopList);
+                if (stops is null)
                 {
-                    var angle = gradientFill.GetFirstChild<Dr.LinearGradientFill>()?.Angle?.Value ?? 0;
-                    return new LinearGradientShapeFill(startColor, endColor, angle / 60000.0);
+                    return null;
                 }
 
-                return null;
+                if (gradientFill.GetFirstChild<Dr.PathGradientFill>() is { } pathFill)
+                {
+                    // a:path[@path='circle'/'rect'/'shape']のいずれも放射状として近似する
+                    // (要件10.6補足)。中心はa:fillToRectの中心、無ければ矩形中心(0.5, 0.5)。
+                    var toRect = pathFill.FillToRectangle;
+                    var center = new PointPt(
+                        (FillToRectFraction(toRect?.Left) + FillToRectFraction(toRect?.Right)) / 2.0,
+                        (FillToRectFraction(toRect?.Top) + FillToRectFraction(toRect?.Bottom)) / 2.0);
+                    return new RadialGradientShapeFill(stops, center);
+                }
+
+                var angle = gradientFill.GetFirstChild<Dr.LinearGradientFill>()?.Angle?.Value ?? 0;
+                return new LinearGradientShapeFill(stops, angle / 60000.0);
             }
 
             if (shapeProperties.GetFirstChild<Dr.SolidFill>() is { } solidFill && TryReadColor(solidFill, out var color))
@@ -787,6 +841,38 @@ namespace Utsushi.Parsing.OpenXml
 
             return null;
         }
+
+        /// <summary>
+        /// <c>a:gsLst</c> の全ストップ(位置・色)を読み取る(要件10.6。3点以上に対応)。
+        /// 位置・色のいずれかを読み取れないストップが1つでもあれば全体を<c>null</c>とし、
+        /// 呼び出し側で塗りなしにフォールバックする(画像対応時の「不正な入力は無視する」方針と同様)。
+        /// </summary>
+        private static IReadOnlyList<GradientStop>? ReadGradientStops(Dr.GradientStopList? gradientStopList)
+        {
+            if (gradientStopList is null)
+            {
+                return null;
+            }
+
+            var stops = new List<GradientStop>();
+            foreach (var stop in gradientStopList.Elements<Dr.GradientStop>())
+            {
+                if (stop.Position?.Value is not { } position || !TryReadColor(stop, out var color))
+                {
+                    return null;
+                }
+
+                stops.Add(new GradientStop(PermilleToFraction(position), color));
+            }
+
+            return stops.Count >= 2 ? stops : null;
+        }
+
+        /// <summary>OOXMLの千分率(0〜100000)を0.0〜1.0の比率に変換する。</summary>
+        private static double PermilleToFraction(int value) => value / 100000.0;
+
+        /// <summary><c>a:fillToRect</c>の1辺(<see cref="Int32Value"/>)を比率に変換する。無指定なら50%とする。</summary>
+        private static double FillToRectFraction(Int32Value? value) => value?.Value is { } v ? PermilleToFraction(v) : 0.5;
 
         /// <summary>図形の枠線(<c>a:ln</c>)を読み取る。</summary>
         private static ShapeOutline? ReadShapeOutline(Xdr.ShapeProperties? shapeProperties)

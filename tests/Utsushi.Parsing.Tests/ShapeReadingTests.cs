@@ -69,7 +69,7 @@ namespace Utsushi.Parsing.Tests
         [Fact]
         public void 非対応プリセットの図形はunsupportedElementsがignoreなら無視される()
         {
-            var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.Star5);
+            var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.FlowChartPreparation);
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
@@ -85,7 +85,7 @@ namespace Utsushi.Parsing.Tests
         [Fact]
         public void 非対応プリセットの図形はunsupportedElementsがerrorなら例外になる()
         {
-            var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.Star5);
+            var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.FlowChartPreparation);
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
@@ -193,8 +193,9 @@ namespace Utsushi.Parsing.Tests
                 var shape = Assert.Single(sheet.DrawingObjects.OfType<ShapeModel>());
 
                 var fill = Assert.IsType<LinearGradientShapeFill>(shape.Fill);
-                Assert.Equal(new ArgbColor(0xFF, 0x00, 0x00, 0xFF), fill.StartColor);
-                Assert.Equal(new ArgbColor(0xFF, 0xFF, 0xFF, 0xFF), fill.EndColor);
+                Assert.Equal(2, fill.Stops.Count);
+                Assert.Equal(new ArgbColor(0xFF, 0x00, 0x00, 0xFF), fill.Stops[0].Color);
+                Assert.Equal(new ArgbColor(0xFF, 0xFF, 0xFF, 0xFF), fill.Stops[1].Color);
                 Assert.Equal(90.0, fill.AngleDegrees, 3);
             }
             finally
