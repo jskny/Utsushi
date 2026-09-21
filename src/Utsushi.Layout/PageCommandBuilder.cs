@@ -148,9 +148,101 @@ namespace Utsushi.Layout
                     case ShapeModel shape:
                         _drawingObjects.Add(BuildShapeCommand(shape, rect));
                         break;
+                    case ConnectorModel connector:
+                        _drawingObjects.Add(new ConnectorCommand(
+                            rect, connector.Preset, connector.RotationDegrees, connector.FlipHorizontal, connector.FlipVertical, connector.Outline));
+                        break;
+                    case GroupShapeModel group:
+                        var children = BuildGroupChildren(group.Children, rect, group.ChildOffset, group.ChildExtent);
+                        _drawingObjects.Add(new GroupCommand(RectCenter(rect), group.RotationDegrees, children));
+                        break;
                 }
             }
         }
+
+        /// <summary>
+        /// グループの子座標空間(<paramref name="childOffset"/>/<paramref name="childExtent"/>)から
+        /// <paramref name="groupRect"/>(グループ自身のページ矩形)への比例変換(平行移動+拡大縮小、
+        /// 非一様倍率を許容する)で各子要素をページ座標へ変換する(要件10.10)。
+        /// 入れ子の<see cref="GroupChildGroup"/>は自身のページ矩形を新たな基準として再帰的に適用する。
+        /// </summary>
+        private List<DrawCommand> BuildGroupChildren(
+            IReadOnlyList<GroupChildModel> children, RectPt groupRect, PointPt childOffset, PointPt childExtent)
+        {
+            var result = new List<DrawCommand>(children.Count);
+
+            // 子座標空間の大きさが0以下では比例変換できないため、このグループの子要素は
+            // 何も描画しない(壊れたジオメトリに対する安全弁)。
+            if (childExtent.X <= 0 || childExtent.Y <= 0)
+            {
+                return result;
+            }
+
+            var scaleX = groupRect.Width / childExtent.X;
+            var scaleY = groupRect.Height / childExtent.Y;
+
+            foreach (var child in children)
+            {
+                var childRect = ToGroupChildRect(child.LocalRect, groupRect, childOffset, scaleX, scaleY);
+                if (childRect.IsEmpty)
+                {
+                    continue;
+                }
+
+                switch (child)
+                {
+                    case GroupChildShape shape:
+                        result.Add(BuildGroupChildShapeCommand(shape, childRect));
+                        break;
+                    case GroupChildImage image:
+                        result.Add(new ImageCommand(childRect, image.Data, image.ContentType));
+                        break;
+                    case GroupChildConnector connector:
+                        result.Add(new ConnectorCommand(
+                            childRect, connector.Preset, connector.RotationDegrees, connector.FlipHorizontal, connector.FlipVertical, connector.Outline));
+                        break;
+                    case GroupChildGroup nestedGroup:
+                        var nestedChildren = BuildGroupChildren(nestedGroup.Children, childRect, nestedGroup.ChildOffset, nestedGroup.ChildExtent);
+                        result.Add(new GroupCommand(RectCenter(childRect), nestedGroup.RotationDegrees, nestedChildren));
+                        break;
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// グループの子座標空間上の矩形(<paramref name="localRect"/>)を、
+        /// <paramref name="groupRect"/>を基準とした比例変換でページ座標の矩形へ変換する。
+        /// </summary>
+        private static RectPt ToGroupChildRect(
+            RectPt localRect, RectPt groupRect, PointPt childOffset, double scaleX, double scaleY)
+        {
+            var left = groupRect.Left + ((localRect.Left - childOffset.X) * scaleX);
+            var top = groupRect.Top + ((localRect.Top - childOffset.Y) * scaleY);
+            var width = localRect.Width * scaleX;
+            var height = localRect.Height * scaleY;
+
+            // 異常に大きいEMU値による過大な矩形を防ぐ(画像・図形と同じ安全弁)。
+            width = Math.Min(width, MaxDrawingObjectDimensionPt);
+            height = Math.Min(height, MaxDrawingObjectDimensionPt);
+
+            return width <= 0 || height <= 0
+                ? default
+                : RectPt.FromBounds(left, top, left + width, top + height);
+        }
+
+        /// <summary>グループ内図形の描画命令を組み立てる(要件10.10)。テキスト折り返しはトップレベルの図形と同じロジックを再利用する。</summary>
+        private ShapeCommand BuildGroupChildShapeCommand(GroupChildShape shape, RectPt rect)
+        {
+            var textLines = shape.Text is { } text
+                ? BuildShapeTextLines(text, rect)
+                : Array.Empty<ShapeTextLine>();
+
+            return new ShapeCommand(rect, shape.Preset, shape.AdjustmentValues, shape.RotationDegrees, shape.Fill, shape.Outline, textLines);
+        }
+
+        private static PointPt RectCenter(RectPt rect) => new(rect.Left + (rect.Width / 2.0), rect.Top + (rect.Height / 2.0));
 
         /// <summary>
         /// 画像・図形共通のアンカー解決(要件9.1, 9.2, 10.1, 10.2)。アンカー左上セルがこのページに

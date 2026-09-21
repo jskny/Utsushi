@@ -438,17 +438,19 @@
       グループのネスト段数の上限(既定5段、`ElementKind = "GroupNestingTooDeep"`。
       トップレベルのグループ自身を1段目とする)を`MaxShapeNestingDepth`として追加した
     - _Requirements: 10.8_
-  - [ ] 15.11 Layoutレイヤー: 接続線のページ座標変換を実装する(`ConnectorCommand`生成)
+  - [x] 15.11 Layoutレイヤー: 接続線のページ座標変換を実装する(`ConnectorCommand`生成)
     - 画像・図形と共通の`TryComputeDrawingObjectRect`をそのまま流用する
     - _Requirements: 10.9_
-  - [ ] 15.12 Layoutレイヤー: グループの子座標空間からページ座標への変換を実装する
+  - [x] 15.12 Layoutレイヤー: グループの子座標空間からページ座標への変換を実装する
     - グループ自身のページ矩形を求めたうえで、`ChildOffset`/`ChildExtent`から
-      各子要素の`LocalRect`を比例変換(非一様倍率)しページ座標へ変換する再帰処理を実装し、
-      結果を`GroupCommand`にまとめる
+      各子要素の`LocalRect`を比例変換(非一様倍率)しページ座標へ変換する再帰処理
+      (`BuildGroupChildren`/`ToGroupChildRect`)を実装し、結果を`GroupCommand`にまとめた。
+      子座標空間の大きさが0以下、または変換後の矩形が異常に大きい場合の安全弁も設けた
     - _Requirements: 10.10_
-  - [ ] 15.13 Layoutレイヤー: グループ内図形のテキスト折り返しを既存ロジックで対応する
+  - [x] 15.13 Layoutレイヤー: グループ内図形のテキスト折り返しを既存ロジックで対応する
     - `GroupChildShape.Text`を`BuildShapeTextLines`/`WrapShapeText`と同じロジックで
-      折り返す(トップレベルの図形と処理を共通化する)
+      折り返す(`BuildGroupChildShapeCommand`がトップレベルの`BuildShapeCommand`と
+      同じ処理を再利用する)
     - _Requirements: 10.10, 10.4_
   - [ ] 15.14 Renderingレイヤー: `DrawPage`のコマンド振り分けを再利用可能なヘルパーへ
         切り出す
