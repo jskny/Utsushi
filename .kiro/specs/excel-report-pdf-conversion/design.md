@@ -336,6 +336,10 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     - 上記いずれのプリセットも「対応済み一覧に限定する」設計(要件10.1補足)のため、
       `custGeom`(自由曲線)や一覧外の`prst`値はParsingレイヤーの時点で
       サポート外要素として弾かれ、ここには到達しない。
+    - 上記の既定調整値・`a:xfrm`/`a:lin`の角度単位(60,000分の1度・時計回り)はECMA-376の
+      定義に基づく想定値であり、この設計時点では一次資料への当たり直しをしていない。
+      実装(タスク14.13, 14.14)の着手時に、実際にExcelで生成した`.xlsx`のXMLと
+      突き合わせて確認する。
   - **塗りつぶし**: `Fill`が`SolidShapeFill`なら`SKPaint.Color`、
     `LinearGradientShapeFill`なら`SKShader.CreateLinearGradient`で`Rect`の対角線相当の
     2点(開始色→終了色、`AngleDegrees`をもとに`Rect`の中心から角度方向に伸ばした2点)を
