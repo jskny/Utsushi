@@ -216,8 +216,12 @@ namespace Utsushi
             {
                 return File.OpenRead(xlsxPath);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
             {
+                // NotSupportedExceptionは、パス文字列自体の形式が不正な場合(例: コロンを含む等)に
+                // File.OpenReadが投げる。ArgumentException/ArgumentNullExceptionは、値が渡されなかった/
+                // 空という呼び出し側の契約違反を表すため、あえてここでは変換せずそのまま伝播させる
+                // (ComputeLayoutの引数nullチェックと同様の扱い)。
                 throw new InvalidExcelFileException(
                     $"入力ファイルを開けません: {xlsxPath}", InvalidExcelFileReason.Unknown, reportCode, ex);
             }
