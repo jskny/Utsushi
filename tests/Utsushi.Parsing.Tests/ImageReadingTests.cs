@@ -117,9 +117,9 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 画像以外の図形はunsupportedElementsがerrorなら引き続き例外になる()
+        public void 接続線はunsupportedElementsがerrorなら引き続き例外になる()
         {
-            var path = ImageWorkbookFixtures.CreateWithNonPictureShape();
+            var path = ImageWorkbookFixtures.CreateWithConnectionShape();
             try
             {
                 var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);

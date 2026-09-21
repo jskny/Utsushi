@@ -150,9 +150,15 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     (`ElementKind = "UnsupportedShapePreset"`)。
   - **既存の`DetectUnsupportedElements`/`HasNonPictureDrawingObject`との整合**: 画像対応時に
     「`xdr:pic` 以外が1つでもあれば `Drawing` として例外化」としていた判定を、
-    「`xdr:pic` および対応済みプリセットの `xdr:sp` 以外(非対応プリセットの`xdr:sp`、
-    接続線`xdr:cxnSp`、グループ`xdr:grpSp`、図表枠は別途検出済み)が1つでもあれば
-    `Drawing` として例外化」に拡張する。
+    「`xdr:pic` および `xdr:sp`(シェイプ)以外(接続線`xdr:cxnSp`、グループ`xdr:grpSp`、
+    図表枠は別途検出済み)が1つでもあれば `Drawing` として例外化」に拡張する。
+    ここでの`xdr:sp`の判定は**構造的**(要素の種類がシェイプかどうか)であり、
+    プリセットが対応済み一覧に含まれるかどうかは問わない。プリセットの対応可否は
+    画像の`ContentType`許可リスト判定(要件9.4)と同じ位置付けで、後段の図形読み取り
+    (`ReadShape`)が個別に検証し、非対応プリセットは`ElementKind = "UnsupportedShapePreset"`
+    として`unsupportedElements`ポリシーに従う(下記「プリセットの判定と非対応プリセットの扱い」)。
+    この2段構えにより、`UnsupportedShapePreset`が「画像の`UnsupportedImageFormat`」と
+    同じ経路(`DetectUnsupportedElements`を通過した後の個別検証)で意味を持つ。
   - **幾何情報**: プリセット種別に加え、`a:avLst/a:gd`(調整ガイド)の `name`/`fmla="val N"`
     を `name → N/100000.0` の辞書として読み取り、`ShapePresetType` ごとに定義した
     ガイド名の並び順(例: `rightArrow` なら `["adj1", "adj2"]`)で `IReadOnlyList<double>`

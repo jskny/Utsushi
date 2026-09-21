@@ -233,7 +233,7 @@
     - _Requirements: 9.2, 9.4, 9.6, 6.4_
 
 - [ ] 14. シート内図形(シェイプ)の再現
-  - [ ] 14.1 Parsingレイヤー: 画像・図形共通のデータモデルへリファクタリングする
+  - [x] 14.1 Parsingレイヤー: 画像・図形共通のデータモデルへリファクタリングする
     - `ImageExtent`/`FixedImageExtent`/`CellSpanImageExtent` を `AnchorExtent`/
       `FixedAnchorExtent`/`CellSpanAnchorExtent` に改名し、`DrawingObjectModel`
       (`AnchorCell`/`AnchorOffset`/`Extent` を持つ抽象基底)を新設して `ImageModel` に
@@ -241,43 +241,49 @@
       呼び出し側(`PageCommandBuilder`・SampleGenerator・既存テスト)を追随させる
       (design.md「Parsing レイヤー」の図形節参照)
     - _Requirements: 9.1, 9.2_
-  - [ ] 14.2 Parsingレイヤー: 図形のデータモデル(`ShapeModel` / `ShapePresetType` /
+  - [x] 14.2 Parsingレイヤー: 図形のデータモデル(`ShapeModel` / `ShapePresetType` /
         `ShapeFill` / `ShapeOutline` / `ShapeTextBody`)を定義する
     - _Requirements: 10.1, 10.4, 10.5, 10.6_
-  - [ ] 14.3 Parsingレイヤー: `xdr:sp` から対応済みプリセットジオメトリの図形を読み取る
+  - [x] 14.3 Parsingレイヤー: `xdr:sp` から対応済みプリセットジオメトリの図形を読み取る
     - `xdr:spPr/a:prstGeom/@prst` を静的なマッピング表と突き合わせ、一致しないものは
-      読み取らない(14.6で非対応要素として検出させる)。アンカー(セル位置・オフセット・
-      固定/セル追従の範囲)は画像と共通の仕組み(14.1)を使う。`ReadImages`/新設する
-      `ReadShapes` を1回のアンカー列挙にまとめ、`drawing.xml` の出現順を保った
-      `DrawingObjects` を構築する(`ReadDrawingObjects`)
+      読み取らない(14.8で非対応要素として検出させる)。アンカー(セル位置・オフセット・
+      固定/セル追従の範囲)は画像と共通の仕組み(14.1)を使う。旧`ReadImages`を
+      `ReadDrawingObjects`に置き換え、1回のアンカー列挙の中で`ReadImage`/`ReadShape`を
+      呼び分けて `drawing.xml` の出現順を保った `DrawingObjects` を構築する
     - _Requirements: 10.1, 10.2, 10.3_
-  - [ ] 14.4 Parsingレイヤー: 図形の調整ガイド値(`a:avLst`)・回転(`a:xfrm/@rot`)を読み取る
+  - [x] 14.4 Parsingレイヤー: 図形の調整ガイド値(`a:avLst`)・回転(`a:xfrm/@rot`)を読み取る
     - ガイド名(`adj`/`adj1`/`adj2`等)を `ShapePresetType` ごとに定めた順序で
-      `IReadOnlyList<double>` に整形する(design.md記載の既定値表はRenderingレイヤー側に置き、
-      Parsingでは値が存在するガイドのみ抽出する)
+      `IReadOnlyList<double>` に整形する。ファイルに該当ガイドが無い位置は`double.NaN`とし、
+      Renderingレイヤーがその位置のECMA-376既定値を補う(既定値表はRenderingレイヤー側に置く)
     - _Requirements: 10.1, 10.5_
-  - [ ] 14.5 Parsingレイヤー: 図形の塗りつぶし(`a:solidFill`/`a:gradFill`/`a:noFill`)と
+  - [x] 14.5 Parsingレイヤー: 図形の塗りつぶし(`a:solidFill`/`a:gradFill`/`a:noFill`)と
         枠線(`a:ln`)を読み取る
-    - グラデーションは先頭・末尾の `a:gs` の色のみ採用し、`a:lin/@ang` があれば角度として読み取る
+    - グラデーションは先頭・末尾の `a:gs` の色のみ採用し、`a:lin/@ang` があれば角度として読み取る。
+      色は`a:srgbClr`(RGB直接指定)のみ対応し、テーマ/システム色は解決しない(未対応分は
+      塗り/枠線を無しとして扱う)
     - _Requirements: 10.1, 10.6_
-  - [ ] 14.6 Parsingレイヤー: 図形内テキスト(`xdr:txBody`)を段落・ラン単位で読み取る
+  - [x] 14.6 Parsingレイヤー: 図形内テキスト(`xdr:txBody`)を段落・ラン単位で読み取る
     - `a:bodyPr/@anchor` を垂直配置、各 `a:p/a:pPr/@algn` を段落ごとの水平配置として読み取り、
       `a:r/a:rPr`(サイズ・太字・斜体・色・書体)と `a:t` から `FontStyle` と同じ型で
       `ShapeTextRun` を構築する(折り返しはLayoutレイヤーの責務なので行わない)
     - _Requirements: 10.4_
-  - [ ] 14.7 Parsingレイヤー: `DetectUnsupportedElements` を拡張し、非対応プリセットの図形・
-        接続線・グループを引き続きサポート外要素として検出する
+  - [x] 14.7 Parsingレイヤー: `DetectUnsupportedElements` を拡張し、接続線・グループを
+        引き続きサポート外要素として検出する
     - 「`xdr:pic` 以外はすべて `Drawing` として例外化」だった判定を「`xdr:pic` および
-      対応済みプリセットの `xdr:sp` 以外(非対応プリセットの `xdr:sp`、接続線 `xdr:cxnSp`、
-      グループ `xdr:grpSp`)が1つでもあれば `Drawing` として例外化」に拡張する。
-      非対応プリセットの `xdr:sp` 単体は `UnsupportedShapePreset` として扱う(14.8)
+      `xdr:sp`(シェイプ)以外(接続線 `xdr:cxnSp`、グループ `xdr:grpSp`)が1つでもあれば
+      `Drawing` として例外化」に拡張する(`HasNonPictureDrawingObject`を
+      `HasUnsupportedDrawingObject`に改名)。ここでの`xdr:sp`判定は構造的なもの(要素の種類が
+      シェイプかどうか)であり、プリセットが対応済みかどうかは問わない(画像の
+      `ContentType`許可リスト判定が`DetectUnsupportedElements`ではなく`ReadImage`側の
+      個別検証であるのと同じ位置付け)。非対応プリセットの`xdr:sp`はこの時点では
+      素通りし、後段の図形読み取り(14.8)が個別に`UnsupportedShapePreset`として検出する
     - _Requirements: 10.7_
-  - [ ] 14.8 Parsingレイヤー: 対応済み一覧に無いプリセットジオメトリを `UnsupportedShapePreset`
+  - [x] 14.8 Parsingレイヤー: 対応済み一覧に無いプリセットジオメトリを `UnsupportedShapePreset`
         として扱う
     - `UnsupportedWorkbookElementException`(`ElementKind = "UnsupportedShapePreset"`)を、
       既存の `unsupportedElements` ポリシー(ignore/error)に従って送出/無視する
     - _Requirements: 10.7_
-  - [ ] 14.9 セキュリティ対策: 図形個数・テキスト文字数の上限を設ける(要件10.8)
+  - [x] 14.9 セキュリティ対策: 図形個数・テキスト文字数の上限を設ける(要件10.8)
     - 1シートあたりの図形アンカー数の上限(既定50個、超過は `ElementKind = "TooManyShapes"`)、
       図形1つあたりの全テキスト文字数の上限(既定2000文字、超過は
       `ElementKind = "ShapeTextTooLong"`)を、画像の上限(13.15)と同じ考え方で設ける
