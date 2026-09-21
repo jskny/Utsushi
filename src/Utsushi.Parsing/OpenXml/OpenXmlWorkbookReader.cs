@@ -1279,13 +1279,13 @@ namespace Utsushi.Parsing.OpenXml
 
         /// <summary>グループ内要素の位置・サイズ(<c>a:off</c>/<c>a:ext</c>)を親の子座標空間上の矩形として読み取る。</summary>
         private static RectPt? ReadLocalRect(Dr.Transform2D? transform) =>
-            transform is { Offset: { X: { } x, Y: { } y }, Extents: { Cx: { } cx, Cy: { } cy } }
+            transform is { Offset: { X: { } x, Y: { } y }, Extents: { Cx: { } cx, Cy: { } cy } } && cx.Value >= 0 && cy.Value >= 0
                 ? new RectPt(Units.EmusToPoints(x.Value), Units.EmusToPoints(y.Value), Units.EmusToPoints(cx.Value), Units.EmusToPoints(cy.Value))
                 : (RectPt?)null;
 
         /// <summary>入れ子グループ自身の位置・サイズ(<c>a:off</c>/<c>a:ext</c>)を親の子座標空間上の矩形として読み取る。</summary>
         private static RectPt? ReadLocalRect(Dr.TransformGroup? transform) =>
-            transform is { Offset: { X: { } x, Y: { } y }, Extents: { Cx: { } cx, Cy: { } cy } }
+            transform is { Offset: { X: { } x, Y: { } y }, Extents: { Cx: { } cx, Cy: { } cy } } && cx.Value >= 0 && cy.Value >= 0
                 ? new RectPt(Units.EmusToPoints(x.Value), Units.EmusToPoints(y.Value), Units.EmusToPoints(cx.Value), Units.EmusToPoints(cy.Value))
                 : (RectPt?)null;
 
