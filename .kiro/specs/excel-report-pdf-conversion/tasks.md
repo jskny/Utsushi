@@ -338,14 +338,21 @@
       目視確認したうえでコミットした)。グラデーション塗りはサンプルには含めず、
       Rendering層のユニットテスト(14.20)で個別に検証する
     - _Requirements: 10.1〜10.5, 8.3_
-  - [ ] 14.19 Parsing層のユニットテストを追加する
-    - 対応済み/非対応プリセットの判定、調整ガイド値・回転・塗り/枠線・テキストの読み取り、
-      図形個数/テキスト文字数の上限、画像と図形が混在する場合の `DrawingObjects` の
-      出現順維持を検証する
+  - [x] 14.19 Parsing層のユニットテストを追加する
+    - `ShapeWorkbookFixtures`/`ShapeReadingTests`を追加し、対応済み/非対応プリセットの判定、
+      oneCell/twoCellアンカー、調整ガイド値(既定値へのフォールバック含む)・回転・
+      単色/グラデーション塗り・noFill・枠線・テキスト(段落/配置/フォント)の読み取り、
+      図形個数/テキスト文字数の上限のignore/error、接続線・グループが引き続き`Drawing`に
+      分類されること、画像と図形が混在する場合の`DrawingObjects`の出現順維持を検証した
+      (17件追加)
     - _Requirements: 10.1〜10.8_
-  - [ ] 14.20 Layout層・Rendering層のユニットテストを追加する
-    - 図形の座標変換・改ページをまたぐ図形の配置・テキスト折り返しをLayout層で、
-      各プリセットのパス生成・塗り/枠線/回転・テキスト描画をRendering層で検証する
+  - [x] 14.20 Layout層・Rendering層のユニットテストを追加する
+    - Layout層: `ReportLayoutEngineTests`に、固定/2セルアンカーの座標変換、改ページをまたぐ
+      図形の配置、テキストの折り返し・垂直配置、画像と図形混在時の出現順維持を追加した(6件)。
+      Rendering層: `ShapeGeometryBuilderTests`で全13プリセットの非空パス生成・矩形への
+      収まり方(吹き出しは意図的に矩形外へ広がる)・矢印の先端位置・調整値のフォールバックを
+      検証し(36件)、`SkiaPdfRendererTests`に全プリセットの描画・回転後の後続描画命令への
+      影響がないこと・グラデーション/noFill/テキスト描画を追加した(18件)
     - _Requirements: 10.1〜10.6_
   - [ ] 14.21 レビュー対応
     - `code-reviewer`/`layout-fidelity-reviewer`/`security-reviewer` の指摘に対応する。

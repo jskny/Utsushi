@@ -85,5 +85,7 @@ namespace Utsushi.Layout.Tests
         public static IEnumerable<FillRectCommand> Fills(PageLayout page) => page.Commands.OfType<FillRectCommand>();
 
         public static IEnumerable<ImageCommand> Images(PageLayout page) => page.Commands.OfType<ImageCommand>();
+
+        public static IEnumerable<ShapeCommand> Shapes(PageLayout page) => page.Commands.OfType<ShapeCommand>();
     }
 }

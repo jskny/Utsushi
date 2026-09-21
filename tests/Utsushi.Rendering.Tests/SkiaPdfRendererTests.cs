@@ -300,6 +300,163 @@ namespace Utsushi.Rendering.Tests
             Assert.Equal(0, output.Length);
         }
 
+        [Fact]
+        public void 図形はPDFに描画される()
+        {
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ShapeCommand(
+                    new RectPt(10, 10, 60, 20),
+                    ShapePresetType.Rect,
+                    Array.Empty<double>(),
+                    RotationDegrees: 0,
+                    Fill: new SolidShapeFill(ArgbColor.Black),
+                    Outline: new ShapeOutline(ArgbColor.Black, 1.0),
+                    TextLines: Array.Empty<ShapeTextLine>()),
+            });
+
+            renderer.Render(layout, output);
+
+            Assert.True(output.Length > 0);
+        }
+
+        [Theory]
+        [InlineData(ShapePresetType.Rect)]
+        [InlineData(ShapePresetType.RoundRect)]
+        [InlineData(ShapePresetType.Ellipse)]
+        [InlineData(ShapePresetType.Triangle)]
+        [InlineData(ShapePresetType.RightArrow)]
+        [InlineData(ShapePresetType.LeftArrow)]
+        [InlineData(ShapePresetType.UpArrow)]
+        [InlineData(ShapePresetType.DownArrow)]
+        [InlineData(ShapePresetType.LeftRightArrow)]
+        [InlineData(ShapePresetType.UpDownArrow)]
+        [InlineData(ShapePresetType.WedgeRectCallout)]
+        [InlineData(ShapePresetType.WedgeRoundRectCallout)]
+        [InlineData(ShapePresetType.WedgeEllipseCallout)]
+        public void 全プリセットが例外なく描画できる(ShapePresetType preset)
+        {
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ShapeCommand(
+                    new RectPt(10, 10, 60, 40),
+                    preset,
+                    Array.Empty<double>(),
+                    RotationDegrees: 0,
+                    Fill: new SolidShapeFill(ArgbColor.Black),
+                    Outline: null,
+                    TextLines: Array.Empty<ShapeTextLine>()),
+            });
+
+            renderer.Render(layout, output);
+
+            Assert.True(output.Length > 0);
+        }
+
+        [Fact]
+        public void 回転した図形の後にも他の描画命令が正しく描画される()
+        {
+            // 図形の回転はcanvas.Save/RotateDegrees/Restoreで実装しており、
+            // Restore漏れがあると後続の描画命令の座標系がずれてしまう回帰テスト。
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ShapeCommand(
+                    new RectPt(10, 10, 40, 40),
+                    ShapePresetType.Rect,
+                    Array.Empty<double>(),
+                    RotationDegrees: 30,
+                    Fill: new SolidShapeFill(ArgbColor.Black),
+                    Outline: null,
+                    TextLines: Array.Empty<ShapeTextLine>()),
+                new FillRectCommand(new RectPt(100, 100, 30, 30), ArgbColor.Black),
+            });
+
+            renderer.Render(layout, output);
+
+            Assert.True(output.Length > 0);
+        }
+
+        [Fact]
+        public void グラデーション塗りの図形はPDFに描画される()
+        {
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ShapeCommand(
+                    new RectPt(10, 10, 60, 20),
+                    ShapePresetType.Rect,
+                    Array.Empty<double>(),
+                    RotationDegrees: 0,
+                    Fill: new LinearGradientShapeFill(ArgbColor.Black, ArgbColor.White, 45.0),
+                    Outline: null,
+                    TextLines: Array.Empty<ShapeTextLine>()),
+            });
+
+            renderer.Render(layout, output);
+
+            Assert.True(output.Length > 0);
+        }
+
+        [Fact]
+        public void 塗りつぶし無しの図形は枠線のみ描画される()
+        {
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ShapeCommand(
+                    new RectPt(10, 10, 60, 20),
+                    ShapePresetType.Rect,
+                    Array.Empty<double>(),
+                    RotationDegrees: 0,
+                    Fill: null,
+                    Outline: new ShapeOutline(ArgbColor.Black, 1.0),
+                    TextLines: Array.Empty<ShapeTextLine>()),
+            });
+
+            renderer.Render(layout, output);
+
+            Assert.True(output.Length > 0);
+        }
+
+        [Fact]
+        public void 図形内テキストはPDFに描画される()
+        {
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var font = new FontStyle("Calibri", 10.0, false, false, UnderlineStyle.None, false, ArgbColor.Black);
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ShapeCommand(
+                    new RectPt(10, 10, 80, 30),
+                    ShapePresetType.Rect,
+                    Array.Empty<double>(),
+                    RotationDegrees: 0,
+                    Fill: null,
+                    Outline: null,
+                    TextLines: new[] { new ShapeTextLine(new PointPt(15, 25), "OK", font, TextAnchor.Left) }),
+            });
+
+            renderer.Render(layout, output);
+
+            Assert.True(output.Length > 0);
+            var content = Encoding.Latin1.GetString(output.ToArray());
+            Assert.Contains("OK", content);
+        }
+
         /// <summary>1x1のPNG(最小の有効なPNGバイト列)。</summary>
         private static byte[] TinyPng() => Convert.FromBase64String(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
