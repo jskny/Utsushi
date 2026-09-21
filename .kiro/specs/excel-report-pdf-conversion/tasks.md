@@ -3,10 +3,9 @@
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
-> **状況**: タスク1〜13完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21)。
-> `dotnet build` / `dotnet test`(232件、2026-09-21時点)/ `dotnet format` はグリーン。
-> タスク14(シート内図形の再現)は要件10・設計を確定し、実装に着手する段階。
-> 実装時に決定した事項・判明した制約は `design.md` に反映済み。
+> **状況**: 全タスク完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21、
+> タスク14: 2026-09-21)。`dotnet build` / `dotnet test`(311件、2026-09-21時点)/ `dotnet format`
+> はグリーン。実装時に決定した事項・判明した制約は `design.md` に反映済み。
 > タスク文面どおりに実現できなかった項目には各タスクに注記を付けた。
 
 - [x] 1. ソリューション基盤のセットアップ
@@ -232,7 +231,7 @@
       画像枚数上限、ContentType偽装の検出を検証する
     - _Requirements: 9.2, 9.4, 9.6, 6.4_
 
-- [ ] 14. シート内図形(シェイプ)の再現
+- [x] 14. シート内図形(シェイプ)の再現
   - [x] 14.1 Parsingレイヤー: 画像・図形共通のデータモデルへリファクタリングする
     - `ImageExtent`/`FixedImageExtent`/`CellSpanImageExtent` を `AnchorExtent`/
       `FixedAnchorExtent`/`CellSpanAnchorExtent` に改名し、`DrawingObjectModel`
@@ -354,9 +353,25 @@
       検証し(36件)、`SkiaPdfRendererTests`に全プリセットの描画・回転後の後続描画命令への
       影響がないこと・グラデーション/noFill/テキスト描画を追加した(18件)
     - _Requirements: 10.1〜10.6_
-  - [ ] 14.21 レビュー対応
-    - `code-reviewer`/`layout-fidelity-reviewer`/`security-reviewer` の指摘に対応する。
-      画像対応(13.13〜13.17)で見つかった観点(印刷範囲外セルの計算、例外への
-      帳票コード/シート名の付与、DoS上限、バイナリでない入力への追加検証)と同様の
-      観点が図形にもないか確認し、必要な修正・回帰テストをここに追記する
+  - [x] 14.21 レビュー対応
+    - `layout-fidelity-reviewer`指摘: 図形内テキストのフォントサイズ・矩形内側余白に
+      印刷拡大縮小率(`_scale`)が適用されておらず、縮小率を持つ帳票でテキストが矩形から
+      はみ出す不具合を修正した(`PageCommandBuilder.BuildShapeTextLines`/`WrapShapeText`)。
+      縮小率によらず折り返し行数が一定になる回帰テストを追加し、修正前は実際に
+      検出できる(2行→10行に増える)ことを確認した
+    - `security-reviewer`指摘: (1) 図形内テキストの文字数上限チェックが全ラン読み取り・
+      フォント解析後にしか効いていなかったため、累積文字数を数えながら上限超過時点で
+      即座に打ち切るよう修正(`OpenXmlWorkbookReader.ReadShapeText`)。(2) 吹き出しの
+      引き出し先端の調整値(ファイル由来、理論上Int32の全域に相当する値を取りうる)が
+      クランプされておらず極端な座標になりうる問題を、絶対値5.0への丸めで修正
+      (`ShapeGeometryBuilder.WedgeCalloutPath`)。(3) OOXMLパーツ全体のサイズ上限が無い点・
+      画像/図形の上限がシート単位でワークブック単位の合算上限が無い点をdesign.mdの
+      未決事項に記載(今回の主経路では実害無しを確認済み)
+    - `code-reviewer`指摘: design.mdが吹き出しの`adj2`既定値を`0.25`と記載していたが、
+      実装(`ShapeGeometryBuilder.DefaultCalloutTipYAdj`)は目視確認の結果`0.75`を採用して
+      おり、design.mdを更新せず放置していた無断逸脱を修正(design.mdを実装値に合わせて
+      更新し、選定経緯を明記)。`ReadShapeText`の重複した`<summary>`タグを1つに統合。
+      レイヤー越境(`Utsushi.Parsing.Model`の型がLayout/Renderingから直接参照される点)は
+      既存の`FontStyle`と同じ確立済みパターンであり本PR起因の新規逸脱ではないため対応不要
+      と判断
     - _Requirements: 10.7, 10.8, 6.4_

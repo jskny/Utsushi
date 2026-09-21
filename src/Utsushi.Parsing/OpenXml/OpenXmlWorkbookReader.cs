@@ -814,10 +814,10 @@ namespace Utsushi.Parsing.OpenXml
         private static bool TryReadColor(Dr.GradientStop stop, out ArgbColor color) =>
             ArgbColor.TryParseHex(stop.RgbColorModelHex?.Val?.Value, out color);
 
-        /// <summary>図形内テキスト(<c>xdr:txBody</c>)を段落・ラン単位で読み取る(要件10.4)。</summary>
         /// <summary>
-        /// 図形内テキストを読み取る。合計文字数が<see cref="MaxShapeTextLength"/>を超えた時点で
-        /// 即座に打ち切り、<paramref name="textTooLong"/>を立てて返す(security-reviewer指摘)。
+        /// 図形内テキスト(<c>xdr:txBody</c>)を段落・ラン単位で読み取る(要件10.4)。
+        /// 合計文字数が<see cref="MaxShapeTextLength"/>を超えた時点で即座に打ち切り、
+        /// <paramref name="textTooLong"/>を立てて返す(security-reviewer指摘)。
         /// フォント・色の解析(<see cref="ReadShapeRunFont"/>)は上限を超えていないランに対してのみ
         /// 行うため、極端に大量のランを仕込んだ入力でも処理コストが合計文字数の上限で頭打ちになる。
         /// </summary>
