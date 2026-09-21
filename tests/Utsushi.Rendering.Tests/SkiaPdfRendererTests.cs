@@ -458,6 +458,186 @@ namespace Utsushi.Rendering.Tests
             Assert.Contains("OK", content);
         }
 
+        [Fact]
+        public void 接続線はPDFに描画される()
+        {
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ConnectorCommand(
+                    new RectPt(10, 10, 60, 20),
+                    ConnectorPresetType.Bent2Segment,
+                    RotationDegrees: 0,
+                    FlipHorizontal: false,
+                    FlipVertical: false,
+                    Outline: new ShapeOutline(ArgbColor.Black, 1.0)),
+            });
+
+            renderer.Render(layout, output);
+
+            Assert.True(output.Length > 0);
+        }
+
+        [Fact]
+        public void 枠線が無い接続線も既定の黒い実線で描画される()
+        {
+            // ConnectorCommand.Outlineがnullの場合、DrawConnectorのDefaultConnectorOutlineに
+            // フォールバックする経路(design.md参照)が例外にならないことの回帰テスト。
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ConnectorCommand(
+                    new RectPt(10, 10, 60, 20),
+                    ConnectorPresetType.Straight,
+                    RotationDegrees: 0,
+                    FlipHorizontal: false,
+                    FlipVertical: false,
+                    Outline: null),
+            });
+
+            renderer.Render(layout, output);
+
+            Assert.True(output.Length > 0);
+            Assert.Equal("%PDF", Encoding.ASCII.GetString(output.ToArray(), 0, 4));
+        }
+
+        [Theory]
+        [InlineData(ConnectorPresetType.Straight)]
+        [InlineData(ConnectorPresetType.Bent2Segment)]
+        [InlineData(ConnectorPresetType.Bent3Segment)]
+        [InlineData(ConnectorPresetType.Curved2Segment)]
+        [InlineData(ConnectorPresetType.Curved3Segment)]
+        public void 全接続線プリセットが例外なく描画できる(ConnectorPresetType preset)
+        {
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ConnectorCommand(
+                    new RectPt(10, 10, 60, 40),
+                    preset,
+                    RotationDegrees: 15,
+                    FlipHorizontal: true,
+                    FlipVertical: false,
+                    Outline: new ShapeOutline(ArgbColor.Black, 1.0)),
+            });
+
+            renderer.Render(layout, output);
+
+            Assert.True(output.Length > 0);
+        }
+
+        [Fact]
+        public void グループ内の図形と接続線がまとめてPDFに描画される()
+        {
+            // DrawGroupが未配線/誤配線だった場合に検出できる回帰テスト
+            // (DrawSingleCommandへのリファクタ・GroupCommandの再帰描画の検証)。
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var childShape = new ShapeCommand(
+                new RectPt(15, 15, 20, 20),
+                ShapePresetType.Ellipse,
+                Array.Empty<double>(),
+                RotationDegrees: 0,
+                Fill: new SolidShapeFill(ArgbColor.Black),
+                Outline: null,
+                TextLines: Array.Empty<ShapeTextLine>());
+            var childConnector = new ConnectorCommand(
+                new RectPt(40, 15, 20, 20),
+                ConnectorPresetType.Curved3Segment,
+                RotationDegrees: 0,
+                FlipHorizontal: false,
+                FlipVertical: true,
+                Outline: new ShapeOutline(ArgbColor.Black, 1.0));
+
+            var group = new GroupCommand(
+                new PointPt(40, 30),
+                RotationDegrees: 0,
+                Children: new DrawCommand[] { childShape, childConnector });
+
+            var layout = Layout(commands: new DrawCommand[] { group });
+
+            renderer.Render(layout, output);
+
+            var bytes = output.ToArray();
+            Assert.True(bytes.Length > 0);
+            Assert.Equal("%PDF", Encoding.ASCII.GetString(bytes, 0, 4));
+        }
+
+        [Fact]
+        public void 回転したグループとさらに回転した子図形が例外なく描画される()
+        {
+            // グループの回転と子要素個別の回転はcanvasの変換行列スタックで合成される
+            // (design.md参照)。ピクセル単位の合成の正しさは自動テストでは検証しづらいため、
+            // ここでは「例外にならず妥当なサイズのPDFが生成される」ことのみを確認する。
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var rotatedChild = new ShapeCommand(
+                new RectPt(15, 15, 20, 20),
+                ShapePresetType.Rect,
+                Array.Empty<double>(),
+                RotationDegrees: 20,
+                Fill: new SolidShapeFill(ArgbColor.Black),
+                Outline: null,
+                TextLines: Array.Empty<ShapeTextLine>());
+            var plainChild = new ShapeCommand(
+                new RectPt(40, 15, 20, 20),
+                ShapePresetType.Rect,
+                Array.Empty<double>(),
+                RotationDegrees: 0,
+                Fill: new SolidShapeFill(ArgbColor.Black),
+                Outline: null,
+                TextLines: Array.Empty<ShapeTextLine>());
+
+            var group = new GroupCommand(
+                new PointPt(40, 30),
+                RotationDegrees: 30,
+                Children: new DrawCommand[] { rotatedChild, plainChild });
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                group,
+                new FillRectCommand(new RectPt(100, 100, 30, 30), ArgbColor.Black),
+            });
+
+            renderer.Render(layout, output);
+
+            var bytes = output.ToArray();
+            Assert.True(bytes.Length > 0);
+            Assert.Equal("%PDF", Encoding.ASCII.GetString(bytes, 0, 4));
+        }
+
+        [Fact]
+        public void 入れ子のグループも例外なく描画される()
+        {
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var innermost = new ShapeCommand(
+                new RectPt(12, 12, 5, 5),
+                ShapePresetType.Rect,
+                Array.Empty<double>(),
+                RotationDegrees: 0,
+                Fill: new SolidShapeFill(ArgbColor.Black),
+                Outline: null,
+                TextLines: Array.Empty<ShapeTextLine>());
+            var nestedGroup = new GroupCommand(new PointPt(15, 15), RotationDegrees: 10, Children: new DrawCommand[] { innermost });
+            var outerGroup = new GroupCommand(new PointPt(15, 15), RotationDegrees: 0, Children: new DrawCommand[] { nestedGroup });
+
+            var layout = Layout(commands: new DrawCommand[] { outerGroup });
+
+            renderer.Render(layout, output);
+
+            Assert.True(output.Length > 0);
+        }
+
         /// <summary>1x1のPNG(最小の有効なPNGバイト列)。</summary>
         private static byte[] TinyPng() => Convert.FromBase64String(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");

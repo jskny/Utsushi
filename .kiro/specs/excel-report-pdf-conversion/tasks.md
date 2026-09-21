@@ -5,13 +5,15 @@
 
 > **状況**: タスク1〜14完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21、
 > タスク14: 2026-09-21)。タスク15(接続線・グループ・追加プリセット・多段階/放射状グラデーション)は
-> 実装中。15.1〜15.19(データモデル定義・追加プリセットのマッピング表、Parsing/Layout/Rendering
-> 各レイヤーでの接続線・グループ対応、多段階/放射状グラデーション、星形・フローチャート記号・
-> 雲形/引き出し線付き吹き出しのジオメトリ)が完了し、CLIで生成したPDFを`pdftoppm`で
-> ラスタライズして目視確認済み。`dotnet build` / `dotnet test`(352件、2026-09-21時点)/
-> `dotnet format` はグリーン。15.20以降(SampleGeneratorへの機能追加、サンプル帳票への配置と
-> ゴールデンテスト更新、15.6〜15.19の各層のユニットテスト追加のうちLayout/Renderingの分)は
-> 未着手。実装時に決定した事項・判明した制約は `design.md` に反映済み。タスク文面どおりに
+> 15.1〜15.24が完了(データモデル定義、Parsing/Layout/Renderingの3層すべてでの接続線・グループ
+> 対応、多段階/放射状グラデーション、星形・フローチャート記号・雲形/引き出し線付き吹き出しの
+> ジオメトリ、SampleGeneratorへの機能追加とサンプル帳票への配置・ゴールデンテスト更新、
+> 各層のユニットテスト追加)。CLIで生成したPDFを`pdftoppm`でラスタライズして目視確認済み。
+> `dotnet build` / `dotnet test`(427件、2026-09-21時点)/ `dotnet format` はグリーン。
+> code-reviewer/security-reviewer/layout-fidelity-reviewerによるレビューを実施し、
+> 指摘(shapeCount上限のグループ経由での超過、画像検証順序の後退、グラデーションストップ数
+> 無制限、負のa:ext値による未処理例外)はいずれも修正済み。残りは15.25(最終レビュー対応)のみ。
+> 実装時に決定した事項・判明した制約は `design.md` に反映済み。タスク文面どおりに
 > 実現できなかった項目には各タスクに注記を付けた。
 
 - [x] 1. ソリューション基盤のセットアップ
@@ -507,13 +509,20 @@
       合計個数/ネスト段数の上限(境界値を含む)、多段階/放射状グラデーションの読み取りを
       `ConnectorAndGroupReadingTests.cs`で検証した(test-writerが作成、26件)
     - _Requirements: 10.1, 10.6, 10.8, 10.9, 10.10_
-  - [ ] 15.23 Layout層のユニットテストを追加する
-    - 接続線の座標変換、グループの子座標空間変換(非一様倍率を含む)、入れ子グループの
-      再帰変換を検証する
+  - [x] 15.23 Layout層のユニットテストを追加する
+    - 接続線の座標変換、グループの子座標空間変換(`ChildOffset`が非ゼロの場合の平行移動、
+      非一様倍率、`ChildExtent`が0以下の壊れた入力での安全な空振り)、入れ子グループの
+      再帰変換(2段ネストを手計算した期待値で検証)、改ページ境界での配置を
+      `ConnectorAndGroupLayoutTests.cs`で検証した(test-writerが作成、10件)
     - _Requirements: 10.9, 10.10_
-  - [ ] 15.24 Rendering層のユニットテストを追加する
-    - 追加プリセットのパス生成、多段階/放射状グラデーションの描画、接続線の経路生成、
-      グループの回転合成(グループ回転+子要素個別回転)を検証する
+  - [x] 15.24 Rendering層のユニットテストを追加する
+    - 追加プリセットのパス生成(星形・フローチャート記号のBounds、cloudCallout/calloutの
+      引き出し部分)、callout1/2/3のBuild(本体のみ)とBuildOutline(引き出し線含む)の
+      差異、それ以外のプリセットではBuildとBuildOutlineが一致すること、接続線5種の
+      経路生成(反転による端点入れ替えを含む)、GroupCommand/ConnectorCommandを含む
+      PagedLayoutのレンダリングが例外なく完了することを
+      `ShapeGeometryBuilderTests.cs`/`ConnectorGeometryBuilderTests.cs`/
+      `SkiaPdfRendererTests.cs`で検証した(test-writerが作成、Rendering層のテスト計163件)
     - _Requirements: 10.1, 10.6, 10.9, 10.10_
   - [ ] 15.25 レビュー対応
     - `code-reviewer`/`layout-fidelity-reviewer`/`security-reviewer` の指摘に対応する
