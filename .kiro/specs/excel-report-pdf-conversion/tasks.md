@@ -5,15 +5,13 @@
 
 > **状況**: タスク1〜14完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21、
 > タスク14: 2026-09-21)。タスク15(接続線・グループ・追加プリセット・多段階/放射状グラデーション)は
-> 実装中。15.1〜15.10・15.17(データモデル定義・追加プリセットのマッピング表・多段階/放射状
-> グラデーションの読み取りと描画・接続線とグループのParsing読み取り・DoS上限)完了、
-> `dotnet build` / `dotnet test`(326件、2026-09-21時点)/ `dotnet format` はグリーン。
-> ただしLayout/Renderingレイヤーはまだ`ConnectorModel`/`GroupShapeModel`を扱わないため、
-> 現時点ではこれらはPDFに出力されず`SheetModel.DrawingObjects`に読み取られるのみ
-> (Layoutの`switch`文が非対応の型を素通りするだけで、既存の画像・図形描画への影響は無い)。
-> 15.11以降(Layoutでの座標変換・GroupCommand生成、Renderingでの新規プリセット・接続線・
-> グループ描画、サンプル・回帰テスト追加、15.6〜15.10のユニットテスト追加)は未着手。
-> 実装時に決定した事項・判明した制約は `design.md` に反映済み。タスク文面どおりに
+> 実装中。15.1〜15.19(データモデル定義・追加プリセットのマッピング表、Parsing/Layout/Rendering
+> 各レイヤーでの接続線・グループ対応、多段階/放射状グラデーション、星形・フローチャート記号・
+> 雲形/引き出し線付き吹き出しのジオメトリ)が完了し、CLIで生成したPDFを`pdftoppm`で
+> ラスタライズして目視確認済み。`dotnet build` / `dotnet test`(352件、2026-09-21時点)/
+> `dotnet format` はグリーン。15.20以降(SampleGeneratorへの機能追加、サンプル帳票への配置と
+> ゴールデンテスト更新、15.6〜15.19の各層のユニットテスト追加のうちLayout/Renderingの分)は
+> 未着手。実装時に決定した事項・判明した制約は `design.md` に反映済み。タスク文面どおりに
 > 実現できなかった項目には各タスクに注記を付けた。
 
 - [x] 1. ソリューション基盤のセットアップ
@@ -452,26 +450,40 @@
       折り返す(`BuildGroupChildShapeCommand`がトップレベルの`BuildShapeCommand`と
       同じ処理を再利用する)
     - _Requirements: 10.10, 10.4_
-  - [ ] 15.14 Renderingレイヤー: `DrawPage`のコマンド振り分けを再利用可能なヘルパーへ
+  - [x] 15.14 Renderingレイヤー: `DrawPage`のコマンド振り分けを再利用可能なヘルパーへ
         切り出す
     - `GroupCommand`の内部展開から個々の子コマンドを描画する際に同じ振り分けロジックを
-      再帰的に使うための準備(既存の`switch`文を`DrawSingleCommand`等へ抽出)
+      再帰的に使うための準備として、既存の`switch`文を`DrawSingleCommand`へ抽出した
+      (抽象レコード型`DrawCommand`と紛らわしくなるため、型名とは別名にした)
     - _Requirements: 10.10_
-  - [ ] 15.15 Renderingレイヤー: 追加プリセット(星形・フローチャート記号)のパス生成を実装する
+  - [x] 15.15 Renderingレイヤー: 追加プリセット(星形・フローチャート記号)のパス生成を実装する
+    - `star4`/`star5`/`star6`/`star8`は外接円半径と内側頂点の半径比から交互に結ぶ2N角形
+      (`StarPath`)、フローチャート記号7種はそれぞれ専用のパス生成メソッド
+      (`DiamondPath`/`StadiumPath`/`ParallelogramPath`/`DocumentPath`/`PredefinedProcessPath`、
+      `flowChartProcess`/`flowChartConnector`は既存の`RectPath`/`EllipsePath`を再利用)を実装した。
+      `pdftoppm`でラスタライズして目視確認済み
     - _Requirements: 10.1_
-  - [ ] 15.16 Renderingレイヤー: 追加の吹き出し(`cloudCallout`, `callout1`/`callout2`/`callout3`)の
+  - [x] 15.16 Renderingレイヤー: 追加の吹き出し(`cloudCallout`, `callout1`/`callout2`/`callout3`)の
         パス生成を実装する
-    - 雲形は円弧の和集合、引き出し線付き吹き出しはN本の折れ線を汎用ロジックで生成する
+    - 雲形(`CloudCalloutPath`)は円の和集合(`SKPath.Op(SKPathOp.Union)`)+
+      wedge系と共通化した引き出し三角形(`AddWedgeTail`)、引き出し線付き吹き出しは
+      N本の折れ線を汎用ロジック(`BuildLeaderPoints`)で生成した。callout1/2/3は
+      本体(塗りつぶし対象)と引き出し線(塗りつぶし無し)でジオメトリが異なるため、
+      `ShapeGeometryBuilder`に塗りつぶし用の`Build`とは別に枠線用の`BuildOutline`を
+      新設し、`SkiaPdfRenderer.DrawShape`をFill/Outlineで別々のパスを使うよう変更した
     - _Requirements: 10.1_
   - [x] 15.17 Renderingレイヤー: 多段階・放射状グラデーションの描画を実装する
     - `SKShader.CreateLinearGradient`/`CreateRadialGradient`に複数ストップを渡すよう
       `CreateShapeFillPaint`を拡張した(`ToShaderStops`ヘルパーで位置昇順にソート)
     - _Requirements: 10.6_
-  - [ ] 15.18 Renderingレイヤー: 接続線のパス生成(`ConnectorGeometryBuilder`)と描画を実装する
+  - [x] 15.18 Renderingレイヤー: 接続線のパス生成(`ConnectorGeometryBuilder`)と描画を実装する
+    - `ShapeGeometryBuilder`とは別に新設。`Outline`が無い接続線には既定の黒い実線1ptを補う
+      (`DefaultConnectorOutline`)。`pdftoppm`でラスタライズして5種のプリセットを目視確認済み
     - _Requirements: 10.9_
-  - [ ] 15.19 Renderingレイヤー: グループの描画(`GroupCommand`)を実装する
-    - `canvas.Save`/`RotateDegrees(Center)`/子コマンドの再帰描画/`Restore`で、グループの
-      回転と子要素個別の回転が正しく合成されることを確認する
+  - [x] 15.19 Renderingレイヤー: グループの描画(`GroupCommand`)を実装する
+    - `canvas.Save`/`RotateDegrees(Center)`/子コマンドの再帰描画(`DrawSingleCommand`)/
+      `Restore`で実装した。子要素の個別回転との合成を`pdftoppm`でラスタライズして
+      目視確認し、想定どおり正しく合成されることを確認した
     - _Requirements: 10.10, 10.5_
   - [ ] 15.20 `Utsushi.SampleGenerator` に接続線・グループ・追加プリセット・多段階/放射状
         グラデーションの埋め込み機能を追加する
