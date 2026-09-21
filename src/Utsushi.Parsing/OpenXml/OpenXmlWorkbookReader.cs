@@ -657,13 +657,17 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
-            var extent = ReadAnchorExtent(anchor);
-            if (extent is null)
+            // ReadAnchorExtentより先に検証する。壊れたアンカー(ReadAnchorExtentの失敗)は
+            // モードによらず常に無言でスキップするため、先に判定すると不正な画像形式/
+            // サイズ超過/シグネチャ不一致がErrorモードでも例外化されずに握りつぶされてしまう
+            // (code-reviewer指摘。リファクタ前の検証順序を維持する)。
+            if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType))
             {
                 return null;
             }
 
-            if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType))
+            var extent = ReadAnchorExtent(anchor);
+            if (extent is null)
             {
                 return null;
             }
@@ -765,7 +769,7 @@ namespace Utsushi.Parsing.OpenXml
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
                 {
                     throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形の数が上限({MaxShapesPerSheet}個)を超えています。"
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
                         + "帳票定義の unsupportedElements が 'error' のため中止します。",
                         "TooManyShapes",
                         options.ReportCode,
@@ -842,7 +846,7 @@ namespace Utsushi.Parsing.OpenXml
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
                 {
                     throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形の数が上限({MaxShapesPerSheet}個)を超えています。"
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
                         + "帳票定義の unsupportedElements が 'error' のため中止します。",
                         "TooManyShapes",
                         options.ReportCode,
@@ -905,7 +909,7 @@ namespace Utsushi.Parsing.OpenXml
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
                 {
                     throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形の数が上限({MaxShapesPerSheet}個)を超えています。"
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
                         + "帳票定義の unsupportedElements が 'error' のため中止します。",
                         "TooManyShapes",
                         options.ReportCode,
@@ -936,6 +940,24 @@ namespace Utsushi.Parsing.OpenXml
             {
                 // Ignoreモードで内部に非対応要素があった場合。グループの一部だけを描画すると
                 // 意図しない見た目になるため、グループ全体を破棄する(要件10.10)。
+                return null;
+            }
+
+            // 子孫の読み取りでshapeCountが増加しているため、グループ自身を1件として
+            // 数える前に改めて上限を確認する(code-reviewer指摘。子孫読み取り前のチェックだけでは
+            // グループ自身の分の加算で上限をわずかに超過しうる)。
+            if (shapeCount >= MaxShapesPerSheet)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "TooManyShapes",
+                        options.ReportCode,
+                        sheetName);
+                }
+
                 return null;
             }
 
@@ -1013,7 +1035,7 @@ namespace Utsushi.Parsing.OpenXml
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
                 {
                     throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形の数が上限({MaxShapesPerSheet}個)を超えています。"
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
                         + "帳票定義の unsupportedElements が 'error' のため中止します。",
                         "TooManyShapes",
                         options.ReportCode,
@@ -1093,13 +1115,13 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
-            var localRect = ReadLocalRect(picture.ShapeProperties?.Transform2D);
-            if (localRect is null)
+            if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType))
             {
                 return null;
             }
 
-            if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType))
+            var localRect = ReadLocalRect(picture.ShapeProperties?.Transform2D);
+            if (localRect is null)
             {
                 return null;
             }
@@ -1117,7 +1139,7 @@ namespace Utsushi.Parsing.OpenXml
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
                 {
                     throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形の数が上限({MaxShapesPerSheet}個)を超えています。"
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
                         + "帳票定義の unsupportedElements が 'error' のため中止します。",
                         "TooManyShapes",
                         options.ReportCode,
@@ -1197,7 +1219,7 @@ namespace Utsushi.Parsing.OpenXml
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
                 {
                     throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形の数が上限({MaxShapesPerSheet}個)を超えています。"
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
                         + "帳票定義の unsupportedElements が 'error' のため中止します。",
                         "TooManyShapes",
                         options.ReportCode,
@@ -1221,6 +1243,23 @@ namespace Utsushi.Parsing.OpenXml
             var children = ReadGroupChildren(sheetName, drawingsPart, group, options, ref shapeCount, ref imageCount, depth);
             if (children is null)
             {
+                return null;
+            }
+
+            // 子孫の読み取りでshapeCountが増加しているため、グループ自身を1件として
+            // 数える前に改めて上限を確認する(code-reviewer指摘)。
+            if (shapeCount >= MaxShapesPerSheet)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を"
+                        + "超えています。帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "TooManyShapes",
+                        options.ReportCode,
+                        sheetName);
+                }
+
                 return null;
             }
 
