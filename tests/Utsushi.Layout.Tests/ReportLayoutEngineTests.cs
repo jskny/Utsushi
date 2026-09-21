@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Utsushi.Core;
@@ -435,7 +436,8 @@ namespace Utsushi.Layout.Tests
                 rowHeightPt,
                 new HashSet<int>(),
                 new HashSet<int>(),
-                NoMarginA4());
+                NoMarginA4(),
+                Array.Empty<ImageModel>());
 
             var lines = Lines(Assert.Single(Compute(sheet).Pages)).ToList();
 
@@ -482,7 +484,8 @@ namespace Utsushi.Layout.Tests
                 rowHeightPt,
                 new HashSet<int>(),
                 new HashSet<int>(),
-                NoMarginA4(rowBreaks: new[] { 2 }));
+                NoMarginA4(rowBreaks: new[] { 2 }),
+                Array.Empty<ImageModel>());
 
             var layout = Compute(sheet);
             Assert.Equal(2, layout.PageCount);
@@ -720,6 +723,112 @@ namespace Utsushi.Layout.Tests
             var texts = Texts(Assert.Single(Compute(sheet).Pages)).Select(t => t.Text).ToHashSet();
 
             Assert.Equal(new[] { "A1", "C1", "A3", "C3" }.ToHashSet(), texts);
+        }
+
+        // -- 要件9: シート内画像 -------------------------------------------------
+
+        [Fact]
+        public void 固定サイズの画像はアンカーセルの位置とオフセットからページ座標に変換される()
+        {
+            const double columnWidthChars = 10.0;
+            const double rowHeightPt = 20.0;
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+
+            var sheet = UniformSheet(
+                rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
+            var image = new ImageModel(
+                new byte[] { 1, 2, 3 },
+                "image/png",
+                CellAddress.Parse("B2"),
+                new PointPt(2.0, 3.0),
+                new FixedImageExtent(15.0, 8.0));
+            sheet = sheet with { Images = new[] { image } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Images(page));
+
+            // B2の左上 = (A列の幅, 1行目の高さ)。そこへオフセット(2,3)を加えた位置が画像の左上になる。
+            Assert.Equal(columnWidthPt + 2.0, command.Rect.Left, 3);
+            Assert.Equal(rowHeightPt + 3.0, command.Rect.Top, 3);
+            Assert.Equal(15.0, command.Rect.Width, 3);
+            Assert.Equal(8.0, command.Rect.Height, 3);
+            Assert.Equal(new byte[] { 1, 2, 3 }, command.Data);
+            Assert.Equal("image/png", command.ContentType);
+        }
+
+        [Fact]
+        public void 二セルアンカーの画像は対角セルまでの幅高さに変換される()
+        {
+            const double columnWidthChars = 10.0;
+            const double rowHeightPt = 20.0;
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+
+            var sheet = UniformSheet(
+                rows: 5, columns: 5, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
+            var image = new ImageModel(
+                Array.Empty<byte>(),
+                "image/png",
+                CellAddress.Parse("A1"),
+                new PointPt(0.0, 0.0),
+                new CellSpanImageExtent(CellAddress.Parse("C2"), new PointPt(4.0, 5.0)));
+            sheet = sheet with { Images = new[] { image } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Images(page));
+
+            // 幅: A列+B列の幅 + オフセット4。高さ: 1行目の高さ + オフセット5。
+            Assert.Equal((columnWidthPt * 2) + 4.0, command.Rect.Width, 3);
+            Assert.Equal(rowHeightPt + 5.0, command.Rect.Height, 3);
+        }
+
+        [Fact]
+        public void 二セルアンカーの対角セルが印刷範囲の外でも実際の列幅行高で計算される()
+        {
+            // 回帰テスト: 対角セルまでの幅/高さの合算に印刷範囲でクリップされた格子(SheetGrid)を
+            // 使うと、印刷範囲外の列/行は「幅0」として扱われ、画像が実際のExcelより小さく
+            // (最悪サイズ0で非表示に)計算されてしまっていた(layout-fidelity-reviewer指摘)。
+            // Excel自体は印刷範囲の設定に関わらず実際の列幅で画像サイズを決めるため、
+            // 印刷範囲がC列までしかなくても、D・E列ぶんの幅が正しく加算されることを確認する。
+            const double columnWidthChars = 10.0;
+            const double rowHeightPt = 20.0;
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+
+            var sheet = UniformSheet(
+                rows: 5, columns: 5, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt,
+                pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("A1:C3") }));
+            var image = new ImageModel(
+                Array.Empty<byte>(),
+                "image/png",
+                CellAddress.Parse("C1"),
+                new PointPt(0.0, 0.0),
+                // 印刷範囲(A1:C3)の外にあるE2まで(D列・E列は印刷範囲外)。
+                new CellSpanImageExtent(CellAddress.Parse("E2"), new PointPt(0.0, 0.0)));
+            sheet = sheet with { Images = new[] { image } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Images(page));
+
+            // 幅: D列+E列の幅(印刷範囲外だが実在する列として計算されるべき)。
+            Assert.Equal(columnWidthPt * 2, command.Rect.Width, 3);
+            // 高さ: 1行目の高さ。
+            Assert.Equal(rowHeightPt, command.Rect.Height, 3);
+        }
+
+        [Fact]
+        public void 改ページをまたぐ画像はアンカーセルが属するページにのみ配置される()
+        {
+            var sheet = UniformSheet(
+                rows: 4, columns: 2, columnWidth: 10.0, rowHeightPt: 20.0,
+                pageSetup: NoMarginA4(rowBreaks: new[] { 3 }));
+            var image = new ImageModel(
+                Array.Empty<byte>(), "image/png", CellAddress.Parse("A1"), default, new FixedImageExtent(5.0, 5.0));
+            sheet = sheet with { Images = new[] { image } };
+
+            var layout = Compute(sheet);
+            Assert.Equal(2, layout.PageCount);
+
+            Assert.Single(Images(layout.Pages[0]));
+            Assert.Empty(Images(layout.Pages[1]));
         }
     }
 }

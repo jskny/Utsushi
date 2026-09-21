@@ -25,9 +25,20 @@ namespace Utsushi.Layout
         private readonly double _scale;
         private readonly PageMargins _margins;
 
+        /// <summary>
+        /// 2セルアンカー画像の幅/高さ計算で合算する列/行数の上限。対角セルにセル番地の上限
+        /// (最大1,048,576行×16,384列)近くを指定する不正な入力による計算量の増大を防ぐ
+        /// (security-reviewer指摘)。自社ロゴ用途でこの上限に達することは想定していない。
+        /// </summary>
+        private const int MaxSpanCells = 4096;
+
+        /// <summary>画像1枚の表示サイズ(pt)の上限。異常に大きいEMU値に対する安全弁。</summary>
+        private const double MaxImageDimensionPt = 5000.0;
+
         private readonly List<DrawCommand> _fills = new();
         private readonly List<DrawCommand> _borders = new();
         private readonly List<DrawCommand> _texts = new();
+        private readonly List<DrawCommand> _images = new();
         private readonly HashSet<string> _emittedBorders = new(StringComparer.Ordinal);
 
         public PageCommandBuilder(
@@ -92,12 +103,114 @@ namespace Utsushi.Layout
                 }
             }
 
-            var commands = new List<DrawCommand>(_fills.Count + _borders.Count + _texts.Count);
+            EmitImages(rowIndex, columnIndex, rowOffsets, columnOffsets);
+
+            var commands = new List<DrawCommand>(_fills.Count + _borders.Count + _texts.Count + _images.Count);
             commands.AddRange(_fills);
             commands.AddRange(_borders);
             commands.AddRange(_texts);
+            commands.AddRange(_images);
             return commands;
         }
+
+        // ---------------------------------------------------------------------
+        // 画像(要件9)
+        // ---------------------------------------------------------------------
+
+        /// <summary>
+        /// アンカー左上セルがこのページに含まれる画像を、ページ座標に変換して描画命令にする。
+        /// 改ページ位置をまたぐ画像は、アンカー左上セルが属するページにのみ全体を配置する
+        /// (design.md「未決事項」の割り切り)。
+        /// </summary>
+        private void EmitImages(
+            IReadOnlyDictionary<int, int> rowIndex,
+            IReadOnlyDictionary<int, int> columnIndex,
+            double[] rowOffsets,
+            double[] columnOffsets)
+        {
+            foreach (var image in _sheet.Images)
+            {
+                if (!rowIndex.TryGetValue(image.AnchorCell.Row, out var r)
+                    || !columnIndex.TryGetValue(image.AnchorCell.Column, out var c))
+                {
+                    continue;
+                }
+
+                var left = columnOffsets[c] + image.AnchorOffset.X;
+                var top = rowOffsets[r] + image.AnchorOffset.Y;
+
+                var (widthPt, heightPt) = image.Extent switch
+                {
+                    FixedImageExtent fixedExtent => (fixedExtent.WidthPt, fixedExtent.HeightPt),
+                    CellSpanImageExtent span => (
+                        SpanWidthPt(image.AnchorCell.Column, image.AnchorOffset.X, span.ToCell.Column, span.ToOffset.X),
+                        SpanHeightPt(image.AnchorCell.Row, image.AnchorOffset.Y, span.ToCell.Row, span.ToOffset.Y)),
+                    _ => (0.0, 0.0),
+                };
+
+                // 異常に大きいEMU値(またはその合算)による過大な矩形を防ぐ(security-reviewer指摘)。
+                widthPt = Math.Min(widthPt, MaxImageDimensionPt);
+                heightPt = Math.Min(heightPt, MaxImageDimensionPt);
+
+                if (widthPt <= 0 || heightPt <= 0)
+                {
+                    continue;
+                }
+
+                var rect = ToPageRect(left, top, left + widthPt, top + heightPt);
+                if (rect.IsEmpty)
+                {
+                    continue;
+                }
+
+                _images.Add(new ImageCommand(rect, image.Data, image.ContentType));
+            }
+        }
+
+        /// <summary>
+        /// 2セルアンカー(<see cref="CellSpanImageExtent"/>)の幅を求める。列幅の合計は
+        /// <see cref="_grid"/>(印刷範囲にクリップされた格子)ではなく <see cref="_sheet"/> から
+        /// 直接取得する。<see cref="_grid"/> は印刷範囲外の列を「幅0」として保持しないため、
+        /// 対角セルが印刷範囲のすぐ外にあるだけで画像が実際より小さく計算されてしまう
+        /// (layout-fidelity-reviewer指摘の不具合)。Excel自体は印刷範囲の設定に関わらず
+        /// 実際の列幅で画像サイズを決めるため、これに合わせる(非表示列は0として扱う点は
+        /// 結合セル等の既存ロジックと同様)。列数には上限を設け、対角セルにセル番地の上限
+        /// (最大1,048,576行×16,384列)近くを指定する不正な入力による計算量の増大を防ぐ
+        /// (security-reviewer指摘)。
+        /// </summary>
+        private double SpanWidthPt(int fromColumn, double fromOffsetPt, int toColumn, double toOffsetPt)
+        {
+            var width = toOffsetPt - fromOffsetPt;
+            var lastColumn = Math.Min(toColumn, fromColumn + MaxSpanCells);
+            for (var column = fromColumn; column < lastColumn; column++)
+            {
+                width += RawColumnWidthPt(column);
+            }
+
+            return Math.Max(0.0, width);
+        }
+
+        /// <summary>2セルアンカーの高さを求める。<see cref="SpanWidthPt"/>と同様の考え方。</summary>
+        private double SpanHeightPt(int fromRow, double fromOffsetPt, int toRow, double toOffsetPt)
+        {
+            var height = toOffsetPt - fromOffsetPt;
+            var lastRow = Math.Min(toRow, fromRow + MaxSpanCells);
+            for (var row = fromRow; row < lastRow; row++)
+            {
+                height += RawRowHeightPt(row);
+            }
+
+            return Math.Max(0.0, height);
+        }
+
+        /// <summary>印刷範囲によらない、シート上の実際の列幅(pt)。非表示列は0。</summary>
+        private double RawColumnWidthPt(int column) =>
+            _sheet.IsColumnHidden(column)
+                ? 0.0
+                : ExcelUnitConverter.ColumnWidthToPoints(_sheet.GetColumnWidth(column), _report.Definition.MaxDigitWidthPx);
+
+        /// <summary>印刷範囲によらない、シート上の実際の行高(pt)。非表示行は0。</summary>
+        private double RawRowHeightPt(int row) => _sheet.IsRowHidden(row) ? 0.0 : _sheet.GetRowHeight(row);
 
         private void EmitCell(CellAddress address, CellModel? cell, RectPt rect, BorderSet? bordersOverride = null)
         {

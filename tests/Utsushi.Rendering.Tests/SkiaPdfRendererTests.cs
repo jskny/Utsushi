@@ -242,6 +242,160 @@ namespace Utsushi.Rendering.Tests
             Assert.DoesNotContain("/Subtype /Type3", content);
         }
 
+        [Fact]
+        public void 画像はPDFに描画される()
+        {
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ImageCommand(new RectPt(10, 10, 60, 20), TinyPng(), "image/png"),
+            });
+
+            renderer.Render(layout, output);
+
+            Assert.True(output.Length > 0);
+            var content = Encoding.Latin1.GetString(output.ToArray());
+            Assert.Contains("/Image", content);
+        }
+
+        [Fact]
+        public void デコードできない画像は帳票コードとシート名を含む例外になる()
+        {
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ImageCommand(new RectPt(0, 0, 10, 10), new byte[] { 0x00, 0x01, 0x02 }, "image/png"),
+            });
+
+            var ex = Assert.Throws<PdfRenderingException>(() => renderer.Render(layout, output));
+
+            Assert.Equal(ProcessingStage.Rendering, ex.Stage);
+            Assert.Equal("test-report", ex.ReportCode);
+            Assert.Equal("テストシート", ex.SheetName);
+            Assert.Equal(0, output.Length);
+        }
+
+        [Fact]
+        public void 宣言サイズが上限を超える画像はデコード前に拒否される()
+        {
+            // いわゆるピクセル爆弾対策(security-reviewer指摘)。実際のピクセルデータが
+            // 無い/不正な状態でも、IHDRの宣言サイズだけで数百バイトのファイルが
+            // 数億ピクセル相当を要求できてしまうため、SKBitmap.Decodeで実際に展開する前に
+            // SKBitmap.DecodeBoundsで寸法を確認し拒否する。
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var hugePng = BuildPngWithDeclaredSize(20000, 20000);
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ImageCommand(new RectPt(0, 0, 10, 10), hugePng, "image/png"),
+            });
+
+            Assert.True(hugePng.Length < 200, "この検証はファイルサイズが小さいことが前提(実データを展開させないため)");
+            Assert.Throws<PdfRenderingException>(() => renderer.Render(layout, output));
+            Assert.Equal(0, output.Length);
+        }
+
+        /// <summary>1x1のPNG(最小の有効なPNGバイト列)。</summary>
+        private static byte[] TinyPng() => Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+
+        /// <summary>
+        /// IHDRだけが指定サイズを宣言し、IDATは実際のスキャンラインと対応しない最小限のPNGを作る。
+        /// <c>SKBitmap.DecodeBounds</c>がIHDRのみで寸法を報告し、IDATの整合性を検証しないことを
+        /// 利用して、実データを展開せずに寸法チェックの安全性を検証するためのテスト専用ヘルパー。
+        /// </summary>
+        private static byte[] BuildPngWithDeclaredSize(int width, int height)
+        {
+            using var stream = new MemoryStream();
+            stream.Write(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, 0, 8);
+
+            var ihdr = new byte[13];
+            WriteUInt32BigEndian(ihdr, 0, (uint)width);
+            WriteUInt32BigEndian(ihdr, 4, (uint)height);
+            ihdr[8] = 8;
+            ihdr[9] = 2;
+            WriteChunk(stream, "IHDR", ihdr);
+
+            using (var zlib = new MemoryStream())
+            {
+                zlib.WriteByte(0x78);
+                zlib.WriteByte(0x9C);
+                using (var deflate = new System.IO.Compression.DeflateStream(
+                    zlib, System.IO.Compression.CompressionLevel.Fastest, leaveOpen: true))
+                {
+                    deflate.WriteByte(0);
+                }
+
+                zlib.Write(new byte[] { 0, 0, 0, 1 }, 0, 4); // Adler-32は検証対象外のため厳密でなくてよい
+                WriteChunk(stream, "IDAT", zlib.ToArray());
+            }
+
+            WriteChunk(stream, "IEND", Array.Empty<byte>());
+            return stream.ToArray();
+        }
+
+        private static void WriteChunk(Stream stream, string type, byte[] data)
+        {
+            var length = new byte[4];
+            WriteUInt32BigEndian(length, 0, (uint)data.Length);
+            stream.Write(length, 0, length.Length);
+
+            var typeBytes = Encoding.ASCII.GetBytes(type);
+            stream.Write(typeBytes, 0, typeBytes.Length);
+            stream.Write(data, 0, data.Length);
+
+            var crcInput = new byte[typeBytes.Length + data.Length];
+            Buffer.BlockCopy(typeBytes, 0, crcInput, 0, typeBytes.Length);
+            Buffer.BlockCopy(data, 0, crcInput, typeBytes.Length, data.Length);
+
+            var crc = new byte[4];
+            WriteUInt32BigEndian(crc, 0, Crc32(crcInput));
+            stream.Write(crc, 0, crc.Length);
+        }
+
+        private static void WriteUInt32BigEndian(byte[] buffer, int offset, uint value)
+        {
+            buffer[offset] = (byte)(value >> 24);
+            buffer[offset + 1] = (byte)(value >> 16);
+            buffer[offset + 2] = (byte)(value >> 8);
+            buffer[offset + 3] = (byte)value;
+        }
+
+        private static readonly uint[] CrcTable = BuildCrcTable();
+
+        private static uint[] BuildCrcTable()
+        {
+            var table = new uint[256];
+            for (uint n = 0; n < 256; n++)
+            {
+                var c = n;
+                for (var k = 0; k < 8; k++)
+                {
+                    c = (c & 1) != 0 ? 0xEDB88320 ^ (c >> 1) : c >> 1;
+                }
+
+                table[n] = c;
+            }
+
+            return table;
+        }
+
+        private static uint Crc32(byte[] data)
+        {
+            var crc = 0xFFFFFFFFu;
+            foreach (var value in data)
+            {
+                crc = CrcTable[(crc ^ value) & 0xFF] ^ (crc >> 8);
+            }
+
+            return crc ^ 0xFFFFFFFFu;
+        }
+
         /// <summary>Rendering が解釈できない描画命令(異常系のテスト用)。</summary>
         private sealed record UnknownCommand : DrawCommand;
     }

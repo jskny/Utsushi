@@ -67,6 +67,11 @@ internal static class Program
         builder.Merge("A1:F1");
         builder.SetText(1, 1, "請求書", Style.Title);
 
+        // 会社ロゴ(要件9)。右上のF列に固定サイズで配置する(サンプルのため単色矩形で代用)。
+        builder.SetImage(
+            row: 1, column: 6, offsetXPt: 8.0, offsetYPt: 5.0, widthPt: 60.0, heightPt: 20.0,
+            png: PlaceholderPng.CreateSolidColor(240, 80, r: 0x1F, g: 0x4E, b: 0x8C));
+
         // 宛先・発行情報
         builder.Merge("A3:C3");
         builder.SetText(3, 1, "株式会社サンプル商事 御中", Style.CustomerName);

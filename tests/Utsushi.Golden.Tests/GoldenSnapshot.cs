@@ -77,6 +77,9 @@ namespace Utsushi.Golden.Tests
                         + $"font={Font(text)} clip={(text.ClipRect is { } c ? Rect(c) : "none")} "
                         + $"value={Quote(text.Text)}",
 
+                    ImageCommand image =>
+                        $"image  rect={Rect(image.Rect)} contentType={image.ContentType} bytes={image.Data.Length}",
+
                     _ => $"unknown {command.GetType().Name}",
                 };
             }

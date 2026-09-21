@@ -253,3 +253,4 @@ text   origin=(307.65,436.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=
 text   origin=(426.9,436.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥2,153,800"
 text   origin=(51.9,461.42) anchor=Left font=MS PGothic@9pt/#FF000000 clip=[50.4,453.5 378x67.5] value="備考:"
 text   origin=(51.9,472.22) anchor=Left font=MS PGothic@9pt/#FF000000 clip=[50.4,453.5 378x67.5] value="ゴールデンテストで固定した値です。"
+image  rect=[362.9,59 60x20] contentType=image/png bytes=300

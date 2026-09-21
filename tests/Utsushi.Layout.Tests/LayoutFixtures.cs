@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Utsushi.Core;
@@ -41,7 +42,8 @@ namespace Utsushi.Layout.Tests
                 rowHeightPt,
                 new HashSet<int>(),
                 new HashSet<int>(),
-                pageSetup ?? PageSetupModel.Default);
+                pageSetup ?? PageSetupModel.Default,
+                Array.Empty<ImageModel>());
         }
 
         public static ReportDefinition Definition(
@@ -81,5 +83,7 @@ namespace Utsushi.Layout.Tests
         public static IEnumerable<LineCommand> Lines(PageLayout page) => page.Commands.OfType<LineCommand>();
 
         public static IEnumerable<FillRectCommand> Fills(PageLayout page) => page.Commands.OfType<FillRectCommand>();
+
+        public static IEnumerable<ImageCommand> Images(PageLayout page) => page.Commands.OfType<ImageCommand>();
     }
 }

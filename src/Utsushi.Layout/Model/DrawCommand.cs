@@ -39,6 +39,14 @@ namespace Utsushi.Layout.Model
         TextAnchor Anchor,
         RectPt? ClipRect) : DrawCommand;
 
+    /// <summary>
+    /// 画像1枚の描画(要件9)。他のセル内容(背景・罫線・文字)より最前面に描画される。
+    /// </summary>
+    /// <param name="Rect">配置先の矩形(ページ左上原点、ポイント単位、余白・拡大縮小適用済み)。</param>
+    /// <param name="Data">画像のバイナリ。</param>
+    /// <param name="ContentType">MIMEタイプ(例: <c>"image/png"</c>)。</param>
+    public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType) : DrawCommand;
+
     /// <summary>テキストのX座標の解釈。</summary>
     public enum TextAnchor
     {
@@ -69,7 +77,7 @@ namespace Utsushi.Layout.Model
     /// <param name="Orientation">印刷の向き。</param>
     /// <param name="WidthPt">ページ幅(向き適用後、ポイント)。</param>
     /// <param name="HeightPt">ページ高さ(向き適用後、ポイント)。</param>
-    /// <param name="Commands">描画命令(背景→罫線→テキストの順)。</param>
+    /// <param name="Commands">描画命令(背景→罫線→テキスト→画像の順)。</param>
     /// <param name="PageNumber">1始まりのページ番号。</param>
     /// <param name="RowRange">このページが表示する本文行の範囲(診断・テスト用)。</param>
     /// <param name="ColumnRange">このページが表示する本文列の範囲(診断・テスト用)。</param>
