@@ -129,12 +129,11 @@ namespace Utsushi.Substitution
                         sheet.Name);
                 }
 
-                var merged = sheet.FindMergedRange(address);
-                if (merged is not null && merged.Anchor != address)
+                if (sheet.IsNonAnchorMergedCell(address, out var merged))
                 {
                     throw new NonAnchorMergedCellOverrideException(
                         address,
-                        merged.Anchor,
+                        merged!.Anchor,
                         $"セル '{address}' は結合セル範囲の先頭(アンカー: '{merged.Anchor}')ではないため、"
                             + "直接指定して上書きすることはできません。アンカーのセル番地を指定してください。",
                         definition.ReportCode,

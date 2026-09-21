@@ -16,5 +16,6 @@
     <Project Path="tests/Utsushi.Rendering.Tests/Utsushi.Rendering.Tests.csproj" />
     <Project Path="tests/Utsushi.ReportDefinition.Tests/Utsushi.ReportDefinition.Tests.csproj" />
     <Project Path="tests/Utsushi.Substitution.Tests/Utsushi.Substitution.Tests.csproj" />
+    <Project Path="tests/Utsushi.TestSupport/Utsushi.TestSupport.csproj" />
   </Folder>
 </Solution>

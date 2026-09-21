@@ -59,7 +59,8 @@ namespace Utsushi.Parsing.OpenXml
                     continue;
                 }
 
-                if (TryParseColumnName(parts[0], out var colStart) && TryParseColumnName(parts[1], out var colEnd))
+                if (CellAddress.TryParseColumnName(parts[0], out var colStart)
+                    && CellAddress.TryParseColumnName(parts[1], out var colEnd))
                 {
                     firstColumn = Math.Min(colStart, colEnd);
                     lastColumn = Math.Max(colStart, colEnd);
@@ -112,31 +113,6 @@ namespace Utsushi.Parsing.OpenXml
             {
                 yield return last;
             }
-        }
-
-        private static bool TryParseColumnName(string text, out int column)
-        {
-            column = 0;
-            if (string.IsNullOrEmpty(text))
-            {
-                return false;
-            }
-
-            foreach (var c in text)
-            {
-                if (!char.IsLetter(c))
-                {
-                    return false;
-                }
-
-                column = (column * 26) + (char.ToUpperInvariant(c) - 'A' + 1);
-                if (column > CellAddress.MaxColumn)
-                {
-                    return false;
-                }
-            }
-
-            return column >= 1;
         }
     }
 }

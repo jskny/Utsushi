@@ -48,6 +48,7 @@ Utsushi/
 │   ├── Utsushi/                    # ファサード(ReportPdfConverter)。呼び出し元プロダクトはここだけを参照する
 │   └── Utsushi.Cli/                # コマンドライン入口。ファサードを呼ぶだけの薄い層
 ├── tests/
+│   ├── Utsushi.TestSupport/        # テストプロジェクト間で共有するヘルパー(製品コードからは参照されない)
 │   ├── Utsushi.Parsing.Tests/
 │   ├── Utsushi.ReportDefinition.Tests/
 │   ├── Utsushi.Substitution.Tests/

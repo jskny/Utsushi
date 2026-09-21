@@ -6,6 +6,7 @@ using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.Parsing.Model;
 using Utsushi.Parsing.OpenXml;
+using Utsushi.TestSupport;
 using Xunit;
 
 namespace Utsushi.Parsing.Tests

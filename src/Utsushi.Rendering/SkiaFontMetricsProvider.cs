@@ -41,11 +41,6 @@ namespace Utsushi.Rendering
         /// <inheritdoc />
         public double MeasureTextWidth(FontStyle font, string text)
         {
-            if (string.IsNullOrEmpty(text))
-            {
-                return 0.0;
-            }
-
             using var skFont = CreateFont(font, out _);
             return MeasureText(skFont, text);
         }

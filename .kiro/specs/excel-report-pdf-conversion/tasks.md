@@ -3,8 +3,8 @@
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
-> **状況**: 全タスク完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20)。
-> `dotnet build` / `dotnet test`(210件)/ `dotnet format` がグリーン。
+> **状況**: 全タスク完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20)。以降もリファクタリングを継続中。
+> `dotnet build` / `dotnet test`(215件、2026-09-21時点)/ `dotnet format` がグリーン。
 > 実装時に決定した事項・判明した制約は `design.md` に反映済み。
 > タスク文面どおりに実現できなかった項目には各タスクに注記を付けた。
 
@@ -15,6 +15,9 @@
   - 注記: ソリューションファイルは `Utsushi.sln` ではなく新形式の `Utsushi.slnx` とした。
     また、例外階層とレイヤー共通の値型を置く `Utsushi.Core`、呼び出し元が参照するファサード
     `Utsushi` を追加している(`.kiro/steering/structure.md` 更新済み)。
+    さらに、呼び出し元プロダクトの開発環境がVisual Studio 2019(C# 9.0まで)であることが判明したため、
+    ファイルスコープ名前空間は不採用とし、`LangVersion` を明示的に `9.0` に固定した
+    (`.kiro/steering/tech.md`「Visual Studio 2019 対応」参照)。
 
 - [x] 2. Parsingレイヤー: WorkbookModel の実装
   - [x] 2.1 `DocumentFormat.OpenXml` を依存に追加し、`.xlsx` からセル値・スタイル(フォント/罫線/配置/数値書式/背景色)を読み取る `IWorkbookReader` を実装する
@@ -27,6 +30,12 @@
     - _Requirements: 1.5_
   - [x] 2.5 破損ファイル・非xlsx形式・パスワード保護ファイルに対する明確な例外を実装する
     - _Requirements: 6.1, 6.2_
+  - [x] 2.6 入力ファイルが存在しない/アクセス権限がなく開けない場合も `InvalidExcelFileException` に統一する
+    - _Requirements: 6.5_
+    - 注記: 当初 `ReportPdfConverter.ConvertToFile` は `File.OpenRead` の失敗(存在しない等)を
+      未加工の `IOException` 系のまま呼び出し元へ伝播していた。ストリーム版 `Convert` との挙動統一のため、
+      2026-09-21のリファクタリングで `UtsushiException` 階層(Stage=Parsing)へ変換するよう修正し、
+      要件6.5として追記した。
 
 - [x] 3. ReportDefinitionレイヤー: 帳票定義のロードと突合
   - [x] 3.1 帳票定義JSONのスキーマを定義し、ロード時のスキーマ検証を実装する

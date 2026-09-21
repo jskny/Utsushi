@@ -59,20 +59,12 @@ namespace Utsushi.Core
 
             var s = text!.Trim().Replace("$", string.Empty);
             var i = 0;
-            var column = 0;
             while (i < s.Length && char.IsLetter(s[i]))
             {
-                var c = char.ToUpperInvariant(s[i]);
-                column = (column * 26) + (c - 'A' + 1);
-                if (column > MaxColumn)
-                {
-                    return false;
-                }
-
                 i++;
             }
 
-            if (i == 0 || i == s.Length)
+            if (i == 0 || i == s.Length || !TryParseColumnName(s.Substring(0, i), out var column))
             {
                 return false;
             }
@@ -89,6 +81,33 @@ namespace Utsushi.Core
 
             address = new CellAddress(row, column);
             return true;
+        }
+
+        /// <summary>"A", "Z", "AA" 形式の列名を1始まりの列番号に変換する。</summary>
+        public static bool TryParseColumnName(string text, out int column)
+        {
+            column = 0;
+            if (string.IsNullOrEmpty(text))
+            {
+                return false;
+            }
+
+            foreach (var c in text)
+            {
+                if (!char.IsLetter(c))
+                {
+                    column = 0;
+                    return false;
+                }
+
+                column = (column * 26) + (char.ToUpperInvariant(c) - 'A' + 1);
+                if (column > MaxColumn)
+                {
+                    return false;
+                }
+            }
+
+            return column >= 1;
         }
 
         /// <summary>1始まりの列番号を "A", "Z", "AA" 形式の列名に変換する。</summary>

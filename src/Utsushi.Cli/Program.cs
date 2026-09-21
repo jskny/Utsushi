@@ -184,30 +184,14 @@ namespace Utsushi.Cli
                         case "--set" or "-s":
                             {
                                 if (!TryTakeValue(args, ref i, "--set", out var pair, out error)) { return null; }
-
-                                var separator = pair!.IndexOf('=');
-                                if (separator <= 0)
-                                {
-                                    error = $"--set の指定は <キー>=<値> の形式で指定してください: '{pair}'";
-                                    return null;
-                                }
-
-                                values[pair.Substring(0, separator)] = pair.Substring(separator + 1);
+                                if (!TryParseKeyValuePair(pair!, "--set", "<キー>=<値>", values, out error)) { return null; }
                                 break;
                             }
 
                         case "--override":
                             {
                                 if (!TryTakeValue(args, ref i, "--override", out var pair, out error)) { return null; }
-
-                                var separator = pair!.IndexOf('=');
-                                if (separator <= 0)
-                                {
-                                    error = $"--override の指定は <セル番地>=<値> の形式で指定してください: '{pair}'";
-                                    return null;
-                                }
-
-                                cellOverrides[pair.Substring(0, separator)] = pair.Substring(separator + 1);
+                                if (!TryParseKeyValuePair(pair!, "--override", "<セル番地>=<値>", cellOverrides, out error)) { return null; }
                                 break;
                             }
 
@@ -266,6 +250,22 @@ namespace Utsushi.Cli
                 }
 
                 value = args[++index];
+                error = null;
+                return true;
+            }
+
+            /// <summary>"<キー>=<値>" 形式の引数を分割し、辞書に格納する(--set / --override で共通)。</summary>
+            private static bool TryParseKeyValuePair(
+                string pair, string optionName, string formatHint, Dictionary<string, string> destination, out string? error)
+            {
+                var separator = pair.IndexOf('=');
+                if (separator <= 0)
+                {
+                    error = $"{optionName} の指定は {formatHint} の形式で指定してください: '{pair}'";
+                    return false;
+                }
+
+                destination[pair.Substring(0, separator)] = pair.Substring(separator + 1);
                 error = null;
                 return true;
             }

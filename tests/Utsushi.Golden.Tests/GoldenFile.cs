@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using Utsushi.TestSupport;
 using Xunit.Sdk;
 
 namespace Utsushi.Golden.Tests

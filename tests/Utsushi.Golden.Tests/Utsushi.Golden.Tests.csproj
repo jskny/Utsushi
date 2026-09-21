@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Utsushi\Utsushi.csproj" />
+    <ProjectReference Include="..\Utsushi.TestSupport\Utsushi.TestSupport.csproj" />
   </ItemGroup>
 
   <ItemGroup>

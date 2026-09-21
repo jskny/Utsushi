@@ -3,7 +3,8 @@ using System;
 namespace Utsushi.Core.Exceptions
 {
     /// <summary>
-    /// 入力ファイルが有効な .xlsx として読めない(非xlsx形式・破損・パスワード保護)。要件6.1, 6.2。
+    /// 入力ファイルが有効な .xlsx として読めない(非xlsx形式・破損・パスワード保護)、
+    /// またはファイル自体を開けない(存在しない・アクセス権限がない)。要件6.1, 6.2, 6.5。
     /// </summary>
     public sealed class InvalidExcelFileException : UtsushiException
     {
@@ -21,10 +22,10 @@ namespace Utsushi.Core.Exceptions
         public InvalidExcelFileReason Reason { get; }
     }
 
-    /// <summary>入力ファイルが読めない理由の種別(要件6.1, 6.2)。</summary>
+    /// <summary>入力ファイルが読めない理由の種別(要件6.1, 6.2, 6.5)。</summary>
     public enum InvalidExcelFileReason
     {
-        /// <summary>分類できないその他の読み取り失敗。</summary>
+        /// <summary>分類できないその他の読み取り失敗、またはファイル自体を開けない(存在しない・アクセス不可)。</summary>
         Unknown = 0,
 
         /// <summary>そもそも .xlsx(OOXML/ZIP)ではない。</summary>

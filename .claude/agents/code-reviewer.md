@@ -34,7 +34,7 @@ tools: Read, Grep, Glob, Bash
 
 ### 5. コーディング規約
 - Nullable参照型が有効化された状態で警告が出ていないか。
-- ファイルスコープ名前空間、命名規則(`Utsushi.<レイヤー名>`)に従っているか。
+- 名前空間は従来のブロック形式(`namespace X { ... }`)になっているか(VS2019/C#9.0対応のため、file-scoped namespaceは使用しない。`.kiro/steering/tech.md`「コーディング規約」参照)。命名規則(`Utsushi.<レイヤー名>`)に従っているか。
 
 ## 進め方
 
