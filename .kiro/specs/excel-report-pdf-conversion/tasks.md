@@ -288,18 +288,19 @@
       図形1つあたりの全テキスト文字数の上限(既定2000文字、超過は
       `ElementKind = "ShapeTextTooLong"`)を、画像の上限(13.15)と同じ考え方で設ける
     - _Requirements: 10.8_
-  - [ ] 14.10 Layoutレイヤー: 図形のページ座標変換を実装する(`PageCommandBuilder.EmitShapes`)
-    - `SheetModel.DrawingObjects` を出現順に処理し、画像と同じ座標変換の仕組み
-      (`SheetGrid`・`SpanWidthPt`/`SpanHeightPt`)で図形の矩形を求める。画像・図形の
+  - [x] 14.10 Layoutレイヤー: 図形のページ座標変換を実装する(`PageCommandBuilder.EmitDrawingObjects`)
+    - `SheetModel.DrawingObjects`(画像・図形が混在)を出現順に処理し、共通の
+      `TryComputeDrawingObjectRect`(旧`EmitImages`を一般化)で矩形を求める。画像・図形の
       `DrawCommand` を出現順のまま1つのリストに追加し、z-orderを保つ(design.md
       「Layout レイヤー」の図形節、要件10.3)
     - _Requirements: 10.1, 10.2, 10.3_
-  - [ ] 14.11 Layoutレイヤー: 図形内テキストの折り返し・配置を実装する
+  - [x] 14.11 Layoutレイヤー: 図形内テキストの折り返し・配置を実装する
     - `ShapeModel.Text` を `IFontMetricsProvider` で図形の矩形幅を基準に折り返し、
       段落の水平配置・`VAlign` に基づく垂直位置から各行のローカル座標(回転前)を算出し
-      `ShapeCommand.TextLines` を構築する
+      `ShapeCommand.TextLines` を構築する(`BuildShapeTextLines`/`WrapShapeText`)。
+      段落内の複数ランは先頭ランのフォントで折り返しを代表させる近似とした
     - _Requirements: 10.4_
-  - [ ] 14.12 Layoutレイヤー: 改ページをまたぐ図形をアンカー側のページにのみ配置する
+  - [x] 14.12 Layoutレイヤー: 改ページをまたぐ図形をアンカー側のページにのみ配置する
     - 画像(13.7)と同じ割り切りを図形にも適用する
     - _Requirements: 10.1_
   - [ ] 14.13 Renderingレイヤー: 対応済みプリセットのパス生成(`ShapeGeometryBuilder`)を実装する
