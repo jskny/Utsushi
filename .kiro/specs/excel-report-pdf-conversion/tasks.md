@@ -4,7 +4,7 @@
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
 > **状況**: 全タスク完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21)。
-> `dotnet build` / `dotnet test`(224件、2026-09-21時点)/ `dotnet format` はグリーン。
+> `dotnet build` / `dotnet test`(232件、2026-09-21時点)/ `dotnet format` はグリーン。
 > 実装時に決定した事項・判明した制約は `design.md` に反映済み。
 > タスク文面どおりに実現できなかった項目には各タスクに注記を付けた。
 
@@ -196,3 +196,37 @@
     - 固定サイズ画像・2セルアンカー画像の座標変換、改ページをまたぐ画像がアンカー側の
       ページにのみ配置されることを検証する
     - _Requirements: 9.1, 9.2_
+  - [x] 13.13 Layoutレイヤー: 2セルアンカーの幅・高さ計算が印刷範囲外の列/行を0扱いする不具合を修正する
+    - `SpanWidthPt`/`SpanHeightPt`が印刷範囲にクリップされた`SheetGrid`を使っていたため、
+      対角セルが印刷範囲のすぐ外にあるだけで画像が実際より小さく計算されていた
+      (layout-fidelity-reviewer指摘)。`SheetModel`から直接列幅/行高を取得するよう修正し、
+      回帰テストを追加する
+    - _Requirements: 9.2_
+  - [x] 13.14 Renderingレイヤー: 画像デコード失敗時の例外に帳票コード・シート名を含める
+    - `DrawImage`が送出する`PdfRenderingException`にreportCode/sheetNameが渡っておらず、
+      同ファイル内の他の送出箇所と一貫性がなかった(code-reviewer必須指摘、要件6.4)。
+      `DrawPage`からreportCode/sheetNameを伝播させ、ユニットテストを追加する
+    - _Requirements: 6.4_
+  - [x] 13.15 セキュリティ対策: ピクセル爆弾・計算量DoSへの上限を追加する(要件9.6)
+    - Renderingレイヤー: `SKBitmap.Decode`で実際に展開する前に`SKBitmap.DecodeBounds`で
+      宣言上のピクセル寸法を確認し、上限(既定4096px)を超える場合は拒否する
+    - Layoutレイヤー: 2セルアンカーの幅・高さ計算(列/行の合算)に上限(既定4096列/行)を設け、
+      対角セルにセル番地の上限近くを指定された場合の計算量を抑える。画像の表示サイズにも
+      上限(既定5000pt)を設ける
+    - Parsingレイヤー: 1シートあたりの画像アンカー数の上限(既定50枚、超過は
+      `ElementKind = "TooManyImages"`)、画像1枚あたりの読み取りバイト数の上限
+      (既定10MB、超過は`ElementKind = "ImageTooLarge"`)を設ける
+    - security-reviewer指摘。いずれもセキュリティレビューで発見された、悪意あるExcelファイルに
+      よるDoS(数百バイトのファイルで大きなメモリ・CPU消費を引き起こせる)への対策
+    - _Requirements: 9.6_
+  - [x] 13.16 セキュリティ対策: 画像バイナリの先頭シグネチャ(マジックバイト)を検証する
+    - `ContentType`はOPCパッケージ側の申告値に過ぎず実バイト列と一致する保証がないため、
+      ネイティブコードのデコーダ(SkiaSharp)に渡す前にPNG/JPEG/GIF/BMPの先頭バイトを
+      比較する(security-reviewer指摘)。不一致の場合は`ElementKind = "UnsupportedImageFormat"`
+      として扱う
+    - _Requirements: 9.4_
+  - [x] 13.17 13.13〜13.16の追加分のユニットテストを追加する
+    - 印刷範囲外の対角セルを持つ2セルアンカーの回帰テスト、画像デコード失敗時の
+      帳票コード/シート名検証、ピクセル爆弾対策(宣言サイズ超過の拒否)、
+      画像枚数上限、ContentType偽装の検出を検証する
+    - _Requirements: 9.2, 9.4, 9.6, 6.4_

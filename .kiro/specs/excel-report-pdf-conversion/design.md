@@ -113,6 +113,24 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     画像読み取りへ進む」という分岐に置き換える必要がある(`xdr:graphicFrame` = グラフは
     既存どおり525行目で先に個別検出される)。この置き換えを行わない限り、画像を1つでも
     含むシートは `unsupportedElements: "error"` の帳票定義で常に失敗し続ける。
+  - **信頼できない入力に対する安全弁(要件9.6)**: `ReportPdfConverter.Convert` は呼び出しごとに
+    外部から供給される `xlsxStream` をそのまま処理するため、埋め込み画像のバイナリも
+    「一度だけ人が確認して固定化された資産」ではなく信頼できない入力として扱う
+    (security-reviewer指摘)。以下の上限・検証を設ける。
+    - 1シートあたりの画像アンカー数の上限(既定50枚)。超過分は `unsupportedElements` の
+      設定に従う(`ElementKind = "TooManyImages"`)。
+    - 画像1枚あたりの読み取りバイト数の上限(既定10MB)。超過時も同様
+      (`ElementKind = "ImageTooLarge"`)。
+    - `ContentType` は宣言に過ぎず実バイト列と一致する保証がないため、ファイル先頭の
+      シグネチャ(PNG/JPEG/GIF/BMPのマジックバイト)が一致することを確認する。
+      不一致の場合は `ElementKind = "UnsupportedImageFormat"` として扱う。
+    - Renderingレイヤーでは、`SKBitmap.Decode` で実際にデコードする前に
+      `SKBitmap.DecodeBounds` で宣言上の幅・高さを確認し、上限(既定4096px)を超える場合は
+      `PdfRenderingException` とする(数百バイトのファイルが巨大な展開後サイズを要求する
+      「ピクセル爆弾」対策)。
+    - 2セルアンカー(対角セル指定)の幅・高さ計算は、対角セルにセル番地の上限
+      (最大1,048,576行×16,384列)近くを指定された場合の計算量を抑えるため、
+      合算する列/行数に上限(既定4096)を設ける。
 
 ### 2. ReportDefinition レイヤー (`Utsushi.ReportDefinition`)
 
@@ -190,9 +208,14 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   - ページヘッダー/フッターの書式コード展開と配置(要件3.7〜3.9)
   - 結合セルの矩形統合
   - セル内テキストのフォントメトリクスに基づく配置(左右/上下揃え、インデント、縮小表示)
-  - **画像の配置(要件9)**: `SheetModel.Images` の各画像について、アンカー(セル+セル内オフセット)を
-    ページ左上原点のポイント座標へ変換する。座標変換自体は結合セルの矩形計算(`SheetGrid` の
-    列幅/行高累積・印刷範囲切り出し・拡大縮小の適用)と同じ仕組みを再利用する。
+  - **画像の配置(要件9)**: `SheetModel.Images` の各画像について、アンカーセルの位置(結合セルの
+    矩形計算と同じ`SheetGrid`の列幅/行高累積・拡大縮小の適用)にセル内オフセットを加えて
+    ページ左上原点のポイント座標へ変換する。
+    2セルアンカー(対角セル指定)の幅・高さは、`SheetGrid`(印刷範囲にクリップされた格子)
+    ではなく`SheetModel`から直接取得した列幅/行高で計算する。`SheetGrid`は印刷範囲外の列/行を
+    「幅0」として保持しないため、これを流用すると対角セルが印刷範囲のすぐ外にあるだけで
+    画像が実際より小さく計算されてしまう(非表示列/行は0として扱う点は結合セル等の既存ロジックと同様。
+    Excel自体は印刷範囲の設定に関わらず実際の列幅で画像サイズを決めるため、これに合わせる)。
     改ページ位置をまたぐ画像の扱いは「未決事項」を参照。
 - **主なインターフェース**:
   ```csharp
@@ -216,10 +239,13 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
 - 1ページ = 1 `SKCanvas` への描画。矩形塗りつぶし(背景)→罫線→テキスト→**画像**の順で描画する。
   Excelはシート上に浮かぶ描画オブジェクト(画像等)をセルの内容より上のレイヤーとして描画するため、
   画像は他のセル内容と重なる場合に最前面へ来るようにする(要件9.3)。
-- **画像の描画(要件9)**: `ImageCommand` は `SKBitmap.Decode(byte[])`(または `SKImage.FromEncodedData`)
-  でデコードし、`SKCanvas.DrawBitmap(bitmap, destRect)` で `ImageCommand.Rect` へ描画する
+- **画像の描画(要件9)**: `ImageCommand` は `SKBitmap.Decode(byte[])`でデコードし、
+  `SKCanvas.DrawBitmap(bitmap, destRect)` で `ImageCommand.Rect` へ描画する
   (SkiaSharp 2.88.8で利用可能な標準API)。既存の `ToSkRect(RectPt)` をそのまま使う。
   ページ境界外にはみ出す部分は `SKCanvas` が自然にクリップするため、追加のクリップ処理は不要。
+  `SKBitmap.Decode` で実際に展開する前に `SKBitmap.DecodeBounds` で宣言上のピクセル寸法を確認し、
+  上限(既定4096px)を超える場合はデコードせず `PdfRenderingException` とする(要件9.6。
+  ピクセル爆弾対策。詳細はParsingレイヤー節「信頼できない入力に対する安全弁」を参照)。
 - 出力するPDFのバージョンは SkiaSharp の PDF バックエンドが生成する **PDF 1.4** とする(要件5.3)。
 - 対象帳票が使用するフォントが実行環境に存在しない場合は `FontNotAvailableException` で失敗させる
   (`FontResolver` の既定は厳格モード)。実行時の暗黙フォールバックによる見た目崩れを避けるため。
@@ -340,9 +366,10 @@ public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType) 
 - 例外階層は `UtsushiException`(`Utsushi.Core.Exceptions`)を基底とし、以下を派生させる。
   - `ReportDefinitionNotFoundException`(要件1.4)
   - `ReportStructureMismatchException`(要件1.4: シート名・セル番地の不一致)
-  - `UnsupportedWorkbookElementException`(要件1.5, 9.4。`ElementKind`は`"Drawing"`/`"Chart"`/
-    `"LegacyDrawing"`/`"ExternalReference"`に加え、デコード不能な画像形式を示す
-    `"UnsupportedImageFormat"`を持つ)
+  - `UnsupportedWorkbookElementException`(要件1.5, 9.4, 9.6。`ElementKind`は`"Drawing"`/`"Chart"`/
+    `"LegacyDrawing"`/`"ExternalReference"`に加え、デコード不能または申告と実バイト列が
+    一致しない画像形式を示す`"UnsupportedImageFormat"`、画像枚数の上限超過を示す
+    `"TooManyImages"`、画像サイズの上限超過を示す`"ImageTooLarge"`を持つ)
   - `SubstitutionKeyNotFoundException` / `RequiredSubstitutionValueMissingException`(要件2.3, 2.4)
   - `InvalidCellOverrideAddressException`(要件2.8。セル番地直接指定がA1形式として解釈できない場合)
   - `NonAnchorMergedCellOverrideException`(要件2.9。セル番地直接指定の対象が結合セル範囲の非アンカー位置の場合)

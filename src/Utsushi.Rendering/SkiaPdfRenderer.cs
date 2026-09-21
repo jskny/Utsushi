@@ -33,6 +33,13 @@ namespace Utsushi.Rendering
         /// </remarks>
         private const double BoldStrokeRatio = 0.03;
 
+        /// <summary>
+        /// 画像のデコード後ピクセル寸法(幅・高さ)の上限。宣言サイズが極端に大きい画像を
+        /// 実際にデコードする前に拒否し、メモリを大量消費させる攻撃(いわゆるピクセル爆弾)を防ぐ
+        /// (security-reviewer指摘)。自社ロゴ用途でこの上限に達することは想定していない。
+        /// </summary>
+        private const int MaxDecodedImageDimensionPx = 4096;
+
         private readonly SkiaFontMetricsProvider _fontMetrics;
         private readonly PdfRenderOptions _options;
 
@@ -122,7 +129,7 @@ namespace Utsushi.Rendering
                 var canvas = document.BeginPage((float)page.WidthPt, (float)page.HeightPt);
                 try
                 {
-                    DrawPage(canvas, page);
+                    DrawPage(canvas, page, layout.ReportCode, layout.SheetName);
                 }
                 finally
                 {
@@ -134,7 +141,7 @@ namespace Utsushi.Rendering
             skStream.Flush();
         }
 
-        private void DrawPage(SKCanvas canvas, PageLayout page)
+        private void DrawPage(SKCanvas canvas, PageLayout page, string reportCode, string sheetName)
         {
             foreach (var command in page.Commands)
             {
@@ -153,12 +160,12 @@ namespace Utsushi.Rendering
                         break;
 
                     case ImageCommand image:
-                        DrawImage(canvas, image);
+                        DrawImage(canvas, image, reportCode, sheetName);
                         break;
 
                     default:
                         throw new PdfRenderingException(
-                            $"未知の描画命令です: {command.GetType().Name}");
+                            $"未知の描画命令です: {command.GetType().Name}", reportCode, sheetName);
                 }
             }
         }
@@ -176,13 +183,31 @@ namespace Utsushi.Rendering
         }
 
         /// <summary>画像を描画する(要件9)。他のセル内容より最前面に描画される。</summary>
-        private static void DrawImage(SKCanvas canvas, ImageCommand image)
+        private static void DrawImage(SKCanvas canvas, ImageCommand image, string reportCode, string sheetName)
         {
+            // 実際にデコードする前に宣言サイズを確認し、極端に大きい画像
+            // (いわゆるピクセル爆弾。数百バイトのファイルが数千万〜数億ピクセル相当を
+            // 宣言することでメモリを大量消費させる攻撃)を拒否する(security-reviewer指摘)。
+            var bounds = SKBitmap.DecodeBounds(image.Data);
+            if (bounds.IsEmpty)
+            {
+                throw new PdfRenderingException(
+                    $"画像(ContentType: {image.ContentType})をデコードできませんでした。", reportCode, sheetName);
+            }
+
+            if (bounds.Width > MaxDecodedImageDimensionPx || bounds.Height > MaxDecodedImageDimensionPx)
+            {
+                throw new PdfRenderingException(
+                    $"画像(ContentType: {image.ContentType})の寸法({bounds.Width}x{bounds.Height}px)が"
+                    + $"上限({MaxDecodedImageDimensionPx}px)を超えています。",
+                    reportCode, sheetName);
+            }
+
             using var bitmap = SKBitmap.Decode(image.Data);
             if (bitmap is null)
             {
                 throw new PdfRenderingException(
-                    $"画像(ContentType: {image.ContentType})をデコードできませんでした。");
+                    $"画像(ContentType: {image.ContentType})をデコードできませんでした。", reportCode, sheetName);
             }
 
             canvas.DrawBitmap(bitmap, ToSkRect(image.Rect));

@@ -373,12 +373,23 @@ namespace Utsushi.Parsing.OpenXml
         };
 
         /// <summary>
+        /// 1シートに含める画像アンカーの数の上限。信頼できない入力(帳票定義への登録前の
+        /// Excelファイル)による計算量の増大を防ぐための安全弁であり、自社ロゴ用途で
+        /// この上限に達することは想定していない(security-reviewer指摘)。
+        /// </summary>
+        internal const int MaxImagesPerSheet = 50;
+
+        /// <summary>画像1枚あたりの読み取りバイト数の上限(10MB)。ピクセル爆弾等への安全弁。</summary>
+        private const long MaxImageDataBytes = 10 * 1024 * 1024;
+
+        /// <summary>
         /// シートに埋め込まれた画像(<c>xdr:pic</c>)を読み取る(要件9)。
         /// </summary>
         /// <remarks>
         /// 画像以外の描画オブジェクト(シェイプ・グラフ等)は対象外とし、<see cref="DetectUnsupportedElements"/>
         /// 側で引き続き「サポート外要素」として扱う(要件9.5)。画像は帳票定義の <c>unsupportedElements</c>
-        /// 設定によらず常に読み取り対象とするが、デコード不能な形式(EMF/WMF等)だけは同じ設定に従う(要件9.4)。
+        /// 設定によらず常に読み取り対象とするが、デコード不能な形式(EMF/WMF等)・対応形式を偽装した
+        /// バイナリ・上限を超える枚数/サイズだけは同じ設定に従う(要件9.4)。
         /// </remarks>
         private static List<ImageModel> ReadImages(string sheetName, WorksheetPart worksheetPart, WorkbookReadOptions options)
         {
@@ -408,6 +419,22 @@ namespace Utsushi.Parsing.OpenXml
                 if (!TryReadMarker(fromMarker, out var anchorCell, out var anchorOffset))
                 {
                     continue;
+                }
+
+                if (result.Count >= MaxImagesPerSheet)
+                {
+                    if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                    {
+                        throw new UnsupportedWorkbookElementException(
+                            $"シート '{sheetName}' の画像の数が上限({MaxImagesPerSheet}枚)を超えています。"
+                            + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                            "TooManyImages",
+                            options.ReportCode,
+                            sheetName);
+                    }
+
+                    // ignore時は上限を超えた以降の画像アンカーをまとめて無視する。
+                    break;
                 }
 
                 var embedId = picture.BlipFill?.Blip?.Embed?.Value;
@@ -445,15 +472,90 @@ namespace Utsushi.Parsing.OpenXml
                     continue;
                 }
 
-                using var stream = imagePart.GetStream();
-                using var buffer = new MemoryStream();
-                stream.CopyTo(buffer);
+                byte[] data;
+                using (var stream = imagePart.GetStream())
+                {
+                    if (!TryReadBounded(stream, MaxImageDataBytes, out data))
+                    {
+                        if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                        {
+                            throw new UnsupportedWorkbookElementException(
+                                $"シート '{sheetName}' の画像のサイズが上限({MaxImageDataBytes / (1024 * 1024)}MB)を"
+                                + "超えています。帳票定義の unsupportedElements が 'error' のため中止します。",
+                                "ImageTooLarge",
+                                options.ReportCode,
+                                sheetName);
+                        }
 
-                result.Add(new ImageModel(buffer.ToArray(), imagePart.ContentType, anchorCell, anchorOffset, extent));
+                        continue;
+                    }
+                }
+
+                // ContentTypeはOPCパッケージ側の申告値に過ぎず、実際のバイト列と一致する保証がない。
+                // ネイティブコードのデコーダ(SkiaSharp)に渡す前に、ファイル先頭のシグネチャで
+                // 最低限の裏取りを行う(security-reviewer指摘)。
+                if (!MatchesContentTypeSignature(imagePart.ContentType, data))
+                {
+                    if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                    {
+                        throw new UnsupportedWorkbookElementException(
+                            $"シート '{sheetName}' の画像データが '{imagePart.ContentType}' として不正です"
+                            + "(ファイル先頭のシグネチャが一致しません)。"
+                            + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                            "UnsupportedImageFormat",
+                            options.ReportCode,
+                            sheetName);
+                    }
+
+                    continue;
+                }
+
+                result.Add(new ImageModel(data, imagePart.ContentType, anchorCell, anchorOffset, extent));
             }
 
             return result;
         }
+
+        /// <summary>
+        /// <paramref name="source"/> から最大 <paramref name="maxBytes"/> バイトだけ読み取る。
+        /// 超過した場合は <c>false</c> を返す(要件9で読み取るバイト数に上限を設けるため)。
+        /// </summary>
+        private static bool TryReadBounded(Stream source, long maxBytes, out byte[] data)
+        {
+            using var buffer = new MemoryStream();
+            var chunk = new byte[81920];
+            int read;
+            while ((read = source.Read(chunk, 0, chunk.Length)) > 0)
+            {
+                if (buffer.Length + read > maxBytes)
+                {
+                    data = Array.Empty<byte>();
+                    return false;
+                }
+
+                buffer.Write(chunk, 0, read);
+            }
+
+            data = buffer.ToArray();
+            return true;
+        }
+
+        /// <summary>
+        /// 画像バイナリの先頭シグネチャ(マジックバイト)が、申告された <paramref name="contentType"/> と
+        /// 一致するかを確認する。<see cref="SupportedImageContentTypes"/> に含まれる4形式のみ対応する。
+        /// </summary>
+        private static bool MatchesContentTypeSignature(string contentType, byte[] data) => contentType.ToLowerInvariant() switch
+        {
+            "image/png" => data.Length >= 8
+                && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47
+                && data[4] == 0x0D && data[5] == 0x0A && data[6] == 0x1A && data[7] == 0x0A,
+            "image/jpeg" => data.Length >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF,
+            "image/gif" => data.Length >= 6
+                && data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38
+                && (data[4] == 0x37 || data[4] == 0x39) && data[5] == 0x61,
+            "image/bmp" => data.Length >= 2 && data[0] == 0x42 && data[1] == 0x4D,
+            _ => false,
+        };
 
         /// <summary>
         /// <c>xdr:from</c>/<c>xdr:to</c> のマーカー(0始まりの行/列 + セル内オフセット)を、

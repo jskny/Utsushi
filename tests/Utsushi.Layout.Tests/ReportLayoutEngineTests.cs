@@ -782,6 +782,39 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
+        public void 二セルアンカーの対角セルが印刷範囲の外でも実際の列幅行高で計算される()
+        {
+            // 回帰テスト: 対角セルまでの幅/高さの合算に印刷範囲でクリップされた格子(SheetGrid)を
+            // 使うと、印刷範囲外の列/行は「幅0」として扱われ、画像が実際のExcelより小さく
+            // (最悪サイズ0で非表示に)計算されてしまっていた(layout-fidelity-reviewer指摘)。
+            // Excel自体は印刷範囲の設定に関わらず実際の列幅で画像サイズを決めるため、
+            // 印刷範囲がC列までしかなくても、D・E列ぶんの幅が正しく加算されることを確認する。
+            const double columnWidthChars = 10.0;
+            const double rowHeightPt = 20.0;
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+
+            var sheet = UniformSheet(
+                rows: 5, columns: 5, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt,
+                pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("A1:C3") }));
+            var image = new ImageModel(
+                Array.Empty<byte>(),
+                "image/png",
+                CellAddress.Parse("C1"),
+                new PointPt(0.0, 0.0),
+                // 印刷範囲(A1:C3)の外にあるE2まで(D列・E列は印刷範囲外)。
+                new CellSpanImageExtent(CellAddress.Parse("E2"), new PointPt(0.0, 0.0)));
+            sheet = sheet with { Images = new[] { image } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Images(page));
+
+            // 幅: D列+E列の幅(印刷範囲外だが実在する列として計算されるべき)。
+            Assert.Equal(columnWidthPt * 2, command.Rect.Width, 3);
+            // 高さ: 1行目の高さ。
+            Assert.Equal(rowHeightPt, command.Rect.Height, 3);
+        }
+
+        [Fact]
         public void 改ページをまたぐ画像はアンカーセルが属するページにのみ配置される()
         {
             var sheet = UniformSheet(

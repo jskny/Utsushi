@@ -65,6 +65,58 @@ namespace Utsushi.Parsing.Tests
             return path;
         }
 
+        /// <summary>
+        /// 同一の画像(<c>image/png</c>)を参照する <paramref name="count"/> 個の oneCellAnchor を
+        /// 含む .xlsx を一時ファイルとして作成し、そのパスを返す。呼び出し側で削除すること。
+        /// 画像アンカー数の上限(<see cref="OpenXmlWorkbookReader.MaxImagesPerSheet"/>)のテスト用。
+        /// </summary>
+        public static string CreateWithManyPictures(int count)
+        {
+            var path = Path.Combine(Path.GetTempPath(), "utsushi-image-test-" + Guid.NewGuid().ToString("N") + ".xlsx");
+
+            using (var document = SpreadsheetDocument.Create(path, SpreadsheetDocumentType.Workbook))
+            {
+                var workbookPart = document.AddWorkbookPart();
+                workbookPart.Workbook = new Workbook();
+
+                var worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
+                worksheetPart.Worksheet = new Worksheet(new SheetData());
+
+                var sheets = workbookPart.Workbook.AppendChild(new Sheets());
+                sheets.Append(new Sheet
+                {
+                    Id = workbookPart.GetIdOfPart(worksheetPart),
+                    SheetId = 1U,
+                    Name = "テストシート",
+                });
+
+                var drawingsPart = worksheetPart.AddNewPart<DrawingsPart>();
+                var imagePart = drawingsPart.AddImagePart(ImagePartType.Png);
+                using (var stream = new MemoryStream(TinyPng()))
+                {
+                    imagePart.FeedData(stream);
+                }
+
+                var drawing = new Xdr.WorksheetDrawing();
+                for (var i = 0; i < count; i++)
+                {
+                    drawing.Append(BuildOneCellAnchorAt(drawingsPart, imagePart, i));
+                }
+
+                drawingsPart.WorksheetDrawing = drawing;
+
+                worksheetPart.Worksheet.Append(new Drawing { Id = worksheetPart.GetIdOfPart(drawingsPart) });
+                worksheetPart.Worksheet.Save();
+                workbookPart.Workbook.Save();
+            }
+
+            return path;
+        }
+
+        /// <summary>1x1のPNG(最小の有効なPNGバイト列)。</summary>
+        public static byte[] TinyPng() => Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+
         /// <summary>画像を含まない図形(<c>xdr:sp</c>)だけを含む最小の .xlsx を作る。</summary>
         public static string CreateWithNonPictureShape()
         {
@@ -133,6 +185,23 @@ namespace Utsushi.Parsing.Tests
                 new Xdr.ClientData());
         }
 
+        /// <summary>指定した行(0始まり)に固定サイズの画像を配置する oneCellAnchor を作る。</summary>
+        private static Xdr.OneCellAnchor BuildOneCellAnchorAt(DrawingsPart drawingsPart, ImagePart imagePart, int rowIndex)
+        {
+            const long widthEmu = 10L * (long)EmusPerPoint;
+            const long heightEmu = 10L * (long)EmusPerPoint;
+
+            return new Xdr.OneCellAnchor(
+                new Xdr.FromMarker(
+                    new Xdr.ColumnId("0"),
+                    new Xdr.ColumnOffset("0"),
+                    new Xdr.RowId(rowIndex.ToString(CultureInfo.InvariantCulture)),
+                    new Xdr.RowOffset("0")),
+                new Xdr.Extent { Cx = widthEmu, Cy = heightEmu },
+                BuildPicture(drawingsPart, imagePart, widthEmu, heightEmu, (uint)(rowIndex + 100)),
+                new Xdr.ClientData());
+        }
+
         private static Xdr.TwoCellAnchor BuildTwoCellAnchor(DrawingsPart drawingsPart, ImagePart imagePart)
         {
             return new Xdr.TwoCellAnchor(
@@ -147,10 +216,11 @@ namespace Utsushi.Parsing.Tests
                 new Xdr.ClientData());
         }
 
-        private static Xdr.Picture BuildPicture(DrawingsPart drawingsPart, ImagePart imagePart, long widthEmu, long heightEmu) =>
+        private static Xdr.Picture BuildPicture(
+            DrawingsPart drawingsPart, ImagePart imagePart, long widthEmu, long heightEmu, uint id = 2U) =>
             new(
                 new Xdr.NonVisualPictureProperties(
-                    new Xdr.NonVisualDrawingProperties { Id = 2U, Name = "Logo" },
+                    new Xdr.NonVisualDrawingProperties { Id = id, Name = "Logo" },
                     new Xdr.NonVisualPictureDrawingProperties()),
                 new Xdr.BlipFill(
                     new A.Blip { Embed = drawingsPart.GetIdOfPart(imagePart) },
