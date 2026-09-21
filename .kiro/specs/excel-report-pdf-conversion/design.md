@@ -131,6 +131,58 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     - 2セルアンカー(対角セル指定)の幅・高さ計算は、対角セルにセル番地の上限
       (最大1,048,576行×16,384列)近くを指定された場合の計算量を抑えるため、
       合算する列/行数に上限(既定4096)を設ける。
+- **図形(要件10)**: 画像(`xdr:pic`)と同じ `xdr:twoCellAnchor` / `xdr:oneCellAnchor` の下に
+  現れる `xdr:sp`(シェイプ)のうち、`xdr:spPr/a:prstGeom/@prst` が対応済みプリセット一覧
+  (要件10.1補足)に含まれるものだけを読み取る。アンカー(左上セル・オフセット・
+  固定/セル追従の範囲)は画像と全く同じ形式のため、`ImageModel`/`ShapeModel` 共通の
+  基底として抽出した `AnchorExtent`(旧`ImageExtent`。`FixedAnchorExtent`/
+  `CellSpanAnchorExtent`)をそのまま流用する。
+  - **z-order(要件10.3)の扱い**: Excelは画像・図形を区別せず、`drawing.xml` 内の出現順で
+    重なりを決める。この順序を保つため、`SheetModel.Images` を廃止し、
+    `SheetModel.DrawingObjects: IReadOnlyList<DrawingObjectModel>`
+    (`ImageModel`/`ShapeModel` はいずれも `DrawingObjectModel` を継承)に置き換える。
+    `ReadImages`/`ReadShapes` は個別に呼ばず、アンカーを1回だけ列挙しながら
+    `xdr:pic`/`xdr:sp` を判別して1つの順序付きリストを構築する
+    (`ReadDrawingObjects` に統合)。
+  - **プリセットの判定と非対応プリセットの扱い**: `@prst` の値を `ShapePresetType` へ
+    マッピングする静的な辞書と突き合わせる。一致しない場合(星形・フローチャート記号・
+    自由曲線 `custGeom` 等)は要件10.7により「サポート外要素」として扱う
+    (`ElementKind = "UnsupportedShapePreset"`)。
+  - **既存の`DetectUnsupportedElements`/`HasNonPictureDrawingObject`との整合**: 画像対応時に
+    「`xdr:pic` 以外が1つでもあれば `Drawing` として例外化」としていた判定を、
+    「`xdr:pic` および対応済みプリセットの `xdr:sp` 以外(非対応プリセットの`xdr:sp`、
+    接続線`xdr:cxnSp`、グループ`xdr:grpSp`、図表枠は別途検出済み)が1つでもあれば
+    `Drawing` として例外化」に拡張する。
+  - **幾何情報**: プリセット種別に加え、`a:avLst/a:gd`(調整ガイド)の `name`/`fmla="val N"`
+    を `name → N/100000.0` の辞書として読み取り、`ShapePresetType` ごとに定義した
+    ガイド名の並び順(例: `rightArrow` なら `["adj1", "adj2"]`)で `IReadOnlyList<double>`
+    に整形する(該当ガイドが無ければそのプリセットのECMA-376既定値を使う。既定値表は
+    Renderingレイヤーに置く。詳細は後述)。パス生成そのものはRenderingレイヤーの責務であり、
+    Parsingレイヤーは数値の抽出のみを行う。
+  - **塗りつぶし・枠線**: `xdr:spPr/a:solidFill` は単色、`a:gradFill/a:gsLst` は
+    先頭と末尾の `a:gs` の色のみを開始色・終了色として採用し(要件10.6)、
+    `a:lin/@ang`(60,000分の1度)があれば角度として読み取る(無ければ既定角度0度=左から右)。
+    `a:noFill` は塗りなし(`Fill = null`)。枠線は `a:ln` の `a:solidFill` の色と
+    `@w`(EMU)から変換した太さを読み取り、`a:ln` 自体が無い/`a:noFill` の場合は
+    `Outline = null` とする。
+  - **回転**: `xdr:spPr/a:xfrm/@rot`(60,000分の1度、時計回り)を `RotationDegrees`
+    (度)に変換する。座標系が「Y軸下方向」(単位と座標系の節)のため、そのままの符号で
+    時計回りの回転として扱える。
+  - **テキスト**: `xdr:txBody` があれば `a:bodyPr/@anchor`(t/ctr/b)を垂直配置、
+    各 `a:p/a:pPr/@algn`(l/ctr/r)を段落ごとの水平配置として読み取り、
+    `a:r/a:rPr`(サイズ・太字・斜体・色・書体)と `a:t` からセルの `FontStyle` と
+    同じ型で `ShapeTextRun` を構築する。折り返し(禁則処理を含まない単純な幅基準の折り返し)
+    はLayoutレイヤーが `IFontMetricsProvider` を使って行うため、Parsingレイヤーでは
+    段落・ランをそのまま保持するだけで折り返しは行わない。
+  - **信頼できない入力に対する安全弁(要件10.8)**: 画像と同様、図形も無条件に信頼できる
+    入力ではない。以下の上限を設ける。
+    - 1シートあたりの図形アンカー数の上限(既定50個。画像の上限とは独立にカウントする)。
+      超過分は `unsupportedElements` の設定に従う(`ElementKind = "TooManyShapes"`)。
+    - 図形1つに含まれる全テキスト(段落・ランを連結した文字数)の上限(既定2000文字)。
+      超過時も同様(`ElementKind = "ShapeTextTooLong"`)。文字数を実際に折り返し計算へ
+      渡す前に拒否することで、極端に長い文字列に対する折り返し計算量を避ける。
+    - 幅・高さの計算に使う列/行数の上限(既定4096)は画像と共通の
+      `SpanWidthPt`/`SpanHeightPt` をそのまま流用するため、別途の上限追加は不要。
 
 ### 2. ReportDefinition レイヤー (`Utsushi.ReportDefinition`)
 
@@ -208,15 +260,28 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   - ページヘッダー/フッターの書式コード展開と配置(要件3.7〜3.9)
   - 結合セルの矩形統合
   - セル内テキストのフォントメトリクスに基づく配置(左右/上下揃え、インデント、縮小表示)
-  - **画像の配置(要件9)**: `SheetModel.Images` の各画像について、アンカーセルの位置(結合セルの
+  - **画像・図形の配置(要件9, 10)**: `SheetModel.DrawingObjects`(画像・図形が`drawing.xml`の
+    出現順で混在するリスト)を先頭から順に処理し、アンカーセルの位置(結合セルの
     矩形計算と同じ`SheetGrid`の列幅/行高累積・拡大縮小の適用)にセル内オフセットを加えて
     ページ左上原点のポイント座標へ変換する。
     2セルアンカー(対角セル指定)の幅・高さは、`SheetGrid`(印刷範囲にクリップされた格子)
     ではなく`SheetModel`から直接取得した列幅/行高で計算する。`SheetGrid`は印刷範囲外の列/行を
     「幅0」として保持しないため、これを流用すると対角セルが印刷範囲のすぐ外にあるだけで
-    画像が実際より小さく計算されてしまう(非表示列/行は0として扱う点は結合セル等の既存ロジックと同様。
-    Excel自体は印刷範囲の設定に関わらず実際の列幅で画像サイズを決めるため、これに合わせる)。
-    改ページ位置をまたぐ画像の扱いは「未決事項」を参照。
+    画像・図形が実際より小さく計算されてしまう(非表示列/行は0として扱う点は結合セル等の
+    既存ロジックと同様。Excel自体は印刷範囲の設定に関わらず実際の列幅でサイズを決めるため、
+    これに合わせる)。改ページ位置をまたぐ画像・図形の扱いは「未決事項」を参照。
+    `DrawingObjects`の出現順をそのまま`DrawCommand`の出現順として`Commands`リストに
+    追加する(セル内容の描画コマンドより後ろにまとめて追加する点は画像単独の場合と同じ。
+    「エラーハンドリング方針」節の直前の描画順序の説明を参照)。
+  - **図形内テキストの折り返し・配置(要件10.4)**: `ShapeModel.Text`(段落・ランの木構造)を、
+    セル内テキストの折り返しと同じ`IFontMetricsProvider`を使い、図形の矩形幅を基準に
+    単純な幅基準の折り返し(禁則処理なし。セル内テキストの折り返しと同水準)で複数行に
+    分割する。各行の水平位置は段落の`HAlign`、行全体の垂直位置は`VAlign`と行数から
+    (セル内テキストの上下揃えと同じ考え方で)算出し、`ShapeCommand.TextLines`の
+    各`ShapeTextLine`として矩形内のポイント座標(回転前、シェイプ自身のローカル座標)を
+    確定させる。回転の適用はRenderingレイヤーの責務とする(座標変換をLayoutに持ち込むと
+    `PagedLayout`が回転行列という新しい概念を持つことになり、既存の「軸に平行な矩形の
+    集まり」という単純なモデルから外れるため)。
 - **主なインターフェース**:
   ```csharp
   public interface IReportLayoutEngine
@@ -236,9 +301,10 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       void Render(PagedLayout layout, Stream output);
   }
   ```
-- 1ページ = 1 `SKCanvas` への描画。矩形塗りつぶし(背景)→罫線→テキスト→**画像**の順で描画する。
-  Excelはシート上に浮かぶ描画オブジェクト(画像等)をセルの内容より上のレイヤーとして描画するため、
-  画像は他のセル内容と重なる場合に最前面へ来るようにする(要件9.3)。
+- 1ページ = 1 `SKCanvas` への描画。矩形塗りつぶし(背景)→罫線→テキスト→**画像・図形**
+  (`drawing.xml`の出現順)の順で描画する。Excelはシート上に浮かぶ描画オブジェクト
+  (画像・図形等)をセルの内容より上のレイヤーとして描画するため、画像・図形は他のセル内容と
+  重なる場合に最前面へ来るようにする(要件9.3, 10.3)。
 - **画像の描画(要件9)**: `ImageCommand` は `SKBitmap.Decode(byte[])`でデコードし、
   `SKCanvas.DrawBitmap(bitmap, destRect)` で `ImageCommand.Rect` へ描画する
   (SkiaSharp 2.88.8で利用可能な標準API)。既存の `ToSkRect(RectPt)` をそのまま使う。
@@ -246,6 +312,42 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   `SKBitmap.Decode` で実際に展開する前に `SKBitmap.DecodeBounds` で宣言上のピクセル寸法を確認し、
   上限(既定4096px)を超える場合はデコードせず `PdfRenderingException` とする(要件9.6。
   ピクセル爆弾対策。詳細はParsingレイヤー節「信頼できない入力に対する安全弁」を参照)。
+- **図形の描画(要件10)**: `ShapeCommand` ごとに、回転がある場合は
+  `canvas.Save()` → `canvas.RotateDegrees(RotationDegrees, centerX, centerY)`
+  (中心は`Rect`の中心)→ 描画 → `canvas.Restore()` で図形本体とテキストの両方を
+  まとめて回転させる(要件10.5)。
+  - **パス生成**: `ShapePresetType`ごとに、`Rect`のローカル座標(左上原点、幅・高さ)と
+    `AdjustmentValues`(Parsingレイヤーが`a:avLst`から抽出済み。要素が無ければ
+    ECMA-376の既定値を`ShapeGeometryBuilder`内の定数表から補う)から`SKPath`を組み立てる
+    `ShapeGeometryBuilder`をRenderingレイヤー内に新設する。
+    - `rect`: そのままの矩形。
+    - `roundRect`: 角丸半径 = `min(幅, 高さ) * adj1`(既定`adj1 = 0.16667`)。
+    - `ellipse`: `Rect`に内接する楕円。
+    - `triangle`: 上辺中央の頂点+下辺の二等辺三角形(既定は二等辺。`adj1`は頂点の水平位置、
+      既定0.5=中央)。
+    - `rightArrow`/`leftArrow`/`upArrow`/`downArrow`: 軸方向の矢尻(幅比`adj2`、既定0.5)と
+      軸に垂直な向きの軸の太さ比(`adj1`、既定0.5)から7点の矢印多角形を組む
+      (ECMA-376 `ST_ShapeType`の`rightArrow`定義に準拠、他3方向は90度単位の回転で導出)。
+    - `leftRightArrow`/`upDownArrow`: 両端に矢尻を持つ形状として、上記の片方向矢印の
+      パス生成を両端に適用する。
+    - `wedgeRectCallout`/`wedgeRoundRectCallout`/`wedgeEllipseCallout`: 本体(矩形/角丸矩形/楕円)
+      に加え、`adj1`,`adj2`(既定 -0.25, 0.25。本体に対する引き出し先端の相対位置)から
+      吹き出しの引き出し三角形を1つ追加する。
+    - 上記いずれのプリセットも「対応済み一覧に限定する」設計(要件10.1補足)のため、
+      `custGeom`(自由曲線)や一覧外の`prst`値はParsingレイヤーの時点で
+      サポート外要素として弾かれ、ここには到達しない。
+  - **塗りつぶし**: `Fill`が`SolidShapeFill`なら`SKPaint.Color`、
+    `LinearGradientShapeFill`なら`SKShader.CreateLinearGradient`で`Rect`の対角線相当の
+    2点(開始色→終了色、`AngleDegrees`をもとに`Rect`の中心から角度方向に伸ばした2点)を
+    グラデーションの始点・終点とするシェーダーを`SKPaint.Shader`に設定して`SKCanvas.DrawPath`
+    (`SKPaintStyle.Fill`)する。`Fill`が`null`(`noFill`)なら塗りつぶしを描画しない。
+  - **枠線**: `Outline`があれば同じ`SKPath`を`SKPaintStyle.Stroke`・`StrokeWidth = WidthPt`で
+    描画する。`null`なら描画しない。
+  - **テキスト**: `TextLines`の各`ShapeTextLine`を、セル内テキスト描画と同じフォント解決・
+    太字/斜体合成のロジック(既存の`DrawText`相当の処理を再利用)で描画する。
+    座標はLayoutレイヤーが算出済みの(回転前の)ローカル座標であり、
+    シェイプ本体と同じ`Save`/`RotateDegrees`/`Restore`のブロック内で描画することで
+    回転が正しく反映される。
 - 出力するPDFのバージョンは SkiaSharp の PDF バックエンドが生成する **PDF 1.4** とする(要件5.3)。
 - 対象帳票が使用するフォントが実行環境に存在しない場合は `FontNotAvailableException` で失敗させる
   (`FontResolver` の既定は厳格モード)。実行時の暗黙フォールバックによる見た目崩れを避けるため。
@@ -289,23 +391,63 @@ public sealed record SheetModel(
     IReadOnlySet<int> HiddenColumns,      // 非表示行/列は印刷されないため保持する
     IReadOnlySet<int> HiddenRows,
     PageSetupModel PageSetup,
-    IReadOnlyList<ImageModel> Images);    // シートに埋め込まれた画像(要件9)
+    IReadOnlyList<DrawingObjectModel> DrawingObjects); // シート上の画像・図形(要件9, 10)。drawing.xmlの出現順(=重なり順)。
+
+// シートに浮かぶ描画オブジェクト(画像・図形)の共通の位置決め情報。
+public abstract record DrawingObjectModel(
+    CellAddress AnchorCell,               // アンカー左上セル
+    PointPt AnchorOffset,                 // アンカーセル左上からのオフセット(pt)
+    AnchorExtent Extent);
 
 // 画像(要件9)。ContentTypeがラスター形式の許可リスト外の場合はサポート外要素として扱う。
 public sealed record ImageModel(
     byte[] Data,
     string ContentType,                   // 例: "image/png"
-    CellAddress AnchorCell,               // アンカー左上セル
-    PointPt AnchorOffset,                 // アンカーセル左上からのオフセット(pt)
-    ImageExtent Extent);
+    CellAddress AnchorCell,
+    PointPt AnchorOffset,
+    AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
 
-public abstract record ImageExtent;
+// 図形(要件10)。対応済みプリセット一覧に含まれないprstGeomはサポート外要素として扱う。
+public sealed record ShapeModel(
+    ShapePresetType Preset,
+    IReadOnlyList<double> AdjustmentValues, // a:avLstのガイド値。プリセットごとに定めた順序で並ぶ。空なら既定値を使う
+    double RotationDegrees,               // a:xfrm/@rotから変換。時計回り
+    ShapeFill? Fill,                      // nullはnoFill(塗りつぶし無し)
+    ShapeOutline? Outline,                // nullは枠線無し
+    ShapeTextBody? Text,                  // nullはxdr:txBody無し
+    CellAddress AnchorCell,
+    PointPt AnchorOffset,
+    AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
+
+public enum ShapePresetType
+{
+    Rect, RoundRect, Ellipse, Triangle,
+    RightArrow, LeftArrow, UpArrow, DownArrow, LeftRightArrow, UpDownArrow,
+    WedgeRectCallout, WedgeRoundRectCallout, WedgeEllipseCallout,
+}
+
+public abstract record ShapeFill;
+public sealed record SolidShapeFill(ArgbColor Color) : ShapeFill;
+public sealed record LinearGradientShapeFill(ArgbColor StartColor, ArgbColor EndColor, double AngleDegrees) : ShapeFill;
+
+public sealed record ShapeOutline(ArgbColor Color, double WidthPt);
+
+// 段落・ランの構造はOOXMLのa:pPr/a:rPrにあわせる。折り返しはLayoutレイヤーが行う(未折り返しの原文)。
+public sealed record ShapeTextBody(
+    IReadOnlyList<ShapeTextParagraph> Paragraphs,
+    VerticalAlignment VAlign);            // a:bodyPr/@anchor
+public sealed record ShapeTextParagraph(
+    IReadOnlyList<ShapeTextRun> Runs,
+    HorizontalAlignment HAlign);          // a:pPr/@algn
+public sealed record ShapeTextRun(string Text, FontStyle Font);
+
+public abstract record AnchorExtent;
 
 // oneCellAnchor相当: セルに対して固定サイズ(セルの拡大縮小に連動しない)。
-public sealed record FixedImageExtent(double WidthPt, double HeightPt) : ImageExtent;
+public sealed record FixedAnchorExtent(double WidthPt, double HeightPt) : AnchorExtent;
 
 // twoCellAnchor相当: 対角のセル+オフセットで範囲が決まる(セルの拡大縮小に連動)。
-public sealed record CellSpanImageExtent(CellAddress ToCell, PointPt ToOffset) : ImageExtent;
+public sealed record CellSpanAnchorExtent(CellAddress ToCell, PointPt ToOffset) : AnchorExtent;
 
 public sealed record CellModel(
     string? Value,                        // Excelが保持している生の値
@@ -355,6 +497,18 @@ public sealed record LineCommand(
 public sealed record TextCommand(
     PointPt Origin, string Text, FontStyle Font, TextAnchor Anchor, RectPt? ClipRect) : DrawCommand;
 public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType) : DrawCommand;
+
+// 図形(要件10)。Rect/TextLinesの座標は回転前のローカル座標。回転はRenderingレイヤーが適用する。
+public sealed record ShapeCommand(
+    RectPt Rect,
+    ShapePresetType Preset,
+    IReadOnlyList<double> AdjustmentValues,
+    double RotationDegrees,
+    ShapeFill? Fill,
+    ShapeOutline? Outline,
+    IReadOnlyList<ShapeTextLine> TextLines) : DrawCommand;
+
+public sealed record ShapeTextLine(PointPt Origin, string Text, FontStyle Font, TextAnchor Anchor);
 ```
 
 `TextCommand.Origin` の X は `Anchor`(Left/Center/Right)の基準点、Y はベースライン位置を表す。
@@ -366,10 +520,12 @@ public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType) 
 - 例外階層は `UtsushiException`(`Utsushi.Core.Exceptions`)を基底とし、以下を派生させる。
   - `ReportDefinitionNotFoundException`(要件1.4)
   - `ReportStructureMismatchException`(要件1.4: シート名・セル番地の不一致)
-  - `UnsupportedWorkbookElementException`(要件1.5, 9.4, 9.6。`ElementKind`は`"Drawing"`/`"Chart"`/
-    `"LegacyDrawing"`/`"ExternalReference"`に加え、デコード不能または申告と実バイト列が
-    一致しない画像形式を示す`"UnsupportedImageFormat"`、画像枚数の上限超過を示す
-    `"TooManyImages"`、画像サイズの上限超過を示す`"ImageTooLarge"`を持つ)
+  - `UnsupportedWorkbookElementException`(要件1.5, 9.4, 9.6, 10.7, 10.8。`ElementKind`は
+    `"Drawing"`/`"Chart"`/`"LegacyDrawing"`/`"ExternalReference"`に加え、デコード不能または
+    申告と実バイト列が一致しない画像形式を示す`"UnsupportedImageFormat"`、画像枚数の上限超過を
+    示す`"TooManyImages"`、画像サイズの上限超過を示す`"ImageTooLarge"`、対応済み一覧に無い
+    プリセットジオメトリを示す`"UnsupportedShapePreset"`、図形個数の上限超過を示す
+    `"TooManyShapes"`、図形内テキストの文字数上限超過を示す`"ShapeTextTooLong"`を持つ)
   - `SubstitutionKeyNotFoundException` / `RequiredSubstitutionValueMissingException`(要件2.3, 2.4)
   - `InvalidCellOverrideAddressException`(要件2.8。セル番地直接指定がA1形式として解釈できない場合)
   - `NonAnchorMergedCellOverrideException`(要件2.9。セル番地直接指定の対象が結合セル範囲の非アンカー位置の場合)
@@ -429,19 +585,23 @@ public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType) 
   対象帳票で必要になった時点で要件化する。
   `&F`(ファイル名)は、Utsushi が Stream を入力に取り元のファイル名を持たないため、
   帳票コードを代わりに展開している。
-- **改ページをまたぐ画像**(要件9): 画像のアンカー左上セルが属するページにのみ画像全体を
-  配置し、他のページには何も描画しない(結合セルのような「見えている部分だけ切り出す」対応は
+- **改ページをまたぐ画像・図形**(要件9, 10): 画像・図形のアンカー左上セルが属するページにのみ
+  全体を配置し、他のページには何も描画しない(結合セルのような「見えている部分だけ切り出す」対応は
   行わない)。ページ全体からはみ出す部分は `SKCanvas` が自然にクリップするため見た目が崩れる
-  ことはないが、Excel側で画像が2ページ目に一部かかるレイアウトを組んでいる場合、
-  そのページには何も表示されない点でExcelの見た目と異なる。会社ロゴのような
+  ことはないが、Excel側で2ページ目に一部かかるレイアウトを組んでいる場合、
+  そのページには何も表示されない点でExcelの見た目と異なる。会社ロゴや注記の吹き出しのような
   「常に1ページの決まった位置に収まる」用途を主眼に置いた割り切りであり、
   対象帳票で実際に問題になった場合に改めて対応する。
-- **図形(シェイプ)対応**(要件9.5): テキストボックス・矢印・オートシェイプ・グループ化された
-  図形などは、画像とは別のプリセット形状ごとのパス生成・テキスト描画が必要でスコープが大きいため、
-  意図的に別フェーズとする。現時点では要件1.5の「サポート外要素」のまま
-  (`unsupportedElements`設定に従い無視/エラー)。対応時は本設計書に新しい節を追加し、
-  `.kiro/specs/`に要件を追記してから着手する。
 - **画像形式の拡張**(要件9.4): 現時点でサポートするのはPNG/JPEG/GIF/BMPのみ。
   EMF/WMF(Excelがベクタ図形やクリップボード貼り付け画像を保存する際によく使う形式)は
   SkiaSharpが直接デコードできず、対応するには追加の変換ライブラリ(ライセンス確認が必要)か
   自前のパーサが要る。対象帳票で実際に必要になった時点で改めて検討する。
+- **図形プリセットの拡張・接続線・グループ化**(要件10.1, 10.3, 10.7): 対応済みプリセットは
+  自社帳票での実用上の必要性から選んだ13種にとどめており、星形・フローチャート記号・
+  自由曲線(`custGeom`)は「サポート外要素」のままである。接続線(`xdr:cxnSp`)と
+  グループ化された図形(`xdr:grpSp`)も対象外(補足10.3)。いずれも対象帳票で
+  実際に必要になった時点で要件を追記して拡張する。
+- **グラデーションの多段階・角度の完全再現**(要件10.6): 現時点では開始色・終了色の2点のみの
+  線形グラデーションで近似しており、3点以上のグラデーションストップやExcel特有の
+  グラデーション角度の細かい仕様は再現しない。対象帳票で見た目の差異が問題になった場合に
+  改めて検討する。
