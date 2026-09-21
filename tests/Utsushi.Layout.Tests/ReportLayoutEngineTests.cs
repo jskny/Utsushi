@@ -437,7 +437,7 @@ namespace Utsushi.Layout.Tests
                 new HashSet<int>(),
                 new HashSet<int>(),
                 NoMarginA4(),
-                Array.Empty<ImageModel>());
+                Array.Empty<DrawingObjectModel>());
 
             var lines = Lines(Assert.Single(Compute(sheet).Pages)).ToList();
 
@@ -485,7 +485,7 @@ namespace Utsushi.Layout.Tests
                 new HashSet<int>(),
                 new HashSet<int>(),
                 NoMarginA4(rowBreaks: new[] { 2 }),
-                Array.Empty<ImageModel>());
+                Array.Empty<DrawingObjectModel>());
 
             var layout = Compute(sheet);
             Assert.Equal(2, layout.PageCount);
@@ -741,8 +741,8 @@ namespace Utsushi.Layout.Tests
                 "image/png",
                 CellAddress.Parse("B2"),
                 new PointPt(2.0, 3.0),
-                new FixedImageExtent(15.0, 8.0));
-            sheet = sheet with { Images = new[] { image } };
+                new FixedAnchorExtent(15.0, 8.0));
+            sheet = sheet with { DrawingObjects = new[] { image } };
 
             var page = Assert.Single(Compute(sheet).Pages);
             var command = Assert.Single(Images(page));
@@ -770,8 +770,8 @@ namespace Utsushi.Layout.Tests
                 "image/png",
                 CellAddress.Parse("A1"),
                 new PointPt(0.0, 0.0),
-                new CellSpanImageExtent(CellAddress.Parse("C2"), new PointPt(4.0, 5.0)));
-            sheet = sheet with { Images = new[] { image } };
+                new CellSpanAnchorExtent(CellAddress.Parse("C2"), new PointPt(4.0, 5.0)));
+            sheet = sheet with { DrawingObjects = new[] { image } };
 
             var page = Assert.Single(Compute(sheet).Pages);
             var command = Assert.Single(Images(page));
@@ -802,8 +802,8 @@ namespace Utsushi.Layout.Tests
                 CellAddress.Parse("C1"),
                 new PointPt(0.0, 0.0),
                 // 印刷範囲(A1:C3)の外にあるE2まで(D列・E列は印刷範囲外)。
-                new CellSpanImageExtent(CellAddress.Parse("E2"), new PointPt(0.0, 0.0)));
-            sheet = sheet with { Images = new[] { image } };
+                new CellSpanAnchorExtent(CellAddress.Parse("E2"), new PointPt(0.0, 0.0)));
+            sheet = sheet with { DrawingObjects = new[] { image } };
 
             var page = Assert.Single(Compute(sheet).Pages);
             var command = Assert.Single(Images(page));
@@ -821,14 +821,194 @@ namespace Utsushi.Layout.Tests
                 rows: 4, columns: 2, columnWidth: 10.0, rowHeightPt: 20.0,
                 pageSetup: NoMarginA4(rowBreaks: new[] { 3 }));
             var image = new ImageModel(
-                Array.Empty<byte>(), "image/png", CellAddress.Parse("A1"), default, new FixedImageExtent(5.0, 5.0));
-            sheet = sheet with { Images = new[] { image } };
+                Array.Empty<byte>(), "image/png", CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new[] { image } };
 
             var layout = Compute(sheet);
             Assert.Equal(2, layout.PageCount);
 
             Assert.Single(Images(layout.Pages[0]));
             Assert.Empty(Images(layout.Pages[1]));
+        }
+
+        // -- 要件10: シート内図形 -------------------------------------------------
+
+        [Fact]
+        public void 固定サイズの図形はアンカーセルの位置とオフセットからページ座標に変換される()
+        {
+            const double columnWidthChars = 10.0;
+            const double rowHeightPt = 20.0;
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+
+            var sheet = UniformSheet(
+                rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
+            var shape = new ShapeModel(
+                ShapePresetType.Rect,
+                Array.Empty<double>(),
+                0,
+                null,
+                null,
+                null,
+                CellAddress.Parse("B2"),
+                new PointPt(2.0, 3.0),
+                new FixedAnchorExtent(15.0, 8.0));
+            sheet = sheet with { DrawingObjects = new[] { shape } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Shapes(page));
+
+            Assert.Equal(columnWidthPt + 2.0, command.Rect.Left, 3);
+            Assert.Equal(rowHeightPt + 3.0, command.Rect.Top, 3);
+            Assert.Equal(15.0, command.Rect.Width, 3);
+            Assert.Equal(8.0, command.Rect.Height, 3);
+            Assert.Equal(ShapePresetType.Rect, command.Preset);
+        }
+
+        [Fact]
+        public void 二セルアンカーの図形は対角セルまでの幅高さに変換される()
+        {
+            const double columnWidthChars = 10.0;
+            const double rowHeightPt = 20.0;
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+
+            var sheet = UniformSheet(
+                rows: 5, columns: 5, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
+            var shape = new ShapeModel(
+                ShapePresetType.Ellipse,
+                Array.Empty<double>(),
+                0,
+                null,
+                null,
+                null,
+                CellAddress.Parse("A1"),
+                new PointPt(0.0, 0.0),
+                new CellSpanAnchorExtent(CellAddress.Parse("C2"), new PointPt(4.0, 5.0)));
+            sheet = sheet with { DrawingObjects = new[] { shape } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Shapes(page));
+
+            Assert.Equal((columnWidthPt * 2) + 4.0, command.Rect.Width, 3);
+            Assert.Equal(rowHeightPt + 5.0, command.Rect.Height, 3);
+        }
+
+        [Fact]
+        public void 改ページをまたぐ図形はアンカーセルが属するページにのみ配置される()
+        {
+            var sheet = UniformSheet(
+                rows: 4, columns: 2, columnWidth: 10.0, rowHeightPt: 20.0,
+                pageSetup: NoMarginA4(rowBreaks: new[] { 3 }));
+            var shape = new ShapeModel(
+                ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null,
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new[] { shape } };
+
+            var layout = Compute(sheet);
+            Assert.Equal(2, layout.PageCount);
+
+            Assert.Single(Shapes(layout.Pages[0]));
+            Assert.Empty(Shapes(layout.Pages[1]));
+        }
+
+        [Fact]
+        public void 図形内テキストは矩形幅で折り返され複数行になる()
+        {
+            var sheet = UniformSheet(rows: 2, columns: 2, columnWidth: 40.0, rowHeightPt: 60.0, pageSetup: NoMarginA4());
+            var font = new FontStyle("Calibri", 10.0, false, false, UnderlineStyle.None, false, ArgbColor.Black);
+            var text = new ShapeTextBody(
+                new[] { new ShapeTextParagraph(new[] { new ShapeTextRun("AAAAAAAAAA", font) }, HorizontalAlignment.Left) },
+                VerticalAlignment.Top);
+
+            // 半角文字幅は0.5em(=5pt)。矩形幅33pt・内側余白4pt×2ぶんを引くと文字領域は25pt=5文字ぶん。
+            var shape = new ShapeModel(
+                ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, text,
+                CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(33.0, 60.0));
+            sheet = sheet with { DrawingObjects = new[] { shape } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Shapes(page));
+
+            Assert.Collection(
+                command.TextLines,
+                line => Assert.Equal("AAAAA", line.Text),
+                line => Assert.Equal("AAAAA", line.Text));
+        }
+
+        [Fact]
+        public void 図形内テキストの垂直配置がCenterのとき上下中央にレイアウトされる()
+        {
+            var sheet = UniformSheet(rows: 2, columns: 2, columnWidth: 40.0, rowHeightPt: 60.0, pageSetup: NoMarginA4());
+            var font = new FontStyle("Calibri", 10.0, false, false, UnderlineStyle.None, false, ArgbColor.Black);
+            var textTop = new ShapeTextBody(
+                new[] { new ShapeTextParagraph(new[] { new ShapeTextRun("A", font) }, HorizontalAlignment.Left) },
+                VerticalAlignment.Top);
+            var textCenter = textTop with { VAlign = VerticalAlignment.Center };
+
+            var topShape = new ShapeModel(
+                ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, textTop,
+                CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(60.0, 60.0));
+            var centerShape = topShape with { Text = textCenter };
+            sheet = sheet with { DrawingObjects = new[] { topShape, centerShape } };
+
+            var commands = Shapes(Assert.Single(Compute(sheet).Pages)).ToList();
+            var topLine = Assert.Single(commands[0].TextLines);
+            var centerLine = Assert.Single(commands[1].TextLines);
+
+            Assert.True(centerLine.Origin.Y > topLine.Origin.Y, "中央揃えの行は上揃えより下に来る");
+        }
+
+        [Fact]
+        public void 画像と図形が混在する場合はDrawingObjectsの出現順を保つ()
+        {
+            var sheet = UniformSheet(rows: 2, columns: 2, columnWidth: 40.0, rowHeightPt: 60.0, pageSetup: NoMarginA4());
+            var image = new ImageModel(
+                Array.Empty<byte>(), "image/png", CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            var shape = new ShapeModel(
+                ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null,
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new DrawingObjectModel[] { shape, image, shape } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var drawingCommands = page.Commands.Where(c => c is ImageCommand or ShapeCommand).ToList();
+
+            Assert.Collection(
+                drawingCommands,
+                c => Assert.IsType<ShapeCommand>(c),
+                c => Assert.IsType<ImageCommand>(c),
+                c => Assert.IsType<ShapeCommand>(c));
+        }
+
+        [Fact]
+        public void 図形内テキストの折り返しは拡大縮小率によらず同じ行数になる()
+        {
+            // 回帰テスト(layout-fidelity-reviewer指摘): 図形の矩形はToPageRectで_scaleが
+            // 掛かって縮むのに、内側のテキストのフォントサイズ・余白に_scaleが適用されていないと、
+            // 縮小率を持つ帳票では同じ文字数でもより多くの行に折り返されてしまっていた。
+            // 矩形とフォントの両方に同じ_scaleが掛かれば、折り返し行数は縮小率によらず一定になるはず。
+            var font = new FontStyle("Calibri", 10.0, false, false, UnderlineStyle.None, false, ArgbColor.Black);
+            var text = new ShapeTextBody(
+                new[] { new ShapeTextParagraph(new[] { new ShapeTextRun("AAAAAAAAAA", font) }, HorizontalAlignment.Left) },
+                VerticalAlignment.Top);
+
+            ShapeCommand Build(PageScaling scaling)
+            {
+                var sheet = UniformSheet(
+                    rows: 2, columns: 2, columnWidth: 40.0, rowHeightPt: 60.0, pageSetup: NoMarginA4(scaling: scaling));
+                var shape = new ShapeModel(
+                    ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, text,
+                    CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(33.0, 60.0));
+                sheet = sheet with { DrawingObjects = new[] { shape } };
+
+                var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider());
+                var page = Assert.Single(engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+                return Assert.Single(page.Commands.OfType<ShapeCommand>());
+            }
+
+            var full = Build(PageScaling.Normal);
+            var half = Build(new PageScaling(50, null, null));
+
+            Assert.Equal(2, full.TextLines.Count);
+            Assert.Equal(full.TextLines.Count, half.TextLines.Count);
         }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
+using A = DocumentFormat.OpenXml.Drawing;
 using static Utsushi.SampleGenerator.SampleStyles;
 
 namespace Utsushi.SampleGenerator
@@ -71,6 +72,24 @@ internal static class Program
         builder.SetImage(
             row: 1, column: 6, offsetXPt: 8.0, offsetYPt: 5.0, widthPt: 60.0, heightPt: 20.0,
             png: PlaceholderPng.CreateSolidColor(240, 80, r: 0x1F, g: 0x4E, b: 0x8C));
+
+        // 図形(要件10)。合計と明細表の間の余白行(9行目)に、対応済みプリセットのうち
+        // 代表的な種類(基本図形+回転+テキスト、矢印、吹き出し+テキスト)をまとめて配置し、
+        // ゴールデンテストで一括して検証する。
+        builder.SetShape(
+            row: 9, column: 1, offsetXPt: 0.0, offsetYPt: -6.0, widthPt: 70.0, heightPt: 22.0,
+            preset: A.ShapeTypeValues.RoundRectangle,
+            fillHex: null, outlineHex: "C00000", rotationDegrees: -12.0, text: "見本");
+
+        builder.SetShape(
+            row: 9, column: 3, offsetXPt: 0.0, offsetYPt: 2.0, widthPt: 40.0, heightPt: 14.0,
+            preset: A.ShapeTypeValues.RightArrow,
+            fillHex: "2E8B57", outlineHex: null);
+
+        builder.SetShape(
+            row: 9, column: 4, offsetXPt: 6.0, offsetYPt: 0.0, widthPt: 110.0, heightPt: 24.0,
+            preset: A.ShapeTypeValues.WedgeRoundRectangleCallout,
+            fillHex: "FFFFFF", outlineHex: "000000", text: "ご確認ください");
 
         // 宛先・発行情報
         builder.Merge("A3:C3");

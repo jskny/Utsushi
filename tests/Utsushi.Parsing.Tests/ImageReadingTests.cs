@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.Parsing.Model;
@@ -22,14 +23,14 @@ namespace Utsushi.Parsing.Tests
             try
             {
                 var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
-                var image = Assert.Single(sheet.Images);
+                var image = Assert.Single(sheet.DrawingObjects.OfType<ImageModel>().ToList());
 
                 Assert.Equal("image/png", image.ContentType);
                 Assert.Equal(CellAddress.Parse("B3"), image.AnchorCell);
                 Assert.Equal(0.0, image.AnchorOffset.X);
                 Assert.Equal(0.0, image.AnchorOffset.Y);
 
-                var extent = Assert.IsType<FixedImageExtent>(image.Extent);
+                var extent = Assert.IsType<FixedAnchorExtent>(image.Extent);
                 Assert.Equal(60.0, extent.WidthPt, 3);
                 Assert.Equal(20.0, extent.HeightPt, 3);
             }
@@ -46,11 +47,11 @@ namespace Utsushi.Parsing.Tests
             try
             {
                 var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
-                var image = Assert.Single(sheet.Images);
+                var image = Assert.Single(sheet.DrawingObjects.OfType<ImageModel>().ToList());
 
                 Assert.Equal(CellAddress.Parse("B3"), image.AnchorCell);
 
-                var extent = Assert.IsType<CellSpanImageExtent>(image.Extent);
+                var extent = Assert.IsType<CellSpanAnchorExtent>(image.Extent);
                 Assert.Equal(CellAddress.Parse("D5"), extent.ToCell);
                 Assert.Equal(10.0, extent.ToOffset.X, 3);
                 Assert.Equal(5.0, extent.ToOffset.Y, 3);
@@ -68,7 +69,7 @@ namespace Utsushi.Parsing.Tests
             try
             {
                 var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
-                Assert.Empty(sheet.Images);
+                Assert.Empty(sheet.DrawingObjects.OfType<ImageModel>().ToList());
             }
             finally
             {
@@ -107,7 +108,7 @@ namespace Utsushi.Parsing.Tests
                 using var stream = File.OpenRead(path);
 
                 var workbook = _reader.Read(stream, options);
-                Assert.Single(workbook.Sheets[0].Images);
+                Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<ImageModel>().ToList());
             }
             finally
             {
@@ -116,9 +117,9 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 画像以外の図形はunsupportedElementsがerrorなら引き続き例外になる()
+        public void 接続線はunsupportedElementsがerrorなら引き続き例外になる()
         {
-            var path = ImageWorkbookFixtures.CreateWithNonPictureShape();
+            var path = ImageWorkbookFixtures.CreateWithConnectionShape();
             try
             {
                 var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
@@ -142,7 +143,7 @@ namespace Utsushi.Parsing.Tests
             try
             {
                 var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
-                Assert.Empty(sheet.Images);
+                Assert.Empty(sheet.DrawingObjects.OfType<ImageModel>().ToList());
             }
             finally
             {
@@ -175,7 +176,7 @@ namespace Utsushi.Parsing.Tests
             try
             {
                 var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
-                Assert.Equal(OpenXmlWorkbookReader.MaxImagesPerSheet, sheet.Images.Count);
+                Assert.Equal(OpenXmlWorkbookReader.MaxImagesPerSheet, sheet.DrawingObjects.OfType<ImageModel>().ToList().Count);
             }
             finally
             {

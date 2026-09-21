@@ -47,6 +47,34 @@ namespace Utsushi.Layout.Model
     /// <param name="ContentType">MIMEタイプ(例: <c>"image/png"</c>)。</param>
     public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType) : DrawCommand;
 
+    /// <summary>
+    /// 図形1つの描画(要件10)。他のセル内容(背景・罫線・文字)より最前面に描画される。
+    /// </summary>
+    /// <param name="Rect">配置先の矩形(ページ左上原点、ポイント単位、余白・拡大縮小適用済み)。</param>
+    /// <param name="Preset">プリセットジオメトリの種別。</param>
+    /// <param name="AdjustmentValues">
+    /// プリセットごとに定めた順序の調整ガイド値。ファイルに指定が無い位置は<see cref="double.NaN"/>で、
+    /// Renderingレイヤーがその位置のECMA-376既定値を補う。
+    /// </param>
+    /// <param name="RotationDegrees"><see cref="Rect"/>の中心を軸とした回転角(度、時計回り)。</param>
+    /// <param name="Fill">塗りつぶし。<c>null</c>は塗りつぶし無し。</param>
+    /// <param name="Outline">枠線。<c>null</c>は枠線無し。</param>
+    /// <param name="TextLines">
+    /// 図形内テキストの各行(折り返し・配置は確定済み)。座標は回転前のローカル座標であり、
+    /// 回転の適用はRenderingレイヤーの責務。
+    /// </param>
+    public sealed record ShapeCommand(
+        RectPt Rect,
+        ShapePresetType Preset,
+        IReadOnlyList<double> AdjustmentValues,
+        double RotationDegrees,
+        ShapeFill? Fill,
+        ShapeOutline? Outline,
+        IReadOnlyList<ShapeTextLine> TextLines) : DrawCommand;
+
+    /// <summary>図形内テキストの1行(要件10.4)。座標は<see cref="ShapeCommand.Rect"/>を基準とした、回転前のローカル座標。</summary>
+    public sealed record ShapeTextLine(PointPt Origin, string Text, FontStyle Font, TextAnchor Anchor);
+
     /// <summary>テキストのX座標の解釈。</summary>
     public enum TextAnchor
     {
@@ -77,7 +105,7 @@ namespace Utsushi.Layout.Model
     /// <param name="Orientation">印刷の向き。</param>
     /// <param name="WidthPt">ページ幅(向き適用後、ポイント)。</param>
     /// <param name="HeightPt">ページ高さ(向き適用後、ポイント)。</param>
-    /// <param name="Commands">描画命令(背景→罫線→テキスト→画像の順)。</param>
+    /// <param name="Commands">描画命令(背景→罫線→テキスト→画像・図形(drawing.xmlの出現順)の順)。</param>
     /// <param name="PageNumber">1始まりのページ番号。</param>
     /// <param name="RowRange">このページが表示する本文行の範囲(診断・テスト用)。</param>
     /// <param name="ColumnRange">このページが表示する本文列の範囲(診断・テスト用)。</param>

@@ -43,7 +43,7 @@ namespace Utsushi.Layout.Tests
                 new HashSet<int>(),
                 new HashSet<int>(),
                 pageSetup ?? PageSetupModel.Default,
-                Array.Empty<ImageModel>());
+                Array.Empty<DrawingObjectModel>());
         }
 
         public static ReportDefinition Definition(
@@ -85,5 +85,7 @@ namespace Utsushi.Layout.Tests
         public static IEnumerable<FillRectCommand> Fills(PageLayout page) => page.Commands.OfType<FillRectCommand>();
 
         public static IEnumerable<ImageCommand> Images(PageLayout page) => page.Commands.OfType<ImageCommand>();
+
+        public static IEnumerable<ShapeCommand> Shapes(PageLayout page) => page.Commands.OfType<ShapeCommand>();
     }
 }

@@ -117,8 +117,12 @@ namespace Utsushi.Parsing.Tests
         public static byte[] TinyPng() => Convert.FromBase64String(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
 
-        /// <summary>画像を含まない図形(<c>xdr:sp</c>)だけを含む最小の .xlsx を作る。</summary>
-        public static string CreateWithNonPictureShape()
+        /// <summary>
+        /// 画像でも対応済みプリセットの図形でもない描画オブジェクト(<c>xdr:cxnSp</c>接続線)だけを
+        /// 含む最小の .xlsx を作る。図形(要件10)対応後もこの種の要素は構造的に
+        /// サポート外(<c>ElementKind = "Drawing"</c>)であり続けることを検証するためのフィクスチャ。
+        /// </summary>
+        public static string CreateWithConnectionShape()
         {
             var path = Path.Combine(Path.GetTempPath(), "utsushi-image-test-" + Guid.NewGuid().ToString("N") + ".xlsx");
 
@@ -140,21 +144,21 @@ namespace Utsushi.Parsing.Tests
 
                 var drawingsPart = worksheetPart.AddNewPart<DrawingsPart>();
 
-                var shape = new Xdr.Shape(
-                    new Xdr.NonVisualShapeProperties(
-                        new Xdr.NonVisualDrawingProperties { Id = 2U, Name = "Rectangle" },
-                        new Xdr.NonVisualShapeDrawingProperties()),
+                var connectionShape = new Xdr.ConnectionShape(
+                    new Xdr.NonVisualConnectionShapeProperties(
+                        new Xdr.NonVisualDrawingProperties { Id = 2U, Name = "Connector" },
+                        new Xdr.NonVisualConnectorShapeDrawingProperties()),
                     new Xdr.ShapeProperties(
                         new A.Transform2D(
                             new A.Offset { X = 0L, Y = 0L },
                             new A.Extents { Cx = 914400L, Cy = 914400L }),
-                        new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
+                        new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.StraightConnector1 }));
 
                 var anchor = new Xdr.OneCellAnchor(
                     new Xdr.FromMarker(
                         new Xdr.ColumnId("0"), new Xdr.ColumnOffset("0"), new Xdr.RowId("0"), new Xdr.RowOffset("0")),
                     new Xdr.Extent { Cx = 914400L, Cy = 914400L },
-                    shape,
+                    connectionShape,
                     new Xdr.ClientData());
 
                 var drawing = new Xdr.WorksheetDrawing();

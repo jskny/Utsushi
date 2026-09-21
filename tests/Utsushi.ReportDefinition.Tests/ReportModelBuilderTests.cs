@@ -54,7 +54,7 @@ namespace Utsushi.ReportDefinition.Tests
                 8.43, 15.0,
                 new HashSet<int>(), new HashSet<int>(),
                 PageSetupModel.Default,
-                Array.Empty<ImageModel>());
+                Array.Empty<DrawingObjectModel>());
 
             return new WorkbookModel(new[] { sheet }, FontStyle.Default);
         }

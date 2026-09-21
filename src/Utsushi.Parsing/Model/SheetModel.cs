@@ -17,7 +17,10 @@ namespace Utsushi.Parsing.Model
     /// <param name="HiddenColumns">非表示の列番号(1始まり)。</param>
     /// <param name="HiddenRows">非表示の行番号(1始まり)。</param>
     /// <param name="PageSetup">ページ設定。</param>
-    /// <param name="Images">シートに埋め込まれた画像(要件9)。</param>
+    /// <param name="DrawingObjects">
+    /// シート上の画像・図形(要件9, 10)。<c>drawing.xml</c> の出現順を保持する
+    /// (Excelは画像・図形をこの順で重ねて描画するため)。
+    /// </param>
     public sealed record SheetModel(
         string Name,
         IReadOnlyDictionary<CellAddress, CellModel> Cells,
@@ -29,7 +32,7 @@ namespace Utsushi.Parsing.Model
         IReadOnlySet<int> HiddenColumns,
         IReadOnlySet<int> HiddenRows,
         PageSetupModel PageSetup,
-        IReadOnlyList<ImageModel> Images)
+        IReadOnlyList<DrawingObjectModel> DrawingObjects)
     {
         /// <summary>指定セルを取得する。存在しない場合は null。</summary>
         public CellModel? GetCell(CellAddress address) =>

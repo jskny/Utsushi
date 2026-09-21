@@ -14,8 +14,9 @@ namespace Utsushi.Rendering
     /// <remarks>
     /// <para>
     /// 入力は <see cref="PagedLayout"/> のみで、Excel やレイアウト計算の知識を持たない。
-    /// 1ページ = 1 <see cref="SKCanvas"/> とし、命令は背景 → 罫線 → テキスト → 画像の順
-    /// (Layout が並べた順)に描画する。画像はExcelと同様に他のセル内容より最前面になる(要件9.3)。
+    /// 1ページ = 1 <see cref="SKCanvas"/> とし、命令は背景 → 罫線 → テキスト → 画像・図形の順
+    /// (Layout が並べた順)に描画する。画像・図形はExcelと同様に他のセル内容より最前面になる
+    /// (要件9.3, 10.3)。
     /// </para>
     /// <para>
     /// 一度メモリ上のストリームへ完全に書き出し、成功した場合のみ出力先へ転送する。
@@ -163,6 +164,10 @@ namespace Utsushi.Rendering
                         DrawImage(canvas, image, reportCode, sheetName);
                         break;
 
+                    case ShapeCommand shape:
+                        DrawShape(canvas, shape);
+                        break;
+
                     default:
                         throw new PdfRenderingException(
                             $"未知の描画命令です: {command.GetType().Name}", reportCode, sheetName);
@@ -211,6 +216,106 @@ namespace Utsushi.Rendering
             }
 
             canvas.DrawBitmap(bitmap, ToSkRect(image.Rect));
+        }
+
+        /// <summary>図形を描画する(要件10)。他のセル内容より最前面に描画される。</summary>
+        private void DrawShape(SKCanvas canvas, ShapeCommand shape)
+        {
+            var skRect = ToSkRect(shape.Rect);
+            var hasRotation = Math.Abs(shape.RotationDegrees) > double.Epsilon;
+
+            if (hasRotation)
+            {
+                canvas.Save();
+                var centerX = (skRect.Left + skRect.Right) / 2f;
+                var centerY = (skRect.Top + skRect.Bottom) / 2f;
+                canvas.RotateDegrees((float)shape.RotationDegrees, centerX, centerY);
+            }
+
+            try
+            {
+                using var path = ShapeGeometryBuilder.Build(shape.Preset, shape.AdjustmentValues, skRect);
+
+                if (shape.Fill is { } fill)
+                {
+                    using var fillPaint = CreateShapeFillPaint(fill, skRect);
+                    canvas.DrawPath(path, fillPaint);
+                }
+
+                if (shape.Outline is { } outline)
+                {
+                    using var outlinePaint = new SKPaint
+                    {
+                        Color = ToSkColor(outline.Color),
+                        Style = SKPaintStyle.Stroke,
+                        StrokeWidth = (float)outline.WidthPt,
+                        IsAntialias = true,
+                    };
+                    canvas.DrawPath(path, outlinePaint);
+                }
+
+                // テキストは図形本体と同じ回転変換の内側で描画することで、回転が正しく反映される
+                // (design.md「Rendering レイヤー」参照)。ShapeTextLineはクリップ矩形を持たないため
+                // TextCommandへの変換ではClipRectをnullにする。
+                foreach (var line in shape.TextLines)
+                {
+                    DrawText(canvas, new TextCommand(line.Origin, line.Text, line.Font, line.Anchor, ClipRect: null));
+                }
+            }
+            finally
+            {
+                if (hasRotation)
+                {
+                    canvas.Restore();
+                }
+            }
+        }
+
+        private static SKPaint CreateShapeFillPaint(ShapeFill fill, SKRect rect)
+        {
+            var paint = new SKPaint
+            {
+                Style = SKPaintStyle.Fill,
+                IsAntialias = true,
+            };
+
+            switch (fill)
+            {
+                case SolidShapeFill solid:
+                    paint.Color = ToSkColor(solid.Color);
+                    break;
+
+                case LinearGradientShapeFill gradient:
+                    var (start, end) = GradientEndpoints(rect, gradient.AngleDegrees);
+                    paint.Shader = SKShader.CreateLinearGradient(
+                        start,
+                        end,
+                        new[] { ToSkColor(gradient.StartColor), ToSkColor(gradient.EndColor) },
+                        null,
+                        SKShaderTileMode.Clamp);
+                    break;
+            }
+
+            return paint;
+        }
+
+        /// <summary>
+        /// 矩形の中心から<paramref name="angleDegrees"/>方向に伸ばした2点を、線形グラデーションの
+        /// 始点・終点とする。角度によらず矩形全体を覆うよう、対角線の半分の長さぶん伸ばす。
+        /// </summary>
+        private static (SKPoint Start, SKPoint End) GradientEndpoints(SKRect rect, double angleDegrees)
+        {
+            var centerX = (rect.Left + rect.Right) / 2.0;
+            var centerY = (rect.Top + rect.Bottom) / 2.0;
+            var radians = angleDegrees * Math.PI / 180.0;
+            var dx = Math.Cos(radians);
+            var dy = Math.Sin(radians);
+
+            var halfDiagonal = Math.Sqrt((rect.Width * rect.Width) + (rect.Height * rect.Height)) / 2.0;
+
+            var start = new SKPoint((float)(centerX - (dx * halfDiagonal)), (float)(centerY - (dy * halfDiagonal)));
+            var end = new SKPoint((float)(centerX + (dx * halfDiagonal)), (float)(centerY + (dy * halfDiagonal)));
+            return (start, end);
         }
 
         private static void DrawLine(SKCanvas canvas, LineCommand line)

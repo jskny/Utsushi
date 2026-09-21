@@ -30,6 +30,50 @@ internal sealed class SpreadsheetBuilder
     private readonly Dictionary<int, double> _rowHeights = new();
     private readonly List<uint> _manualRowBreaks = new();
     private (int Row, int Column, double OffsetXPt, double OffsetYPt, double WidthPt, double HeightPt, byte[] Png)? _image;
+    private readonly List<ShapeSpec> _shapes = new();
+
+    /// <summary>図形(要件10)1つぶんの配置情報。</summary>
+    private readonly struct ShapeSpec
+    {
+        public ShapeSpec(
+            int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
+            A.ShapeTypeValues preset, string? fillHex, string? outlineHex, double rotationDegrees, string? text)
+        {
+            Row = row;
+            Column = column;
+            OffsetXPt = offsetXPt;
+            OffsetYPt = offsetYPt;
+            WidthPt = widthPt;
+            HeightPt = heightPt;
+            Preset = preset;
+            FillHex = fillHex;
+            OutlineHex = outlineHex;
+            RotationDegrees = rotationDegrees;
+            Text = text;
+        }
+
+        public int Row { get; }
+
+        public int Column { get; }
+
+        public double OffsetXPt { get; }
+
+        public double OffsetYPt { get; }
+
+        public double WidthPt { get; }
+
+        public double HeightPt { get; }
+
+        public A.ShapeTypeValues Preset { get; }
+
+        public string? FillHex { get; }
+
+        public string? OutlineHex { get; }
+
+        public double RotationDegrees { get; }
+
+        public string? Text { get; }
+    }
 
     public SpreadsheetBuilder(string sheetName)
     {
@@ -87,6 +131,19 @@ internal sealed class SpreadsheetBuilder
         int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt, byte[] png) =>
         _image = (row, column, offsetXPt, offsetYPt, widthPt, heightPt, png);
 
+    /// <summary>
+    /// シートに図形(要件10)を1つ追加する(oneCellAnchor)。複数回呼べば出現順に重なる。
+    /// </summary>
+    /// <param name="fillHex">塗りつぶし色(6桁16進、例: "1F4E8C")。nullは塗りつぶし無し。</param>
+    /// <param name="outlineHex">枠線色(6桁16進)。nullは枠線無し。</param>
+    /// <param name="rotationDegrees">回転角(度、時計回り)。</param>
+    /// <param name="text">図形内テキスト。nullはテキスト無し。</param>
+    public void SetShape(
+        int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
+        A.ShapeTypeValues preset, string? fillHex, string? outlineHex, double rotationDegrees = 0, string? text = null) =>
+        _shapes.Add(new ShapeSpec(
+            row, column, offsetXPt, offsetYPt, widthPt, heightPt, preset, fillHex, outlineHex, rotationDegrees, text));
+
     public void SetText(int row, int column, string? text, uint styleIndex = 0) =>
         _cells[Reference(row, column)] = (row, column, text, styleIndex, false);
 
@@ -127,9 +184,9 @@ internal sealed class SpreadsheetBuilder
         var worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
         worksheetPart.Worksheet = BuildWorksheet();
 
-        if (_image is { } image)
+        if (_image is not null || _shapes.Count > 0)
         {
-            AppendImage(worksheetPart, image);
+            AppendDrawingObjects(worksheetPart, _image, _shapes);
         }
 
         var sheets = workbookPart.Workbook.AppendChild(new Sheets());
@@ -373,13 +430,40 @@ internal sealed class SpreadsheetBuilder
         name.Any(c => char.IsWhiteSpace(c) || c > 0x7F) ? "'" + name.Replace("'", "''") + "'" : name;
 
     /// <summary>
-    /// 画像パート(<c>xdr:pic</c>、oneCellAnchor)をワークシートへ追加する。
+    /// 画像(<c>xdr:pic</c>)・図形(<c>xdr:sp</c>)を、1つの<c>DrawingsPart</c>にまとめて
+    /// 追加する(出現順=重なり順。要件10.3)。画像は指定されていれば図形より前に置く。
     /// </summary>
-    private static void AppendImage(
+    private static void AppendDrawingObjects(
         WorksheetPart worksheetPart,
-        (int Row, int Column, double OffsetXPt, double OffsetYPt, double WidthPt, double HeightPt, byte[] Png) image)
+        (int Row, int Column, double OffsetXPt, double OffsetYPt, double WidthPt, double HeightPt, byte[] Png)? image,
+        IReadOnlyList<ShapeSpec> shapes)
     {
         var drawingsPart = worksheetPart.AddNewPart<DrawingsPart>();
+        var drawing = new Xdr.WorksheetDrawing();
+
+        var nextId = 2U;
+
+        if (image is { } img)
+        {
+            drawing.Append(BuildImageAnchor(drawingsPart, img, nextId++));
+        }
+
+        foreach (var shape in shapes)
+        {
+            drawing.Append(BuildShapeAnchor(shape, nextId++));
+        }
+
+        drawingsPart.WorksheetDrawing = drawing;
+
+        // CT_Worksheetのスキーマ順(drawingはrowBreaks/colBreaksより後)に従い、最後に追加する。
+        worksheetPart.Worksheet.Append(new Drawing { Id = worksheetPart.GetIdOfPart(drawingsPart) });
+    }
+
+    private static Xdr.OneCellAnchor BuildImageAnchor(
+        DrawingsPart drawingsPart,
+        (int Row, int Column, double OffsetXPt, double OffsetYPt, double WidthPt, double HeightPt, byte[] Png) image,
+        uint id)
+    {
         var imagePart = drawingsPart.AddImagePart(ImagePartType.Png);
         using (var stream = new MemoryStream(image.Png))
         {
@@ -391,7 +475,7 @@ internal sealed class SpreadsheetBuilder
         var widthEmu = (long)Math.Round(image.WidthPt * EmusPerPoint);
         var heightEmu = (long)Math.Round(image.HeightPt * EmusPerPoint);
 
-        var anchor = new Xdr.OneCellAnchor(
+        return new Xdr.OneCellAnchor(
             new Xdr.FromMarker(
                 new Xdr.ColumnId((image.Column - 1).ToString(CultureInfo.InvariantCulture)),
                 new Xdr.ColumnOffset(offsetXEmu.ToString(CultureInfo.InvariantCulture)),
@@ -400,7 +484,7 @@ internal sealed class SpreadsheetBuilder
             new Xdr.Extent { Cx = widthEmu, Cy = heightEmu },
             new Xdr.Picture(
                 new Xdr.NonVisualPictureProperties(
-                    new Xdr.NonVisualDrawingProperties { Id = 2U, Name = "Logo" },
+                    new Xdr.NonVisualDrawingProperties { Id = id, Name = "Logo" },
                     new Xdr.NonVisualPictureDrawingProperties()),
                 new Xdr.BlipFill(
                     new A.Blip { Embed = drawingsPart.GetIdOfPart(imagePart) },
@@ -411,13 +495,63 @@ internal sealed class SpreadsheetBuilder
                         new A.Extents { Cx = widthEmu, Cy = heightEmu }),
                     new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle })),
             new Xdr.ClientData());
+    }
 
-        var drawing = new Xdr.WorksheetDrawing();
-        drawing.Append(anchor);
-        drawingsPart.WorksheetDrawing = drawing;
+    /// <summary>図形(<c>xdr:sp</c>、oneCellAnchor)を組み立てる(要件10)。</summary>
+    private static Xdr.OneCellAnchor BuildShapeAnchor(ShapeSpec shape, uint id)
+    {
+        var offsetXEmu = (long)Math.Round(shape.OffsetXPt * EmusPerPoint);
+        var offsetYEmu = (long)Math.Round(shape.OffsetYPt * EmusPerPoint);
+        var widthEmu = (long)Math.Round(shape.WidthPt * EmusPerPoint);
+        var heightEmu = (long)Math.Round(shape.HeightPt * EmusPerPoint);
+        var rotationEmu = (int)Math.Round(shape.RotationDegrees * 60000.0);
 
-        // CT_Worksheetのスキーマ順(drawingはrowBreaks/colBreaksより後)に従い、最後に追加する。
-        worksheetPart.Worksheet.Append(new Drawing { Id = worksheetPart.GetIdOfPart(drawingsPart) });
+        OpenXmlElement fill = shape.FillHex is { } fillHex
+            ? new A.SolidFill(new A.RgbColorModelHex { Val = fillHex })
+            : new A.NoFill();
+
+        var shapeProperties = new Xdr.ShapeProperties(
+            new A.Transform2D(
+                new A.Offset { X = 0L, Y = 0L },
+                new A.Extents { Cx = widthEmu, Cy = heightEmu })
+            {
+                Rotation = rotationEmu,
+            },
+            new A.PresetGeometry(new A.AdjustValueList()) { Preset = shape.Preset },
+            fill);
+
+        if (shape.OutlineHex is { } outlineHex)
+        {
+            shapeProperties.Append(new A.Outline(new A.SolidFill(new A.RgbColorModelHex { Val = outlineHex })) { Width = 12700 });
+        }
+
+        var visualShape = new Xdr.Shape(
+            new Xdr.NonVisualShapeProperties(
+                new Xdr.NonVisualDrawingProperties { Id = id, Name = "Shape" + id.ToString(CultureInfo.InvariantCulture) },
+                new Xdr.NonVisualShapeDrawingProperties()),
+            shapeProperties);
+
+        if (shape.Text is { } text)
+        {
+            visualShape.Append(new Xdr.TextBody(
+                new A.BodyProperties { Anchor = A.TextAnchoringTypeValues.Center },
+                new A.ListStyle(),
+                new A.Paragraph(
+                    new A.ParagraphProperties { Alignment = A.TextAlignmentTypeValues.Center },
+                    new A.Run(
+                        new A.RunProperties { FontSize = 1000 },
+                        new A.Text(text)))));
+        }
+
+        return new Xdr.OneCellAnchor(
+            new Xdr.FromMarker(
+                new Xdr.ColumnId((shape.Column - 1).ToString(CultureInfo.InvariantCulture)),
+                new Xdr.ColumnOffset(offsetXEmu.ToString(CultureInfo.InvariantCulture)),
+                new Xdr.RowId((shape.Row - 1).ToString(CultureInfo.InvariantCulture)),
+                new Xdr.RowOffset(offsetYEmu.ToString(CultureInfo.InvariantCulture))),
+            new Xdr.Extent { Cx = widthEmu, Cy = heightEmu },
+            visualShape,
+            new Xdr.ClientData());
     }
 }
 }

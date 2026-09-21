@@ -9,6 +9,7 @@ using DocumentFormat.OpenXml.Packaging;
 using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.Parsing.Model;
+using Dr = DocumentFormat.OpenXml.Drawing;
 using X = DocumentFormat.OpenXml.Spreadsheet;
 using Xdr = DocumentFormat.OpenXml.Drawing.Spreadsheet;
 
@@ -202,7 +203,7 @@ namespace Utsushi.Parsing.OpenXml
             var (columnWidths, hiddenColumns) = ReadColumns(worksheet, defaultColumnWidth);
             var mergedRanges = ReadMergedRanges(worksheet);
             var pageSetup = ReadPageSetup(name, worksheet, definedNames);
-            var images = ReadImages(name, worksheetPart, options);
+            var drawingObjects = ReadDrawingObjects(name, worksheetPart, options);
 
             return new SheetModel(
                 name,
@@ -215,7 +216,7 @@ namespace Utsushi.Parsing.OpenXml
                 hiddenColumns,
                 hiddenRows,
                 pageSetup,
-                images);
+                drawingObjects);
         }
 
         /// <summary>
@@ -383,17 +384,76 @@ namespace Utsushi.Parsing.OpenXml
         private const long MaxImageDataBytes = 10 * 1024 * 1024;
 
         /// <summary>
-        /// シートに埋め込まれた画像(<c>xdr:pic</c>)を読み取る(要件9)。
+        /// 対応済みプリセットジオメトリ(要件10.1補足)。自社帳票での実用上の必要性を踏まえた
+        /// キュレーション方式であり、ECMA-376の <c>ST_ShapeType</c> 全体には対応しない。
+        /// </summary>
+        private static readonly Dictionary<Dr.ShapeTypeValues, ShapePresetType> SupportedShapePresets = new()
+        {
+            [Dr.ShapeTypeValues.Rectangle] = ShapePresetType.Rect,
+            [Dr.ShapeTypeValues.RoundRectangle] = ShapePresetType.RoundRect,
+            [Dr.ShapeTypeValues.Ellipse] = ShapePresetType.Ellipse,
+            [Dr.ShapeTypeValues.Triangle] = ShapePresetType.Triangle,
+            [Dr.ShapeTypeValues.RightArrow] = ShapePresetType.RightArrow,
+            [Dr.ShapeTypeValues.LeftArrow] = ShapePresetType.LeftArrow,
+            [Dr.ShapeTypeValues.UpArrow] = ShapePresetType.UpArrow,
+            [Dr.ShapeTypeValues.DownArrow] = ShapePresetType.DownArrow,
+            [Dr.ShapeTypeValues.LeftRightArrow] = ShapePresetType.LeftRightArrow,
+            [Dr.ShapeTypeValues.UpDownArrow] = ShapePresetType.UpDownArrow,
+            [Dr.ShapeTypeValues.WedgeRectangleCallout] = ShapePresetType.WedgeRectCallout,
+            [Dr.ShapeTypeValues.WedgeRoundRectangleCallout] = ShapePresetType.WedgeRoundRectCallout,
+            [Dr.ShapeTypeValues.WedgeEllipseCallout] = ShapePresetType.WedgeEllipseCallout,
+        };
+
+        /// <summary>
+        /// プリセットごとの調整ガイド(<c>a:avLst/a:gd/@name</c>)の並び順。<see cref="ShapeModel.AdjustmentValues"/>
+        /// はこの並びに対応する固定長のリストとして返し、ファイルにガイドが無い位置は
+        /// <see cref="double.NaN"/> とする(Renderingレイヤーが該当位置のECMA-376既定値を補う)。
+        /// </summary>
+        private static readonly Dictionary<ShapePresetType, string[]> ShapeAdjustmentGuideNames = new()
+        {
+            [ShapePresetType.Rect] = Array.Empty<string>(),
+            [ShapePresetType.Ellipse] = Array.Empty<string>(),
+            [ShapePresetType.RoundRect] = new[] { "adj" },
+            [ShapePresetType.Triangle] = new[] { "adj" },
+            [ShapePresetType.RightArrow] = new[] { "adj1", "adj2" },
+            [ShapePresetType.LeftArrow] = new[] { "adj1", "adj2" },
+            [ShapePresetType.UpArrow] = new[] { "adj1", "adj2" },
+            [ShapePresetType.DownArrow] = new[] { "adj1", "adj2" },
+            [ShapePresetType.LeftRightArrow] = new[] { "adj1", "adj2" },
+            [ShapePresetType.UpDownArrow] = new[] { "adj1", "adj2" },
+            [ShapePresetType.WedgeRectCallout] = new[] { "adj1", "adj2" },
+            [ShapePresetType.WedgeRoundRectCallout] = new[] { "adj1", "adj2" },
+            [ShapePresetType.WedgeEllipseCallout] = new[] { "adj1", "adj2" },
+        };
+
+        /// <summary>
+        /// 1シートに含める図形アンカーの数の上限。画像の上限(<see cref="MaxImagesPerSheet"/>)とは
+        /// 独立にカウントする(security-reviewer指摘と同じ考え方。要件10.8)。
+        /// </summary>
+        internal const int MaxShapesPerSheet = 50;
+
+        /// <summary>
+        /// 図形1つに含まれる全テキスト(段落・ランを連結した文字数)の上限。極端に長い文字列に
+        /// 対する折り返し計算量を避けるための安全弁(要件10.8)。
+        /// </summary>
+        private const int MaxShapeTextLength = 2000;
+
+        /// <summary>
+        /// シートに埋め込まれた画像(<c>xdr:pic</c>)・図形(<c>xdr:sp</c>)を読み取る(要件9, 10)。
         /// </summary>
         /// <remarks>
-        /// 画像以外の描画オブジェクト(シェイプ・グラフ等)は対象外とし、<see cref="DetectUnsupportedElements"/>
-        /// 側で引き続き「サポート外要素」として扱う(要件9.5)。画像は帳票定義の <c>unsupportedElements</c>
-        /// 設定によらず常に読み取り対象とするが、デコード不能な形式(EMF/WMF等)・対応形式を偽装した
-        /// バイナリ・上限を超える枚数/サイズだけは同じ設定に従う(要件9.4)。
+        /// <c>drawing.xml</c> のアンカーを出現順に1回だけ列挙し、画像・図形が混在する場合の
+        /// 重なり順(z-order。要件10.3)を保った1つのリストを返す。画像・図形以外の描画
+        /// オブジェクト(グループ・接続線・グラフ等)は対象外とし、<see cref="DetectUnsupportedElements"/>
+        /// 側で引き続き「サポート外要素」として扱う(要件9.5, 10.7)。画像・対応済みプリセットの
+        /// 図形は帳票定義の <c>unsupportedElements</c> 設定によらず常に読み取り対象とするが、
+        /// デコード不能な画像形式・非対応プリセット・上限を超える枚数/サイズ/文字数だけは
+        /// 同じ設定に従う(要件9.4, 9.6, 10.7, 10.8)。
         /// </remarks>
-        private static List<ImageModel> ReadImages(string sheetName, WorksheetPart worksheetPart, WorkbookReadOptions options)
+        private static List<DrawingObjectModel> ReadDrawingObjects(
+            string sheetName, WorksheetPart worksheetPart, WorkbookReadOptions options)
         {
-            var result = new List<ImageModel>();
+            var result = new List<DrawingObjectModel>();
             var drawing = worksheetPart.DrawingsPart?.WorksheetDrawing;
             if (drawing is null)
             {
@@ -401,120 +461,459 @@ namespace Utsushi.Parsing.OpenXml
             }
 
             var drawingsPart = worksheetPart.DrawingsPart!;
+            var imageCount = 0;
+            var shapeCount = 0;
 
             foreach (var anchor in drawing.ChildElements)
             {
-                var (fromMarker, picture) = anchor switch
+                var fromMarker = anchor switch
                 {
-                    Xdr.TwoCellAnchor two => (two.FromMarker, two.GetFirstChild<Xdr.Picture>()),
-                    Xdr.OneCellAnchor one => (one.FromMarker, one.GetFirstChild<Xdr.Picture>()),
-                    _ => (null, null),
-                };
-
-                if (fromMarker is null || picture is null)
-                {
-                    continue;
-                }
-
-                if (!TryReadMarker(fromMarker, out var anchorCell, out var anchorOffset))
-                {
-                    continue;
-                }
-
-                if (result.Count >= MaxImagesPerSheet)
-                {
-                    if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                    {
-                        throw new UnsupportedWorkbookElementException(
-                            $"シート '{sheetName}' の画像の数が上限({MaxImagesPerSheet}枚)を超えています。"
-                            + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                            "TooManyImages",
-                            options.ReportCode,
-                            sheetName);
-                    }
-
-                    // ignore時は上限を超えた以降の画像アンカーをまとめて無視する。
-                    break;
-                }
-
-                var embedId = picture.BlipFill?.Blip?.Embed?.Value;
-                if (string.IsNullOrEmpty(embedId) || drawingsPart.GetPartById(embedId!) is not ImagePart imagePart)
-                {
-                    continue;
-                }
-
-                if (!SupportedImageContentTypes.Contains(imagePart.ContentType))
-                {
-                    if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                    {
-                        throw new UnsupportedWorkbookElementException(
-                            $"シート '{sheetName}' の画像形式 '{imagePart.ContentType}' には対応していません"
-                            + "(対応形式: PNG/JPEG/GIF/BMP)。帳票定義の unsupportedElements が 'error' のため中止します。",
-                            "UnsupportedImageFormat",
-                            options.ReportCode,
-                            sheetName);
-                    }
-
-                    continue;
-                }
-
-                ImageExtent? extent = anchor switch
-                {
-                    Xdr.TwoCellAnchor two when two.ToMarker is { } toMarker && TryReadMarker(toMarker, out var toCell, out var toOffset) =>
-                        new CellSpanImageExtent(toCell, toOffset),
-                    Xdr.OneCellAnchor { Extent: { Cx: { } cx, Cy: { } cy } } =>
-                        new FixedImageExtent(Units.EmusToPoints(cx.Value), Units.EmusToPoints(cy.Value)),
+                    Xdr.TwoCellAnchor two => two.FromMarker,
+                    Xdr.OneCellAnchor one => one.FromMarker,
                     _ => null,
                 };
 
-                if (extent is null)
+                if (fromMarker is null || !TryReadMarker(fromMarker, out var anchorCell, out var anchorOffset))
                 {
                     continue;
                 }
 
-                byte[] data;
-                using (var stream = imagePart.GetStream())
+                var picture = anchor switch
                 {
-                    if (!TryReadBounded(stream, MaxImageDataBytes, out data))
-                    {
-                        if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                        {
-                            throw new UnsupportedWorkbookElementException(
-                                $"シート '{sheetName}' の画像のサイズが上限({MaxImageDataBytes / (1024 * 1024)}MB)を"
-                                + "超えています。帳票定義の unsupportedElements が 'error' のため中止します。",
-                                "ImageTooLarge",
-                                options.ReportCode,
-                                sheetName);
-                        }
+                    Xdr.TwoCellAnchor two => two.GetFirstChild<Xdr.Picture>(),
+                    Xdr.OneCellAnchor one => one.GetFirstChild<Xdr.Picture>(),
+                    _ => null,
+                };
 
-                        continue;
-                    }
-                }
-
-                // ContentTypeはOPCパッケージ側の申告値に過ぎず、実際のバイト列と一致する保証がない。
-                // ネイティブコードのデコーダ(SkiaSharp)に渡す前に、ファイル先頭のシグネチャで
-                // 最低限の裏取りを行う(security-reviewer指摘)。
-                if (!MatchesContentTypeSignature(imagePart.ContentType, data))
+                if (picture is not null)
                 {
-                    if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                    var image = ReadImage(
+                        sheetName, drawingsPart, anchor, picture, anchorCell, anchorOffset, options, ref imageCount);
+                    if (image is not null)
                     {
-                        throw new UnsupportedWorkbookElementException(
-                            $"シート '{sheetName}' の画像データが '{imagePart.ContentType}' として不正です"
-                            + "(ファイル先頭のシグネチャが一致しません)。"
-                            + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                            "UnsupportedImageFormat",
-                            options.ReportCode,
-                            sheetName);
+                        result.Add(image);
                     }
 
                     continue;
                 }
 
-                result.Add(new ImageModel(data, imagePart.ContentType, anchorCell, anchorOffset, extent));
+                var shape = anchor switch
+                {
+                    Xdr.TwoCellAnchor two => two.GetFirstChild<Xdr.Shape>(),
+                    Xdr.OneCellAnchor one => one.GetFirstChild<Xdr.Shape>(),
+                    _ => null,
+                };
+
+                if (shape is not null)
+                {
+                    var shapeModel = ReadShape(sheetName, anchor, shape, anchorCell, anchorOffset, options, ref shapeCount);
+                    if (shapeModel is not null)
+                    {
+                        result.Add(shapeModel);
+                    }
+                }
             }
 
             return result;
         }
+
+        /// <summary>
+        /// アンカー(<see cref="Xdr.TwoCellAnchor"/>/<see cref="Xdr.OneCellAnchor"/>)から
+        /// 画像・図形共通の終端(サイズ)を読み取る。
+        /// </summary>
+        private static AnchorExtent? ReadAnchorExtent(OpenXmlElement anchor) => anchor switch
+        {
+            Xdr.TwoCellAnchor two when two.ToMarker is { } toMarker && TryReadMarker(toMarker, out var toCell, out var toOffset) =>
+                new CellSpanAnchorExtent(toCell, toOffset),
+            Xdr.OneCellAnchor { Extent: { Cx: { } cx, Cy: { } cy } } =>
+                new FixedAnchorExtent(Units.EmusToPoints(cx.Value), Units.EmusToPoints(cy.Value)),
+            _ => null,
+        };
+
+        /// <summary>1つの<c>xdr:pic</c>アンカーを<see cref="ImageModel"/>として読み取る(要件9)。</summary>
+        private static ImageModel? ReadImage(
+            string sheetName,
+            DrawingsPart drawingsPart,
+            OpenXmlElement anchor,
+            Xdr.Picture picture,
+            CellAddress anchorCell,
+            PointPt anchorOffset,
+            WorkbookReadOptions options,
+            ref int imageCount)
+        {
+            if (imageCount >= MaxImagesPerSheet)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の画像の数が上限({MaxImagesPerSheet}枚)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "TooManyImages",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                // ignore時はこのアンカーだけを無視し、以降のアンカーの走査は続ける
+                // (画像・図形が混在するシートで、他方の走査を止めないため)。
+                return null;
+            }
+
+            var embedId = picture.BlipFill?.Blip?.Embed?.Value;
+            if (string.IsNullOrEmpty(embedId) || drawingsPart.GetPartById(embedId!) is not ImagePart imagePart)
+            {
+                return null;
+            }
+
+            if (!SupportedImageContentTypes.Contains(imagePart.ContentType))
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の画像形式 '{imagePart.ContentType}' には対応していません"
+                        + "(対応形式: PNG/JPEG/GIF/BMP)。帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "UnsupportedImageFormat",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var extent = ReadAnchorExtent(anchor);
+            if (extent is null)
+            {
+                return null;
+            }
+
+            byte[] data;
+            using (var stream = imagePart.GetStream())
+            {
+                if (!TryReadBounded(stream, MaxImageDataBytes, out data))
+                {
+                    if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                    {
+                        throw new UnsupportedWorkbookElementException(
+                            $"シート '{sheetName}' の画像のサイズが上限({MaxImageDataBytes / (1024 * 1024)}MB)を"
+                            + "超えています。帳票定義の unsupportedElements が 'error' のため中止します。",
+                            "ImageTooLarge",
+                            options.ReportCode,
+                            sheetName);
+                    }
+
+                    return null;
+                }
+            }
+
+            // ContentTypeはOPCパッケージ側の申告値に過ぎず、実際のバイト列と一致する保証がない。
+            // ネイティブコードのデコーダ(SkiaSharp)に渡す前に、ファイル先頭のシグネチャで
+            // 最低限の裏取りを行う(security-reviewer指摘)。
+            if (!MatchesContentTypeSignature(imagePart.ContentType, data))
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の画像データが '{imagePart.ContentType}' として不正です"
+                        + "(ファイル先頭のシグネチャが一致しません)。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "UnsupportedImageFormat",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            imageCount++;
+            return new ImageModel(data, imagePart.ContentType, anchorCell, anchorOffset, extent);
+        }
+
+        /// <summary>1つの<c>xdr:sp</c>アンカーを<see cref="ShapeModel"/>として読み取る(要件10)。</summary>
+        private static ShapeModel? ReadShape(
+            string sheetName,
+            OpenXmlElement anchor,
+            Xdr.Shape shape,
+            CellAddress anchorCell,
+            PointPt anchorOffset,
+            WorkbookReadOptions options,
+            ref int shapeCount)
+        {
+            if (shapeCount >= MaxShapesPerSheet)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形の数が上限({MaxShapesPerSheet}個)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "TooManyShapes",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                // ignore時はこのアンカーだけを無視し、以降のアンカーの走査は続ける。
+                return null;
+            }
+
+            var shapeProperties = shape.ShapeProperties;
+            var presetGeometry = shapeProperties?.GetFirstChild<Dr.PresetGeometry>();
+            var presetValue = presetGeometry?.Preset?.Value;
+
+            if (presetValue is null || !SupportedShapePresets.TryGetValue(presetValue.Value, out var preset))
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    var presetDescription = presetValue is null ? "(prstGeomなし/custGeom)" : presetValue.Value.ToString();
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形のプリセットジオメトリ '{presetDescription}' には対応していません。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "UnsupportedShapePreset",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var extent = ReadAnchorExtent(anchor);
+            if (extent is null)
+            {
+                return null;
+            }
+
+            var adjustmentValues = ReadShapeAdjustmentValues(preset, presetGeometry);
+            var rotationDegrees = (shapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
+            var fill = ReadShapeFill(shapeProperties);
+            var outline = ReadShapeOutline(shapeProperties);
+            var text = ReadShapeText(shape.TextBody, out var textTooLong);
+
+            if (textTooLong)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形のテキストが上限({MaxShapeTextLength}文字)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "ShapeTextTooLong",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            shapeCount++;
+            return new ShapeModel(preset, adjustmentValues, rotationDegrees, fill, outline, text, anchorCell, anchorOffset, extent);
+        }
+
+        /// <summary>
+        /// プリセットごとの調整ガイド(<see cref="ShapeAdjustmentGuideNames"/>)の並び順に対応する
+        /// 固定長のリストを組み立てる。ファイルに該当ガイドが無い位置は <see cref="double.NaN"/> とし、
+        /// Renderingレイヤーがその位置のECMA-376既定値を補う(design.md「Parsing レイヤー」参照)。
+        /// </summary>
+        private static IReadOnlyList<double> ReadShapeAdjustmentValues(ShapePresetType preset, Dr.PresetGeometry? presetGeometry)
+        {
+            var guideNames = ShapeAdjustmentGuideNames[preset];
+            if (guideNames.Length == 0)
+            {
+                return Array.Empty<double>();
+            }
+
+            var guideValues = new Dictionary<string, double>(StringComparer.Ordinal);
+            if (presetGeometry?.AdjustValueList is { } adjustValueList)
+            {
+                foreach (var guide in adjustValueList.Elements<Dr.ShapeGuide>())
+                {
+                    if (guide.Name?.Value is { } name && TryParseGuideFormula(guide.Formula?.Value, out var value))
+                    {
+                        guideValues[name] = value;
+                    }
+                }
+            }
+
+            var result = new double[guideNames.Length];
+            for (var i = 0; i < guideNames.Length; i++)
+            {
+                result[i] = guideValues.TryGetValue(guideNames[i], out var value) ? value : double.NaN;
+            }
+
+            return result;
+        }
+
+        /// <summary><c>a:gd/@fmla</c>(例: <c>"val 16667"</c>)から比率(0〜1)を読み取る。</summary>
+        private static bool TryParseGuideFormula(string? formula, out double value)
+        {
+            value = default;
+            if (string.IsNullOrEmpty(formula))
+            {
+                return false;
+            }
+
+            var parts = formula!.Split(' ');
+            var numberText = parts[parts.Length - 1];
+            if (!int.TryParse(numberText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var raw))
+            {
+                return false;
+            }
+
+            value = raw / 100000.0;
+            return true;
+        }
+
+        /// <summary>図形の塗りつぶし(<c>a:noFill</c>/<c>a:solidFill</c>/<c>a:gradFill</c>)を読み取る。</summary>
+        private static ShapeFill? ReadShapeFill(Xdr.ShapeProperties? shapeProperties)
+        {
+            if (shapeProperties is null || shapeProperties.GetFirstChild<Dr.NoFill>() is not null)
+            {
+                return null;
+            }
+
+            if (shapeProperties.GetFirstChild<Dr.GradientFill>() is { } gradientFill)
+            {
+                var stops = gradientFill.GradientStopList?.Elements<Dr.GradientStop>().ToList();
+                if (stops is { Count: > 0 }
+                    && TryReadColor(stops[0], out var startColor)
+                    && TryReadColor(stops[stops.Count - 1], out var endColor))
+                {
+                    var angle = gradientFill.GetFirstChild<Dr.LinearGradientFill>()?.Angle?.Value ?? 0;
+                    return new LinearGradientShapeFill(startColor, endColor, angle / 60000.0);
+                }
+
+                return null;
+            }
+
+            if (shapeProperties.GetFirstChild<Dr.SolidFill>() is { } solidFill && TryReadColor(solidFill, out var color))
+            {
+                return new SolidShapeFill(color);
+            }
+
+            return null;
+        }
+
+        /// <summary>図形の枠線(<c>a:ln</c>)を読み取る。</summary>
+        private static ShapeOutline? ReadShapeOutline(Xdr.ShapeProperties? shapeProperties)
+        {
+            var outline = shapeProperties?.GetFirstChild<Dr.Outline>();
+            if (outline is null || outline.GetFirstChild<Dr.NoFill>() is not null)
+            {
+                return null;
+            }
+
+            if (outline.GetFirstChild<Dr.SolidFill>() is not { } solidFill || !TryReadColor(solidFill, out var color))
+            {
+                return null;
+            }
+
+            // @w省略時の既定太さはECMA-376上厳密には未指定だが、線色が明示されている以上
+            // 「見える枠線がある」とみなし、Excelの既定的な細線に近い1ptを補う。
+            var widthPt = Units.EmusToPoints(outline.Width?.Value ?? 12700);
+            return new ShapeOutline(color, widthPt);
+        }
+
+        private static bool TryReadColor(Dr.SolidFill solidFill, out ArgbColor color) =>
+            ArgbColor.TryParseHex(solidFill.RgbColorModelHex?.Val?.Value, out color);
+
+        private static bool TryReadColor(Dr.GradientStop stop, out ArgbColor color) =>
+            ArgbColor.TryParseHex(stop.RgbColorModelHex?.Val?.Value, out color);
+
+        /// <summary>
+        /// 図形内テキスト(<c>xdr:txBody</c>)を段落・ラン単位で読み取る(要件10.4)。
+        /// 合計文字数が<see cref="MaxShapeTextLength"/>を超えた時点で即座に打ち切り、
+        /// <paramref name="textTooLong"/>を立てて返す(security-reviewer指摘)。
+        /// フォント・色の解析(<see cref="ReadShapeRunFont"/>)は上限を超えていないランに対してのみ
+        /// 行うため、極端に大量のランを仕込んだ入力でも処理コストが合計文字数の上限で頭打ちになる。
+        /// </summary>
+        private static ShapeTextBody? ReadShapeText(Xdr.TextBody? textBody, out bool textTooLong)
+        {
+            textTooLong = false;
+            if (textBody is null)
+            {
+                return null;
+            }
+
+            var paragraphs = new List<ShapeTextParagraph>();
+            var totalLength = 0;
+            foreach (var paragraph in textBody.Elements<Dr.Paragraph>())
+            {
+                var runs = new List<ShapeTextRun>();
+                foreach (var run in paragraph.Elements<Dr.Run>())
+                {
+                    var text = run.Text?.Text;
+                    if (string.IsNullOrEmpty(text))
+                    {
+                        continue;
+                    }
+
+                    totalLength += text!.Length;
+                    if (totalLength > MaxShapeTextLength)
+                    {
+                        textTooLong = true;
+                        return null;
+                    }
+
+                    runs.Add(new ShapeTextRun(text!, ReadShapeRunFont(run.RunProperties)));
+                }
+
+                if (runs.Count == 0)
+                {
+                    continue;
+                }
+
+                var hAlign = MapHorizontalAlignment(paragraph.ParagraphProperties?.Alignment?.Value);
+                paragraphs.Add(new ShapeTextParagraph(runs, hAlign));
+            }
+
+            if (paragraphs.Count == 0)
+            {
+                return null;
+            }
+
+            var vAlign = MapVerticalAlignment(textBody.BodyProperties?.Anchor?.Value);
+            return new ShapeTextBody(paragraphs, vAlign);
+        }
+
+        private static FontStyle ReadShapeRunFont(Dr.RunProperties? runProperties)
+        {
+            if (runProperties is null)
+            {
+                return FontStyle.Default;
+            }
+
+            var sizePt = runProperties.FontSize?.Value is { } sz ? sz / 100.0 : FontStyle.Default.SizePt;
+            var bold = runProperties.Bold?.Value ?? false;
+            var italic = runProperties.Italic?.Value ?? false;
+            var underline = MapUnderline(runProperties.Underline?.Value);
+            var strike = runProperties.Strike?.Value is { } strikeValue && strikeValue != Dr.TextStrikeValues.NoStrike;
+            var name = runProperties.GetFirstChild<Dr.LatinFont>()?.Typeface?.Value ?? FontStyle.Default.Name;
+            var color = runProperties.GetFirstChild<Dr.SolidFill>() is { } solidFill && TryReadColor(solidFill, out var runColor)
+                ? runColor
+                : ArgbColor.Black;
+
+            return new FontStyle(name!, sizePt, bold, italic, underline, strike, color);
+        }
+
+        private static UnderlineStyle MapUnderline(Dr.TextUnderlineValues? value)
+        {
+            if (value is null || value == Dr.TextUnderlineValues.None)
+            {
+                return UnderlineStyle.None;
+            }
+
+            // 波線・二重下線以外の下線種別は単純な実線として近似する。
+            return value == Dr.TextUnderlineValues.Double ? UnderlineStyle.Double : UnderlineStyle.Single;
+        }
+
+        private static HorizontalAlignment MapHorizontalAlignment(Dr.TextAlignmentTypeValues? value) => value switch
+        {
+            Dr.TextAlignmentTypeValues.Center => HorizontalAlignment.Center,
+            Dr.TextAlignmentTypeValues.Right => HorizontalAlignment.Right,
+            _ => HorizontalAlignment.Left,
+        };
+
+        private static VerticalAlignment MapVerticalAlignment(Dr.TextAnchoringTypeValues? value) => value switch
+        {
+            Dr.TextAnchoringTypeValues.Center => VerticalAlignment.Center,
+            Dr.TextAnchoringTypeValues.Bottom => VerticalAlignment.Bottom,
+            _ => VerticalAlignment.Top,
+        };
 
         /// <summary>
         /// <paramref name="source"/> から最大 <paramref name="maxBytes"/> バイトだけ読み取る。
@@ -763,12 +1162,15 @@ namespace Utsushi.Parsing.OpenXml
                     sheetName);
             }
 
-            // 画像(xdr:pic)は要件9として常に読み取り対象とするため、ここでは対象外とする(ReadImagesが担う)。
-            // 画像以外の描画オブジェクト(シェイプ・グループ・接続線等)が1つでもあれば引き続きサポート外要素とする。
-            // drawingsPartが解決できないのに<drawing>参照だけがある場合は中身を判定できないため、
-            // 従来どおり保守的にサポート外として扱う。
+            // 画像(xdr:pic)は要件9として、シェイプ(xdr:sp)は要件10として常に読み取り対象と
+            // するため、ここでは対象外とする(ReadDrawingObjectsが担う)。xdr:spの判定は構造的
+            // なもので、プリセットが対応済みかどうかは問わない(非対応プリセットは
+            // ReadShapeが個別にUnsupportedShapePresetとして検出する)。
+            // 画像・シェイプ以外の描画オブジェクト(グループ・接続線等)が1つでもあれば
+            // 引き続きサポート外要素とする。drawingsPartが解決できないのに<drawing>参照だけが
+            // ある場合は中身を判定できないため、従来どおり保守的にサポート外として扱う。
             var hasUnsupportedDrawingObject = drawingsPart is not null
-                ? HasNonPictureDrawingObject(drawingsPart)
+                ? HasUnsupportedDrawingObject(drawingsPart)
                 : worksheet.GetFirstChild<X.Drawing>() is not null;
 
             if (hasUnsupportedDrawingObject)
@@ -791,10 +1193,13 @@ namespace Utsushi.Parsing.OpenXml
         }
 
         /// <summary>
-        /// <paramref name="drawingsPart"/> 内のアンカーに、画像(<c>xdr:pic</c>)以外の描画オブジェクト
-        /// (シェイプ・グループ・接続線・絶対座標アンカー等)が1つでも含まれるかどうかを判定する(要件9.5)。
+        /// <paramref name="drawingsPart"/> 内のアンカーに、画像(<c>xdr:pic</c>)・シェイプ
+        /// (<c>xdr:sp</c>)以外の描画オブジェクト(グループ・接続線・絶対座標アンカー等)が
+        /// 1つでも含まれるかどうかを判定する(要件9.5, 10.7)。<c>xdr:sp</c>の判定は構造的な
+        /// もので、プリセットジオメトリが対応済みかどうかは問わない(非対応プリセットは
+        /// <see cref="ReadShape"/>が個別に検出する)。
         /// </summary>
-        private static bool HasNonPictureDrawingObject(DrawingsPart drawingsPart)
+        private static bool HasUnsupportedDrawingObject(DrawingsPart drawingsPart)
         {
             var drawing = drawingsPart.WorksheetDrawing;
             if (drawing is null)
@@ -804,15 +1209,15 @@ namespace Utsushi.Parsing.OpenXml
 
             foreach (var anchor in drawing.ChildElements)
             {
-                var picture = anchor switch
+                var isPictureOrShape = anchor switch
                 {
-                    Xdr.TwoCellAnchor two => two.GetFirstChild<Xdr.Picture>(),
-                    Xdr.OneCellAnchor one => one.GetFirstChild<Xdr.Picture>(),
-                    // AbsoluteAnchor(絶対座標配置)は要件9.1/9.2の対象外のため、画像でもサポート外として扱う。
-                    _ => null,
+                    Xdr.TwoCellAnchor two => two.GetFirstChild<Xdr.Picture>() is not null || two.GetFirstChild<Xdr.Shape>() is not null,
+                    Xdr.OneCellAnchor one => one.GetFirstChild<Xdr.Picture>() is not null || one.GetFirstChild<Xdr.Shape>() is not null,
+                    // AbsoluteAnchor(絶対座標配置)は要件9.1/9.2/10.1の対象外のため、画像・シェイプでもサポート外として扱う。
+                    _ => false,
                 };
 
-                if (picture is null)
+                if (!isPictureOrShape)
                 {
                     return true;
                 }

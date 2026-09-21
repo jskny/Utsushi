@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Utsushi.Core;
 using Utsushi.Layout.Model;
 using Utsushi.Layout.Text;
@@ -32,13 +33,16 @@ namespace Utsushi.Layout
         /// </summary>
         private const int MaxSpanCells = 4096;
 
-        /// <summary>画像1枚の表示サイズ(pt)の上限。異常に大きいEMU値に対する安全弁。</summary>
-        private const double MaxImageDimensionPt = 5000.0;
+        /// <summary>画像・図形1つの表示サイズ(pt)の上限。異常に大きいEMU値に対する安全弁。</summary>
+        private const double MaxDrawingObjectDimensionPt = 5000.0;
+
+        /// <summary>図形内テキストの矩形内側の余白(pt)。セルの<see cref="ExcelUnitConverter.CellPaddingPoints"/>とは別に、図形用の小さめの値を使う。</summary>
+        private const double ShapeTextPaddingPt = 4.0;
 
         private readonly List<DrawCommand> _fills = new();
         private readonly List<DrawCommand> _borders = new();
         private readonly List<DrawCommand> _texts = new();
-        private readonly List<DrawCommand> _images = new();
+        private readonly List<DrawCommand> _drawingObjects = new();
         private readonly HashSet<string> _emittedBorders = new(StringComparer.Ordinal);
 
         public PageCommandBuilder(
@@ -103,72 +107,178 @@ namespace Utsushi.Layout
                 }
             }
 
-            EmitImages(rowIndex, columnIndex, rowOffsets, columnOffsets);
+            EmitDrawingObjects(rowIndex, columnIndex, rowOffsets, columnOffsets);
 
-            var commands = new List<DrawCommand>(_fills.Count + _borders.Count + _texts.Count + _images.Count);
+            var commands = new List<DrawCommand>(_fills.Count + _borders.Count + _texts.Count + _drawingObjects.Count);
             commands.AddRange(_fills);
             commands.AddRange(_borders);
             commands.AddRange(_texts);
-            commands.AddRange(_images);
+            commands.AddRange(_drawingObjects);
             return commands;
         }
 
         // ---------------------------------------------------------------------
-        // 画像(要件9)
+        // 画像・図形(要件9, 10)
         // ---------------------------------------------------------------------
 
         /// <summary>
-        /// アンカー左上セルがこのページに含まれる画像を、ページ座標に変換して描画命令にする。
-        /// 改ページ位置をまたぐ画像は、アンカー左上セルが属するページにのみ全体を配置する
-        /// (design.md「未決事項」の割り切り)。
+        /// アンカー左上セルがこのページに含まれる画像・図形を、ページ座標に変換して描画命令にする。
+        /// <see cref="SheetModel.DrawingObjects"/> の出現順(drawing.xmlの重なり順。要件10.3)を
+        /// そのまま維持するため、画像・図形をまとめて1回だけ列挙する。改ページ位置をまたぐ
+        /// 画像・図形は、アンカー左上セルが属するページにのみ全体を配置する(design.md「未決事項」の割り切り)。
         /// </summary>
-        private void EmitImages(
+        private void EmitDrawingObjects(
             IReadOnlyDictionary<int, int> rowIndex,
             IReadOnlyDictionary<int, int> columnIndex,
             double[] rowOffsets,
             double[] columnOffsets)
         {
-            foreach (var image in _sheet.Images)
+            foreach (var drawingObject in _sheet.DrawingObjects)
             {
-                if (!rowIndex.TryGetValue(image.AnchorCell.Row, out var r)
-                    || !columnIndex.TryGetValue(image.AnchorCell.Column, out var c))
+                if (!TryComputeDrawingObjectRect(drawingObject, rowIndex, columnIndex, rowOffsets, columnOffsets, out var rect))
                 {
                     continue;
                 }
 
-                var left = columnOffsets[c] + image.AnchorOffset.X;
-                var top = rowOffsets[r] + image.AnchorOffset.Y;
-
-                var (widthPt, heightPt) = image.Extent switch
+                switch (drawingObject)
                 {
-                    FixedImageExtent fixedExtent => (fixedExtent.WidthPt, fixedExtent.HeightPt),
-                    CellSpanImageExtent span => (
-                        SpanWidthPt(image.AnchorCell.Column, image.AnchorOffset.X, span.ToCell.Column, span.ToOffset.X),
-                        SpanHeightPt(image.AnchorCell.Row, image.AnchorOffset.Y, span.ToCell.Row, span.ToOffset.Y)),
-                    _ => (0.0, 0.0),
-                };
-
-                // 異常に大きいEMU値(またはその合算)による過大な矩形を防ぐ(security-reviewer指摘)。
-                widthPt = Math.Min(widthPt, MaxImageDimensionPt);
-                heightPt = Math.Min(heightPt, MaxImageDimensionPt);
-
-                if (widthPt <= 0 || heightPt <= 0)
-                {
-                    continue;
+                    case ImageModel image:
+                        _drawingObjects.Add(new ImageCommand(rect, image.Data, image.ContentType));
+                        break;
+                    case ShapeModel shape:
+                        _drawingObjects.Add(BuildShapeCommand(shape, rect));
+                        break;
                 }
-
-                var rect = ToPageRect(left, top, left + widthPt, top + heightPt);
-                if (rect.IsEmpty)
-                {
-                    continue;
-                }
-
-                _images.Add(new ImageCommand(rect, image.Data, image.ContentType));
             }
         }
 
         /// <summary>
-        /// 2セルアンカー(<see cref="CellSpanImageExtent"/>)の幅を求める。列幅の合計は
+        /// 画像・図形共通のアンカー解決(要件9.1, 9.2, 10.1, 10.2)。アンカー左上セルがこのページに
+        /// 含まれない場合は <c>false</c> を返す。
+        /// </summary>
+        private bool TryComputeDrawingObjectRect(
+            DrawingObjectModel drawingObject,
+            IReadOnlyDictionary<int, int> rowIndex,
+            IReadOnlyDictionary<int, int> columnIndex,
+            double[] rowOffsets,
+            double[] columnOffsets,
+            out RectPt rect)
+        {
+            rect = default;
+
+            if (!rowIndex.TryGetValue(drawingObject.AnchorCell.Row, out var r)
+                || !columnIndex.TryGetValue(drawingObject.AnchorCell.Column, out var c))
+            {
+                return false;
+            }
+
+            var left = columnOffsets[c] + drawingObject.AnchorOffset.X;
+            var top = rowOffsets[r] + drawingObject.AnchorOffset.Y;
+
+            var (widthPt, heightPt) = drawingObject.Extent switch
+            {
+                FixedAnchorExtent fixedExtent => (fixedExtent.WidthPt, fixedExtent.HeightPt),
+                CellSpanAnchorExtent span => (
+                    SpanWidthPt(drawingObject.AnchorCell.Column, drawingObject.AnchorOffset.X, span.ToCell.Column, span.ToOffset.X),
+                    SpanHeightPt(drawingObject.AnchorCell.Row, drawingObject.AnchorOffset.Y, span.ToCell.Row, span.ToOffset.Y)),
+                _ => (0.0, 0.0),
+            };
+
+            // 異常に大きいEMU値(またはその合算)による過大な矩形を防ぐ(security-reviewer指摘)。
+            widthPt = Math.Min(widthPt, MaxDrawingObjectDimensionPt);
+            heightPt = Math.Min(heightPt, MaxDrawingObjectDimensionPt);
+
+            if (widthPt <= 0 || heightPt <= 0)
+            {
+                return false;
+            }
+
+            rect = ToPageRect(left, top, left + widthPt, top + heightPt);
+            return !rect.IsEmpty;
+        }
+
+        /// <summary>図形の描画命令を組み立てる(要件10)。テキストの折り返し・配置はここで確定させ、回転前のローカル座標で保持する(回転はRenderingレイヤーが適用する)。</summary>
+        private ShapeCommand BuildShapeCommand(ShapeModel shape, RectPt rect)
+        {
+            var textLines = shape.Text is { } text
+                ? BuildShapeTextLines(text, rect)
+                : Array.Empty<ShapeTextLine>();
+
+            return new ShapeCommand(rect, shape.Preset, shape.AdjustmentValues, shape.RotationDegrees, shape.Fill, shape.Outline, textLines);
+        }
+
+        /// <summary>図形内テキストを矩形幅で折り返し、水平/垂直配置に基づく各行のローカル座標を確定させる(要件10.4)。</summary>
+        private IReadOnlyList<ShapeTextLine> BuildShapeTextLines(ShapeTextBody text, RectPt rect)
+        {
+            // 拡大縮小率はセル内テキスト(EmitText)と同様、余白・フォントサイズの両方に適用する
+            // (layout-fidelity-reviewer指摘: 図形の矩形自体はToPageRectで_scaleが掛かるのに、
+            // 内側のテキストが原寸のままだと、印刷倍率を持つ帳票でテキストが矩形からはみ出す)。
+            var paddingPt = ShapeTextPaddingPt * _scale;
+            var contentRect = RectPt.FromBounds(
+                rect.Left + paddingPt,
+                rect.Top + paddingPt,
+                rect.Right - paddingPt,
+                rect.Bottom - paddingPt);
+
+            if (contentRect.Width <= 0 || contentRect.Height <= 0)
+            {
+                return Array.Empty<ShapeTextLine>();
+            }
+
+            var wrapped = WrapShapeText(text, contentRect.Width);
+            if (wrapped.Count == 0)
+            {
+                return Array.Empty<ShapeTextLine>();
+            }
+
+            var firstMetrics = _fontMetrics.GetMetrics(wrapped[0].Font);
+            var totalHeight = wrapped.Sum(line => _fontMetrics.GetMetrics(line.Font).LineSpacingPt);
+            var y = ResolveFirstBaselineY(text.VAlign, contentRect, firstMetrics, totalHeight);
+
+            var lines = new List<ShapeTextLine>(wrapped.Count);
+            foreach (var (lineText, hAlign, font) in wrapped)
+            {
+                var metrics = _fontMetrics.GetMetrics(font);
+                var (x, anchor) = ResolveTextOrigin(hAlign, contentRect);
+                lines.Add(new ShapeTextLine(new PointPt(x, y), lineText, font, anchor));
+                y += metrics.LineSpacingPt;
+            }
+
+            return lines;
+        }
+
+        /// <summary>
+        /// 図形内テキストの各段落を、その段落の先頭ランのフォントで折り返す(要件10.4)。
+        /// 段落内で複数ランが異なるフォントを持つ場合でも、折り返し計算は先頭ランのフォントで代表させる
+        /// (図形は注記・吹き出し用途を想定した近似実装であり、セル内テキストほど厳密な混在対応はしない)。
+        /// </summary>
+        private List<(string Text, HorizontalAlignment HAlign, FontStyle Font)> WrapShapeText(
+            ShapeTextBody text, double availableWidthPt)
+        {
+            var lines = new List<(string, HorizontalAlignment, FontStyle)>();
+            foreach (var paragraph in text.Paragraphs)
+            {
+                if (paragraph.Runs.Count == 0)
+                {
+                    lines.Add((string.Empty, paragraph.HAlign, FontStyle.Default));
+                    continue;
+                }
+
+                // 拡大縮小率はフォントサイズにも適用する(セル内テキストのEmitTextと同様。
+                // 座標だけを縮めると文字が矩形に収まらなくなるため)。
+                var scaledFont = paragraph.Runs[0].Font with { SizePt = paragraph.Runs[0].Font.SizePt * _scale };
+                var paragraphText = string.Concat(paragraph.Runs.Select(run => run.Text));
+                foreach (var line in WrapLines(scaledFont, paragraphText, availableWidthPt))
+                {
+                    lines.Add((line, paragraph.HAlign, scaledFont));
+                }
+            }
+
+            return lines;
+        }
+
+        /// <summary>
+        /// 2セルアンカー(<see cref="CellSpanAnchorExtent"/>)の幅を求める。列幅の合計は
         /// <see cref="_grid"/>(印刷範囲にクリップされた格子)ではなく <see cref="_sheet"/> から
         /// 直接取得する。<see cref="_grid"/> は印刷範囲外の列を「幅0」として保持しないため、
         /// 対角セルが印刷範囲のすぐ外にあるだけで画像が実際より小さく計算されてしまう

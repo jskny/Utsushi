@@ -3,9 +3,9 @@
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
-> **状況**: 全タスク完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21)。
-> `dotnet build` / `dotnet test`(232件、2026-09-21時点)/ `dotnet format` はグリーン。
-> 実装時に決定した事項・判明した制約は `design.md` に反映済み。
+> **状況**: 全タスク完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21、
+> タスク14: 2026-09-21)。`dotnet build` / `dotnet test`(311件、2026-09-21時点)/ `dotnet format`
+> はグリーン。実装時に決定した事項・判明した制約は `design.md` に反映済み。
 > タスク文面どおりに実現できなかった項目には各タスクに注記を付けた。
 
 - [x] 1. ソリューション基盤のセットアップ
@@ -230,3 +230,148 @@
       帳票コード/シート名検証、ピクセル爆弾対策(宣言サイズ超過の拒否)、
       画像枚数上限、ContentType偽装の検出を検証する
     - _Requirements: 9.2, 9.4, 9.6, 6.4_
+
+- [x] 14. シート内図形(シェイプ)の再現
+  - [x] 14.1 Parsingレイヤー: 画像・図形共通のデータモデルへリファクタリングする
+    - `ImageExtent`/`FixedImageExtent`/`CellSpanImageExtent` を `AnchorExtent`/
+      `FixedAnchorExtent`/`CellSpanAnchorExtent` に改名し、`DrawingObjectModel`
+      (`AnchorCell`/`AnchorOffset`/`Extent` を持つ抽象基底)を新設して `ImageModel` に
+      継承させる。`SheetModel.Images` を `SheetModel.DrawingObjects` に置き換え、
+      呼び出し側(`PageCommandBuilder`・SampleGenerator・既存テスト)を追随させる
+      (design.md「Parsing レイヤー」の図形節参照)
+    - _Requirements: 9.1, 9.2_
+  - [x] 14.2 Parsingレイヤー: 図形のデータモデル(`ShapeModel` / `ShapePresetType` /
+        `ShapeFill` / `ShapeOutline` / `ShapeTextBody`)を定義する
+    - _Requirements: 10.1, 10.4, 10.5, 10.6_
+  - [x] 14.3 Parsingレイヤー: `xdr:sp` から対応済みプリセットジオメトリの図形を読み取る
+    - `xdr:spPr/a:prstGeom/@prst` を静的なマッピング表と突き合わせ、一致しないものは
+      読み取らない(14.8で非対応要素として検出させる)。アンカー(セル位置・オフセット・
+      固定/セル追従の範囲)は画像と共通の仕組み(14.1)を使う。旧`ReadImages`を
+      `ReadDrawingObjects`に置き換え、1回のアンカー列挙の中で`ReadImage`/`ReadShape`を
+      呼び分けて `drawing.xml` の出現順を保った `DrawingObjects` を構築する
+    - _Requirements: 10.1, 10.2, 10.3_
+  - [x] 14.4 Parsingレイヤー: 図形の調整ガイド値(`a:avLst`)・回転(`a:xfrm/@rot`)を読み取る
+    - ガイド名(`adj`/`adj1`/`adj2`等)を `ShapePresetType` ごとに定めた順序で
+      `IReadOnlyList<double>` に整形する。ファイルに該当ガイドが無い位置は`double.NaN`とし、
+      Renderingレイヤーがその位置のECMA-376既定値を補う(既定値表はRenderingレイヤー側に置く)
+    - _Requirements: 10.1, 10.5_
+  - [x] 14.5 Parsingレイヤー: 図形の塗りつぶし(`a:solidFill`/`a:gradFill`/`a:noFill`)と
+        枠線(`a:ln`)を読み取る
+    - グラデーションは先頭・末尾の `a:gs` の色のみ採用し、`a:lin/@ang` があれば角度として読み取る。
+      色は`a:srgbClr`(RGB直接指定)のみ対応し、テーマ/システム色は解決しない(未対応分は
+      塗り/枠線を無しとして扱う)
+    - _Requirements: 10.1, 10.6_
+  - [x] 14.6 Parsingレイヤー: 図形内テキスト(`xdr:txBody`)を段落・ラン単位で読み取る
+    - `a:bodyPr/@anchor` を垂直配置、各 `a:p/a:pPr/@algn` を段落ごとの水平配置として読み取り、
+      `a:r/a:rPr`(サイズ・太字・斜体・色・書体)と `a:t` から `FontStyle` と同じ型で
+      `ShapeTextRun` を構築する(折り返しはLayoutレイヤーの責務なので行わない)
+    - _Requirements: 10.4_
+  - [x] 14.7 Parsingレイヤー: `DetectUnsupportedElements` を拡張し、接続線・グループを
+        引き続きサポート外要素として検出する
+    - 「`xdr:pic` 以外はすべて `Drawing` として例外化」だった判定を「`xdr:pic` および
+      `xdr:sp`(シェイプ)以外(接続線 `xdr:cxnSp`、グループ `xdr:grpSp`)が1つでもあれば
+      `Drawing` として例外化」に拡張する(`HasNonPictureDrawingObject`を
+      `HasUnsupportedDrawingObject`に改名)。ここでの`xdr:sp`判定は構造的なもの(要素の種類が
+      シェイプかどうか)であり、プリセットが対応済みかどうかは問わない(画像の
+      `ContentType`許可リスト判定が`DetectUnsupportedElements`ではなく`ReadImage`側の
+      個別検証であるのと同じ位置付け)。非対応プリセットの`xdr:sp`はこの時点では
+      素通りし、後段の図形読み取り(14.8)が個別に`UnsupportedShapePreset`として検出する
+    - _Requirements: 10.7_
+  - [x] 14.8 Parsingレイヤー: 対応済み一覧に無いプリセットジオメトリを `UnsupportedShapePreset`
+        として扱う
+    - `UnsupportedWorkbookElementException`(`ElementKind = "UnsupportedShapePreset"`)を、
+      既存の `unsupportedElements` ポリシー(ignore/error)に従って送出/無視する
+    - _Requirements: 10.7_
+  - [x] 14.9 セキュリティ対策: 図形個数・テキスト文字数の上限を設ける(要件10.8)
+    - 1シートあたりの図形アンカー数の上限(既定50個、超過は `ElementKind = "TooManyShapes"`)、
+      図形1つあたりの全テキスト文字数の上限(既定2000文字、超過は
+      `ElementKind = "ShapeTextTooLong"`)を、画像の上限(13.15)と同じ考え方で設ける
+    - _Requirements: 10.8_
+  - [x] 14.10 Layoutレイヤー: 図形のページ座標変換を実装する(`PageCommandBuilder.EmitDrawingObjects`)
+    - `SheetModel.DrawingObjects`(画像・図形が混在)を出現順に処理し、共通の
+      `TryComputeDrawingObjectRect`(旧`EmitImages`を一般化)で矩形を求める。画像・図形の
+      `DrawCommand` を出現順のまま1つのリストに追加し、z-orderを保つ(design.md
+      「Layout レイヤー」の図形節、要件10.3)
+    - _Requirements: 10.1, 10.2, 10.3_
+  - [x] 14.11 Layoutレイヤー: 図形内テキストの折り返し・配置を実装する
+    - `ShapeModel.Text` を `IFontMetricsProvider` で図形の矩形幅を基準に折り返し、
+      段落の水平配置・`VAlign` に基づく垂直位置から各行のローカル座標(回転前)を算出し
+      `ShapeCommand.TextLines` を構築する(`BuildShapeTextLines`/`WrapShapeText`)。
+      段落内の複数ランは先頭ランのフォントで折り返しを代表させる近似とした
+    - _Requirements: 10.4_
+  - [x] 14.12 Layoutレイヤー: 改ページをまたぐ図形をアンカー側のページにのみ配置する
+    - 画像(13.7)と同じ割り切りを図形にも適用する
+    - _Requirements: 10.1_
+  - [x] 14.13 Renderingレイヤー: 対応済みプリセットのパス生成(`ShapeGeometryBuilder`)を実装する
+    - `rect`/`roundRect`/`ellipse`/`triangle` と、`rightArrow`/`leftArrow`/`upArrow`/
+      `downArrow`/`leftRightArrow`/`upDownArrow` のパス生成を、既定調整値をフォールバックとして
+      実装した。矢印は「右向き・幅=進行方向」のローカル座標で組み立て、明示的なアフィン変換
+      (`TransformArrowLocalPath`)で4方向に配置する。双方向矢印(leftRightArrow/upDownArrow)は
+      単方向矢印と同じ既定矢尻長さ比(0.5)を使うと両端の矢尻で幅を使い切り菱形に潰れるため、
+      専用の既定値(0.25)を設けた(単一の`.pdf`をラスタライズして目視確認済み)
+    - _Requirements: 10.1_
+  - [x] 14.14 Renderingレイヤー: 吹き出し(`wedgeRectCallout`/`wedgeRoundRectCallout`/
+        `wedgeEllipseCallout`)のパス生成を実装する
+    - 本体形状(矩形/角丸矩形/楕円)に、引き出し先端(調整値2つを本体の幅・高さに対する
+      比率とみなす)から最も近い辺へ向けた引き出し三角形を追加する2段階のパス構築とした
+    - _Requirements: 10.1_
+  - [x] 14.15 Renderingレイヤー: 図形の塗りつぶし・枠線・回転を描画する
+    - `SolidShapeFill`/`LinearGradientShapeFill`/`noFill`、`ShapeOutline` の描画と、
+      `RotationDegrees` に応じた `canvas.Save`/`RotateDegrees`/`Restore` を実装した
+    - _Requirements: 10.1, 10.5, 10.6_
+  - [x] 14.16 Renderingレイヤー: 図形内テキストを描画する
+    - `ShapeTextLine` を一時的な `TextCommand`(ClipRectなし)に変換し、セル内テキストと同じ
+      `DrawText` を再利用することでフォント解決・太字/斜体合成ロジックを重複させずに実装した。
+      図形本体と同じ回転変換の内側(`Save`/`Restore`の間)で描画するため回転が反映される
+    - _Requirements: 10.4, 10.5_
+  - [x] 14.17 `Utsushi.SampleGenerator` に図形埋め込み機能を追加する
+    - `SpreadsheetBuilder.SetShape`(プリセット・塗り/枠線・回転・テキストを指定できる)を実装した。
+      画像と図形が同じシートに混在する場合の重なり順(要件10.3)を保つため、両者を1つの
+      `DrawingsPart`にまとめる`AppendDrawingObjects`に統合した(旧`AppendImage`を置き換え)
+    - _Requirements: 8.3_
+  - [x] 14.18 サンプル帳票に図形(注記の吹き出し等)を配置し、ゴールデンテストを更新する
+    - invoiceサンプルの合計行と明細表の間に、基本図形+回転+テキスト(`RoundRect`、
+      赤枠・回転-12度・「見本」)、矢印(`RightArrow`)、吹き出し+テキスト
+      (`WedgeRoundRectCallout`、「ご確認ください」)を配置し、`UTSUSHI_UPDATE_GOLDEN=1 dotnet test`
+      でゴールデンファイルを更新した(差分は実際にCLIでPDFを生成しラスタライズして
+      目視確認したうえでコミットした)。グラデーション塗りはサンプルには含めず、
+      Rendering層のユニットテスト(14.20)で個別に検証する
+    - _Requirements: 10.1〜10.5, 8.3_
+  - [x] 14.19 Parsing層のユニットテストを追加する
+    - `ShapeWorkbookFixtures`/`ShapeReadingTests`を追加し、対応済み/非対応プリセットの判定、
+      oneCell/twoCellアンカー、調整ガイド値(既定値へのフォールバック含む)・回転・
+      単色/グラデーション塗り・noFill・枠線・テキスト(段落/配置/フォント)の読み取り、
+      図形個数/テキスト文字数の上限のignore/error、接続線・グループが引き続き`Drawing`に
+      分類されること、画像と図形が混在する場合の`DrawingObjects`の出現順維持を検証した
+      (17件追加)
+    - _Requirements: 10.1〜10.8_
+  - [x] 14.20 Layout層・Rendering層のユニットテストを追加する
+    - Layout層: `ReportLayoutEngineTests`に、固定/2セルアンカーの座標変換、改ページをまたぐ
+      図形の配置、テキストの折り返し・垂直配置、画像と図形混在時の出現順維持を追加した(6件)。
+      Rendering層: `ShapeGeometryBuilderTests`で全13プリセットの非空パス生成・矩形への
+      収まり方(吹き出しは意図的に矩形外へ広がる)・矢印の先端位置・調整値のフォールバックを
+      検証し(36件)、`SkiaPdfRendererTests`に全プリセットの描画・回転後の後続描画命令への
+      影響がないこと・グラデーション/noFill/テキスト描画を追加した(18件)
+    - _Requirements: 10.1〜10.6_
+  - [x] 14.21 レビュー対応
+    - `layout-fidelity-reviewer`指摘: 図形内テキストのフォントサイズ・矩形内側余白に
+      印刷拡大縮小率(`_scale`)が適用されておらず、縮小率を持つ帳票でテキストが矩形から
+      はみ出す不具合を修正した(`PageCommandBuilder.BuildShapeTextLines`/`WrapShapeText`)。
+      縮小率によらず折り返し行数が一定になる回帰テストを追加し、修正前は実際に
+      検出できる(2行→10行に増える)ことを確認した
+    - `security-reviewer`指摘: (1) 図形内テキストの文字数上限チェックが全ラン読み取り・
+      フォント解析後にしか効いていなかったため、累積文字数を数えながら上限超過時点で
+      即座に打ち切るよう修正(`OpenXmlWorkbookReader.ReadShapeText`)。(2) 吹き出しの
+      引き出し先端の調整値(ファイル由来、理論上Int32の全域に相当する値を取りうる)が
+      クランプされておらず極端な座標になりうる問題を、絶対値5.0への丸めで修正
+      (`ShapeGeometryBuilder.WedgeCalloutPath`)。(3) OOXMLパーツ全体のサイズ上限が無い点・
+      画像/図形の上限がシート単位でワークブック単位の合算上限が無い点をdesign.mdの
+      未決事項に記載(今回の主経路では実害無しを確認済み)
+    - `code-reviewer`指摘: design.mdが吹き出しの`adj2`既定値を`0.25`と記載していたが、
+      実装(`ShapeGeometryBuilder.DefaultCalloutTipYAdj`)は目視確認の結果`0.75`を採用して
+      おり、design.mdを更新せず放置していた無断逸脱を修正(design.mdを実装値に合わせて
+      更新し、選定経緯を明記)。`ReadShapeText`の重複した`<summary>`タグを1つに統合。
+      レイヤー越境(`Utsushi.Parsing.Model`の型がLayout/Renderingから直接参照される点)は
+      既存の`FontStyle`と同じ確立済みパターンであり本PR起因の新規逸脱ではないため対応不要
+      と判断
+    - _Requirements: 10.7, 10.8, 6.4_
