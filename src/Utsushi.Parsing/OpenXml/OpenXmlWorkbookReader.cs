@@ -491,6 +491,14 @@ namespace Utsushi.Parsing.OpenXml
         internal const int MaxShapeNestingDepth = 5;
 
         /// <summary>
+        /// 1つの塗りつぶし(<c>a:gsLst</c>)に含める、グラデーションストップ(<c>a:gs</c>)の
+        /// 個数の上限。Excel UI自体が通常扱う範囲(数個〜十数個)を大きく超える値とし、
+        /// 実用上の妨げにはならない範囲で、大量の<c>a:gs</c>要素を仕込んだ入力による
+        /// メモリ・CPU消費を抑える(要件10.8。security-reviewer指摘)。
+        /// </summary>
+        private const int MaxGradientStopsPerFill = 64;
+
+        /// <summary>
         /// シートに埋め込まれた画像(<c>xdr:pic</c>)・図形(<c>xdr:sp</c>)・接続線(<c>xdr:cxnSp</c>)・
         /// グループ(<c>xdr:grpSp</c>)を読み取る(要件9, 10)。
         /// </summary>
@@ -1350,6 +1358,13 @@ namespace Utsushi.Parsing.OpenXml
             var stops = new List<GradientStop>();
             foreach (var stop in gradientStopList.Elements<Dr.GradientStop>())
             {
+                // 件数を数える前に上限で打ち切る(shapeCount/imageCount/MaxShapeTextLengthと
+                // 同じ「無制限の入力から先に上限チェックする」方針。security-reviewer指摘)。
+                if (stops.Count >= MaxGradientStopsPerFill)
+                {
+                    return null;
+                }
+
                 if (stop.Position?.Value is not { } position || !TryReadColor(stop, out var color))
                 {
                     return null;
