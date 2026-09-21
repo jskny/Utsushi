@@ -139,25 +139,60 @@
     - 注記(コードレビューで発見): 結合セルの非アンカー位置を直接指定すると、Layoutレイヤーはアンカーの値しか描画しないため値が静かに失われる。また同一セルが帳票定義の置換キーにも登録され`overflow`が明示されている場合、`ApplyCellOverrides`だけでは`OverflowByCell`のエントリが残ってしまい「Excel側の書式に従う」という設計と矛盾する。いずれも12.1のレビューで発見し、本タスクで合わせて修正した。
 
 - [x] 13. シート内画像(ロゴ等)の再現
-  - [x] 13.1 Parsingレイヤー: `xdr:pic` からの画像読み取りを実装する
-    - `ImageModel` / `ImageExtent`(`FixedImageExtent` / `CellSpanImageExtent`)を実装し、`SheetModel.Images` として保持する
-    - `DetectUnsupportedElements`(`OpenXmlWorkbookReader`)の `Drawing` 検出を、アンカーを列挙して `xdr:pic` 以外(`xdr:sp`/`xdr:grpSp`/`xdr:cxnSp` 等)が含まれる場合のみ例外化するよう改修する(design.md「Parsing レイヤー」の必須修正点)
-    - 画像の `ContentType` が `image/png`/`image/jpeg`/`image/gif`/`image/bmp` 以外の場合は `UnsupportedWorkbookElementException`(`ElementKind = "UnsupportedImageFormat"`)を、既存の `unsupportedElements` ポリシーに従って送出/無視する
-    - _Requirements: 9.1, 9.2, 9.4_
-  - [x] 13.2 Layoutレイヤー: 画像のページ座標変換を実装する
-    - `SheetModel.Images` の各画像を、結合セルと同じ座標変換の仕組み(`SheetGrid`)でページ左上原点のポイント座標に変換し `ImageCommand` を生成する
-    - 改ページ位置をまたぐ画像は、アンカー左上セルが属するページにのみ全体を配置する(design.md「未決事項」の割り切り)
+  - [x] 13.1 Parsingレイヤー: 画像のデータモデル(`ImageModel` / `ImageExtent`)を定義する
+    - `ImageExtent` の派生として、固定サイズ(oneCellAnchor相当)の `FixedImageExtent`、
+      対角セル指定(twoCellAnchor相当)の `CellSpanImageExtent` を実装し、`SheetModel.Images` として保持する
     - _Requirements: 9.1, 9.2_
-  - [x] 13.3 Renderingレイヤー: `ImageCommand` の描画を実装する
-    - `SKBitmap.Decode`(または `SKImage.FromEncodedData`)でデコードし `SKCanvas.DrawBitmap` で描画する
-    - 描画順を 背景→罫線→テキスト→画像 とし、画像が最前面に来るようにする
+  - [x] 13.2 Parsingレイヤー: `xdr:pic`(oneCellAnchor/twoCellAnchor)から画像を読み取る
+    - `WorksheetPart.DrawingsPart.WorksheetDrawing` のアンカーから `a:blip` の `r:embed` を辿って
+      `ImagePart` を解決し、バイナリと `ContentType`、0始まりのOOXMLマーカーを1始まりの
+      `CellAddress` + ポイント単位オフセットへ変換する(`ReadImages` / `TryReadMarker`)
+    - _Requirements: 9.1, 9.2_
+  - [x] 13.3 Parsingレイヤー: `DetectUnsupportedElements` を改修し、画像のみのDrawingPartを誤検出しないようにする
+    - 従来は `DrawingsPart` の存在だけで無条件に「サポート外要素(Drawing)」としていたが、
+      アンカーを列挙して `xdr:pic` 以外(`xdr:sp`/`xdr:grpSp`/`xdr:cxnSp` 等)が
+      1つでも含まれる場合のみ例外化するよう変更する(design.md「Parsing レイヤー」の必須修正点。
+      これをしないと画像を1つでも含むシートが `unsupportedElements: "error"` で常に失敗し続ける)
+    - _Requirements: 9.5_
+  - [x] 13.4 Parsingレイヤー: 対応形式外の画像を `UnsupportedImageFormat` として扱う
+    - 画像の `ContentType` が `image/png`/`image/jpeg`/`image/gif`/`image/bmp` 以外
+      (EMF/WMF等)の場合は `UnsupportedWorkbookElementException`
+      (`ElementKind = "UnsupportedImageFormat"`)を、既存の `unsupportedElements` ポリシー
+      (ignore/error)に従って送出/無視する
+    - _Requirements: 9.4_
+  - [x] 13.5 Layoutレイヤー: 固定サイズ画像(oneCellAnchor相当)のページ座標変換を実装する
+    - `SheetModel.Images` の各画像について、アンカーセルがページに含まれる場合のみ、
+      結合セルと同じ座標変換の仕組み(`SheetGrid`)でページ左上原点のポイント座標に変換し
+      `ImageCommand` を生成する(`PageCommandBuilder.EmitImages`)
+    - _Requirements: 9.1, 9.2_
+  - [x] 13.6 Layoutレイヤー: 2セルアンカー(twoCellAnchor相当)の幅・高さ計算を実装する
+    - アンカーセルから対角セルまでの列幅/行高を `SheetGrid` で合算して幅・高さを求める
+      (`SpanWidthPt` / `SpanHeightPt`)。対角セルが現在のページの行/列範囲外にあっても、
+      印刷範囲全体の格子を保持する `SheetGrid` を使うため正しく計算できる
+    - _Requirements: 9.2_
+  - [x] 13.7 Layoutレイヤー: 改ページをまたぐ画像をアンカー側のページにのみ配置する
+    - 結合セルのような「見えている部分だけ切り出す」対応はせず、アンカー左上セルが
+      属するページにのみ画像全体を配置し、他のページには描画しない(design.md「未決事項」の割り切り)
+    - _Requirements: 9.1_
+  - [x] 13.8 Renderingレイヤー: `ImageCommand` を描画する
+    - `SKBitmap.Decode` でデコードし `SKCanvas.DrawBitmap` で描画する。描画順を
+      背景→罫線→テキスト→画像 とし、Excelと同様に画像が他のセル内容より最前面に来るようにする
     - _Requirements: 9.1, 9.3_
-  - [x] 13.4 サンプル帳票にロゴ画像を追加し、ゴールデンテストを更新する
-    - `tools/Utsushi.SampleGenerator` で対象帳票(例: invoice)のテンプレートにロゴ画像を埋め込めるようにし、生成された `template.xlsx` を確認のうえコミットする
-    - `UTSUSHI_UPDATE_GOLDEN=1 dotnet test` でゴールデンファイルを更新し、差分をレビューしてからコミットする
+  - [x] 13.9 `Utsushi.SampleGenerator` に画像埋め込み機能を追加する
+    - `SpreadsheetBuilder.SetImage`(oneCellAnchorでの画像配置)を実装する。画像処理ライブラリは
+      追加せず、`PlaceholderPng`(PNGを直接組み立てる自前の最小エンコーダ)で単色矩形のロゴを生成する
+    - _Requirements: 8.3_
+  - [x] 13.10 サンプル帳票(invoice)にロゴ画像を配置し、ゴールデンテストを更新する
+    - invoiceサンプルのF1セル(表題行の右上)にロゴ画像を配置して `template.xlsx` を再生成し、
+      `UTSUSHI_UPDATE_GOLDEN=1 dotnet test` でゴールデンファイルを更新する
+      (差分は実際にCLIでPDFを生成し目視確認したうえでコミットした)
     - _Requirements: 9.1, 9.2, 9.3, 8.3_
-    - 注記: 画像処理ライブラリを追加せず、`PlaceholderPng`(PNGを直接組み立てる自前の最小エンコーダ)で
-      単色矩形のロゴを生成した。invoiceサンプルのF1セル(表題行の右上)にoneCellAnchorで配置した。
-  - [x] 13.5 ユニットテストを追加する
-    - 画像アンカー(`oneCellAnchor`/`twoCellAnchor`)のパース、`ContentType` 許可リスト判定、`UnsupportedImageFormat` 例外、改ページをまたぐ画像の配置(アンカー側のページにのみ出ること)を検証する
+  - [x] 13.11 Parsing層のユニットテストを追加する
+    - oneCell/twoCellアンカーのパース、`ContentType` 許可リスト判定によるignore/error、
+      画像のみのシートで `unsupportedElements: error` でも例外にならないこと、
+      画像以外の図形は引き続き例外になることを検証する
     - _Requirements: 9.1, 9.2, 9.4_
+  - [x] 13.12 Layout層のユニットテストを追加する
+    - 固定サイズ画像・2セルアンカー画像の座標変換、改ページをまたぐ画像がアンカー側の
+      ページにのみ配置されることを検証する
+    - _Requirements: 9.1, 9.2_
