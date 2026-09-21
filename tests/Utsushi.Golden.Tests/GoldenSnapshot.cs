@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using Utsushi.Core;
 using Utsushi.Layout.Model;
+using Utsushi.Parsing.Model;
 
 namespace Utsushi.Golden.Tests
 {
@@ -80,18 +81,38 @@ namespace Utsushi.Golden.Tests
                     ImageCommand image =>
                         $"image  rect={Rect(image.Rect)} contentType={image.ContentType} bytes={image.Data.Length}",
 
+                    ShapeCommand shape =>
+                        $"shape  rect={Rect(shape.Rect)} preset={shape.Preset} rotation={N(shape.RotationDegrees)} "
+                        + $"fill={Fill(shape.Fill)} outline={Outline(shape.Outline)} "
+                        + $"text=[{string.Join(";", shape.TextLines.Select(ShapeTextLine))}]",
+
                     _ => $"unknown {command.GetType().Name}",
                 };
             }
         }
 
-        private static string Font(TextCommand text)
+        private static string Fill(ShapeFill? fill) => fill switch
         {
-            var font = text.Font;
+            SolidShapeFill solid => $"solid:{solid.Color}",
+            LinearGradientShapeFill gradient =>
+                $"gradient:{gradient.StartColor}->{gradient.EndColor}@{N(gradient.AngleDegrees)}",
+            _ => "none",
+        };
+
+        private static string Outline(ShapeOutline? outline) =>
+            outline is { } o ? $"{o.Color}/{N(o.WidthPt)}pt" : "none";
+
+        private static string ShapeTextLine(ShapeTextLine line) =>
+            $"origin={Point(line.Origin)} anchor={line.Anchor} font={Font(line.Font)} value={Quote(line.Text)}";
+
+        private static string Font(TextCommand text) => Font(text.Font);
+
+        private static string Font(FontStyle font)
+        {
             var flags = new List<string>(4);
             if (font.Bold) { flags.Add("bold"); }
             if (font.Italic) { flags.Add("italic"); }
-            if (font.Underline != Parsing.Model.UnderlineStyle.None) { flags.Add("underline:" + font.Underline); }
+            if (font.Underline != UnderlineStyle.None) { flags.Add("underline:" + font.Underline); }
             if (font.Strike) { flags.Add("strike"); }
 
             var suffix = flags.Count == 0 ? string.Empty : "," + string.Join(",", flags);
