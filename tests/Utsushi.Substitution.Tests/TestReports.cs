@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Utsushi.Core;
 using Utsushi.Parsing.Model;
@@ -46,7 +47,8 @@ namespace Utsushi.Substitution.Tests
                 DefaultRowHeight: 15.0,
                 HiddenColumns: new HashSet<int>(),
                 HiddenRows: new HashSet<int>(),
-                PageSetup: PageSetupModel.Default);
+                PageSetup: PageSetupModel.Default,
+                Images: Array.Empty<ImageModel>());
         }
 
         public static ReportModel Report(ReportDefinition definition, SheetModel sheet) =>

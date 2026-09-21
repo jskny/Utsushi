@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Utsushi.Core;
 using Utsushi.Core.Exceptions;
@@ -52,7 +53,8 @@ namespace Utsushi.ReportDefinition.Tests
                 new List<double>(), new List<double>(),
                 8.43, 15.0,
                 new HashSet<int>(), new HashSet<int>(),
-                PageSetupModel.Default);
+                PageSetupModel.Default,
+                Array.Empty<ImageModel>());
 
             return new WorkbookModel(new[] { sheet }, FontStyle.Default);
         }

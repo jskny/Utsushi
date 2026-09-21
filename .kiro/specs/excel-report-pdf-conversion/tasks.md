@@ -3,9 +3,8 @@
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
-> **状況**: タスク1〜12は完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20)。
-> `dotnet build` / `dotnet test`(215件、2026-09-21時点)/ `dotnet format` はグリーン。
-> タスク13(シート内画像の再現)は要件・設計まで完了し、実装に着手中。
+> **状況**: 全タスク完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21)。
+> `dotnet build` / `dotnet test`(224件、2026-09-21時点)/ `dotnet format` はグリーン。
 > 実装時に決定した事項・判明した制約は `design.md` に反映済み。
 > タスク文面どおりに実現できなかった項目には各タスクに注記を付けた。
 
@@ -139,24 +138,26 @@
     - _Requirements: 2.9_
     - 注記(コードレビューで発見): 結合セルの非アンカー位置を直接指定すると、Layoutレイヤーはアンカーの値しか描画しないため値が静かに失われる。また同一セルが帳票定義の置換キーにも登録され`overflow`が明示されている場合、`ApplyCellOverrides`だけでは`OverflowByCell`のエントリが残ってしまい「Excel側の書式に従う」という設計と矛盾する。いずれも12.1のレビューで発見し、本タスクで合わせて修正した。
 
-- [ ] 13. シート内画像(ロゴ等)の再現
-  - [ ] 13.1 Parsingレイヤー: `xdr:pic` からの画像読み取りを実装する
+- [x] 13. シート内画像(ロゴ等)の再現
+  - [x] 13.1 Parsingレイヤー: `xdr:pic` からの画像読み取りを実装する
     - `ImageModel` / `ImageExtent`(`FixedImageExtent` / `CellSpanImageExtent`)を実装し、`SheetModel.Images` として保持する
     - `DetectUnsupportedElements`(`OpenXmlWorkbookReader`)の `Drawing` 検出を、アンカーを列挙して `xdr:pic` 以外(`xdr:sp`/`xdr:grpSp`/`xdr:cxnSp` 等)が含まれる場合のみ例外化するよう改修する(design.md「Parsing レイヤー」の必須修正点)
     - 画像の `ContentType` が `image/png`/`image/jpeg`/`image/gif`/`image/bmp` 以外の場合は `UnsupportedWorkbookElementException`(`ElementKind = "UnsupportedImageFormat"`)を、既存の `unsupportedElements` ポリシーに従って送出/無視する
     - _Requirements: 9.1, 9.2, 9.4_
-  - [ ] 13.2 Layoutレイヤー: 画像のページ座標変換を実装する
+  - [x] 13.2 Layoutレイヤー: 画像のページ座標変換を実装する
     - `SheetModel.Images` の各画像を、結合セルと同じ座標変換の仕組み(`SheetGrid`)でページ左上原点のポイント座標に変換し `ImageCommand` を生成する
     - 改ページ位置をまたぐ画像は、アンカー左上セルが属するページにのみ全体を配置する(design.md「未決事項」の割り切り)
     - _Requirements: 9.1, 9.2_
-  - [ ] 13.3 Renderingレイヤー: `ImageCommand` の描画を実装する
+  - [x] 13.3 Renderingレイヤー: `ImageCommand` の描画を実装する
     - `SKBitmap.Decode`(または `SKImage.FromEncodedData`)でデコードし `SKCanvas.DrawBitmap` で描画する
     - 描画順を 背景→罫線→テキスト→画像 とし、画像が最前面に来るようにする
     - _Requirements: 9.1, 9.3_
-  - [ ] 13.4 サンプル帳票にロゴ画像を追加し、ゴールデンテストを更新する
+  - [x] 13.4 サンプル帳票にロゴ画像を追加し、ゴールデンテストを更新する
     - `tools/Utsushi.SampleGenerator` で対象帳票(例: invoice)のテンプレートにロゴ画像を埋め込めるようにし、生成された `template.xlsx` を確認のうえコミットする
     - `UTSUSHI_UPDATE_GOLDEN=1 dotnet test` でゴールデンファイルを更新し、差分をレビューしてからコミットする
     - _Requirements: 9.1, 9.2, 9.3, 8.3_
-  - [ ] 13.5 ユニットテストを追加する
+    - 注記: 画像処理ライブラリを追加せず、`PlaceholderPng`(PNGを直接組み立てる自前の最小エンコーダ)で
+      単色矩形のロゴを生成した。invoiceサンプルのF1セル(表題行の右上)にoneCellAnchorで配置した。
+  - [x] 13.5 ユニットテストを追加する
     - 画像アンカー(`oneCellAnchor`/`twoCellAnchor`)のパース、`ContentType` 許可リスト判定、`UnsupportedImageFormat` 例外、改ページをまたぐ画像の配置(アンカー側のページにのみ出ること)を検証する
     - _Requirements: 9.1, 9.2, 9.4_

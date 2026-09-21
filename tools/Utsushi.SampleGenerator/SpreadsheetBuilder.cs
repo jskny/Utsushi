@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
+using A = DocumentFormat.OpenXml.Drawing;
+using Xdr = DocumentFormat.OpenXml.Drawing.Spreadsheet;
 
 namespace Utsushi.SampleGenerator
 {
@@ -17,11 +21,15 @@ namespace Utsushi.SampleGenerator
 /// </remarks>
 internal sealed class SpreadsheetBuilder
 {
+    /// <summary>1ポイントあたりのEMU(English Metric Unit)数。OOXML描画要素の座標・サイズの単位。</summary>
+    private const double EmusPerPoint = 12700.0;
+
     private readonly Dictionary<string, (int Row, int Column, object? Value, uint StyleIndex, bool IsNumber)> _cells = new();
     private readonly List<string> _mergedRanges = new();
     private readonly Dictionary<int, double> _columnWidths = new();
     private readonly Dictionary<int, double> _rowHeights = new();
     private readonly List<uint> _manualRowBreaks = new();
+    private (int Row, int Column, double OffsetXPt, double OffsetYPt, double WidthPt, double HeightPt, byte[] Png)? _image;
 
     public SpreadsheetBuilder(string sheetName)
     {
@@ -70,6 +78,15 @@ internal sealed class SpreadsheetBuilder
 
     public void AddManualRowBreak(uint rowIndex) => _manualRowBreaks.Add(rowIndex);
 
+    /// <summary>
+    /// シートに画像(要件9)を1枚配置する。<paramref name="row"/>/<paramref name="column"/>のセル左上を
+    /// 基準に、そこから<paramref name="offsetXPt"/>/<paramref name="offsetYPt"/>だけ離れた位置へ、
+    /// <paramref name="widthPt"/>x<paramref name="heightPt"/>の固定サイズで配置する(oneCellAnchor)。
+    /// </summary>
+    public void SetImage(
+        int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt, byte[] png) =>
+        _image = (row, column, offsetXPt, offsetYPt, widthPt, heightPt, png);
+
     public void SetText(int row, int column, string? text, uint styleIndex = 0) =>
         _cells[Reference(row, column)] = (row, column, text, styleIndex, false);
 
@@ -109,6 +126,11 @@ internal sealed class SpreadsheetBuilder
 
         var worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
         worksheetPart.Worksheet = BuildWorksheet();
+
+        if (_image is { } image)
+        {
+            AppendImage(worksheetPart, image);
+        }
 
         var sheets = workbookPart.Workbook.AppendChild(new Sheets());
         sheets.Append(new Sheet
@@ -349,5 +371,53 @@ internal sealed class SpreadsheetBuilder
 
     private static string QuoteSheetName(string name) =>
         name.Any(c => char.IsWhiteSpace(c) || c > 0x7F) ? "'" + name.Replace("'", "''") + "'" : name;
+
+    /// <summary>
+    /// 画像パート(<c>xdr:pic</c>、oneCellAnchor)をワークシートへ追加する。
+    /// </summary>
+    private static void AppendImage(
+        WorksheetPart worksheetPart,
+        (int Row, int Column, double OffsetXPt, double OffsetYPt, double WidthPt, double HeightPt, byte[] Png) image)
+    {
+        var drawingsPart = worksheetPart.AddNewPart<DrawingsPart>();
+        var imagePart = drawingsPart.AddImagePart(ImagePartType.Png);
+        using (var stream = new MemoryStream(image.Png))
+        {
+            imagePart.FeedData(stream);
+        }
+
+        var offsetXEmu = (long)Math.Round(image.OffsetXPt * EmusPerPoint);
+        var offsetYEmu = (long)Math.Round(image.OffsetYPt * EmusPerPoint);
+        var widthEmu = (long)Math.Round(image.WidthPt * EmusPerPoint);
+        var heightEmu = (long)Math.Round(image.HeightPt * EmusPerPoint);
+
+        var anchor = new Xdr.OneCellAnchor(
+            new Xdr.FromMarker(
+                new Xdr.ColumnId((image.Column - 1).ToString(CultureInfo.InvariantCulture)),
+                new Xdr.ColumnOffset(offsetXEmu.ToString(CultureInfo.InvariantCulture)),
+                new Xdr.RowId((image.Row - 1).ToString(CultureInfo.InvariantCulture)),
+                new Xdr.RowOffset(offsetYEmu.ToString(CultureInfo.InvariantCulture))),
+            new Xdr.Extent { Cx = widthEmu, Cy = heightEmu },
+            new Xdr.Picture(
+                new Xdr.NonVisualPictureProperties(
+                    new Xdr.NonVisualDrawingProperties { Id = 2U, Name = "Logo" },
+                    new Xdr.NonVisualPictureDrawingProperties()),
+                new Xdr.BlipFill(
+                    new A.Blip { Embed = drawingsPart.GetIdOfPart(imagePart) },
+                    new A.Stretch(new A.FillRectangle())),
+                new Xdr.ShapeProperties(
+                    new A.Transform2D(
+                        new A.Offset { X = 0L, Y = 0L },
+                        new A.Extents { Cx = widthEmu, Cy = heightEmu }),
+                    new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle })),
+            new Xdr.ClientData());
+
+        var drawing = new Xdr.WorksheetDrawing();
+        drawing.Append(anchor);
+        drawingsPart.WorksheetDrawing = drawing;
+
+        // CT_Worksheetのスキーマ順(drawingはrowBreaks/colBreaksより後)に従い、最後に追加する。
+        worksheetPart.Worksheet.Append(new Drawing { Id = worksheetPart.GetIdOfPart(drawingsPart) });
+    }
 }
 }

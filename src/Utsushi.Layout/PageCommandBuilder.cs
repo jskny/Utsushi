@@ -28,6 +28,7 @@ namespace Utsushi.Layout
         private readonly List<DrawCommand> _fills = new();
         private readonly List<DrawCommand> _borders = new();
         private readonly List<DrawCommand> _texts = new();
+        private readonly List<DrawCommand> _images = new();
         private readonly HashSet<string> _emittedBorders = new(StringComparer.Ordinal);
 
         public PageCommandBuilder(
@@ -92,11 +93,92 @@ namespace Utsushi.Layout
                 }
             }
 
-            var commands = new List<DrawCommand>(_fills.Count + _borders.Count + _texts.Count);
+            EmitImages(rowIndex, columnIndex, rowOffsets, columnOffsets);
+
+            var commands = new List<DrawCommand>(_fills.Count + _borders.Count + _texts.Count + _images.Count);
             commands.AddRange(_fills);
             commands.AddRange(_borders);
             commands.AddRange(_texts);
+            commands.AddRange(_images);
             return commands;
+        }
+
+        // ---------------------------------------------------------------------
+        // 画像(要件9)
+        // ---------------------------------------------------------------------
+
+        /// <summary>
+        /// アンカー左上セルがこのページに含まれる画像を、ページ座標に変換して描画命令にする。
+        /// 改ページ位置をまたぐ画像は、アンカー左上セルが属するページにのみ全体を配置する
+        /// (design.md「未決事項」の割り切り)。
+        /// </summary>
+        private void EmitImages(
+            IReadOnlyDictionary<int, int> rowIndex,
+            IReadOnlyDictionary<int, int> columnIndex,
+            double[] rowOffsets,
+            double[] columnOffsets)
+        {
+            foreach (var image in _sheet.Images)
+            {
+                if (!rowIndex.TryGetValue(image.AnchorCell.Row, out var r)
+                    || !columnIndex.TryGetValue(image.AnchorCell.Column, out var c))
+                {
+                    continue;
+                }
+
+                var left = columnOffsets[c] + image.AnchorOffset.X;
+                var top = rowOffsets[r] + image.AnchorOffset.Y;
+
+                var (widthPt, heightPt) = image.Extent switch
+                {
+                    FixedImageExtent fixedExtent => (fixedExtent.WidthPt, fixedExtent.HeightPt),
+                    CellSpanImageExtent span => (
+                        SpanWidthPt(image.AnchorCell.Column, image.AnchorOffset.X, span.ToCell.Column, span.ToOffset.X),
+                        SpanHeightPt(image.AnchorCell.Row, image.AnchorOffset.Y, span.ToCell.Row, span.ToOffset.Y)),
+                    _ => (0.0, 0.0),
+                };
+
+                if (widthPt <= 0 || heightPt <= 0)
+                {
+                    continue;
+                }
+
+                var rect = ToPageRect(left, top, left + widthPt, top + heightPt);
+                if (rect.IsEmpty)
+                {
+                    continue;
+                }
+
+                _images.Add(new ImageCommand(rect, image.Data, image.ContentType));
+            }
+        }
+
+        /// <summary>
+        /// 2セルアンカー(<see cref="CellSpanImageExtent"/>)の幅を求める。列幅の合計には
+        /// <see cref="_grid"/>(印刷範囲全体の格子)を使うため、対角セルが現在のページの
+        /// 列範囲外(別のページ帯)にあっても正しく計算できる。
+        /// </summary>
+        private double SpanWidthPt(int fromColumn, double fromOffsetPt, int toColumn, double toOffsetPt)
+        {
+            var width = toOffsetPt - fromOffsetPt;
+            for (var column = fromColumn; column < toColumn; column++)
+            {
+                width += _grid.GetColumnWidthPt(column);
+            }
+
+            return Math.Max(0.0, width);
+        }
+
+        /// <summary>2セルアンカーの高さを求める。<see cref="SpanWidthPt"/>と同様の考え方。</summary>
+        private double SpanHeightPt(int fromRow, double fromOffsetPt, int toRow, double toOffsetPt)
+        {
+            var height = toOffsetPt - fromOffsetPt;
+            for (var row = fromRow; row < toRow; row++)
+            {
+                height += _grid.GetRowHeightPt(row);
+            }
+
+            return Math.Max(0.0, height);
         }
 
         private void EmitCell(CellAddress address, CellModel? cell, RectPt rect, BorderSet? bordersOverride = null)

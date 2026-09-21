@@ -10,6 +10,7 @@ using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.Parsing.Model;
 using X = DocumentFormat.OpenXml.Spreadsheet;
+using Xdr = DocumentFormat.OpenXml.Drawing.Spreadsheet;
 
 namespace Utsushi.Parsing.OpenXml
 {
@@ -201,6 +202,7 @@ namespace Utsushi.Parsing.OpenXml
             var (columnWidths, hiddenColumns) = ReadColumns(worksheet, defaultColumnWidth);
             var mergedRanges = ReadMergedRanges(worksheet);
             var pageSetup = ReadPageSetup(name, worksheet, definedNames);
+            var images = ReadImages(name, worksheetPart, options);
 
             return new SheetModel(
                 name,
@@ -212,7 +214,8 @@ namespace Utsushi.Parsing.OpenXml
                 defaultRowHeight,
                 hiddenColumns,
                 hiddenRows,
-                pageSetup);
+                pageSetup,
+                images);
         }
 
         /// <summary>
@@ -357,6 +360,133 @@ namespace Utsushi.Parsing.OpenXml
             }
 
             return result;
+        }
+
+        /// <summary>対応するラスター画像のMIMEタイプ(要件9.4)。SkiaSharpによる実デコードではなく、
+        /// この静的な許可リストで判定する(ParsingレイヤーはRenderingレイヤーのSkiaSharpに依存しないため)。</summary>
+        private static readonly HashSet<string> SupportedImageContentTypes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "image/png",
+            "image/jpeg",
+            "image/gif",
+            "image/bmp",
+        };
+
+        /// <summary>
+        /// シートに埋め込まれた画像(<c>xdr:pic</c>)を読み取る(要件9)。
+        /// </summary>
+        /// <remarks>
+        /// 画像以外の描画オブジェクト(シェイプ・グラフ等)は対象外とし、<see cref="DetectUnsupportedElements"/>
+        /// 側で引き続き「サポート外要素」として扱う(要件9.5)。画像は帳票定義の <c>unsupportedElements</c>
+        /// 設定によらず常に読み取り対象とするが、デコード不能な形式(EMF/WMF等)だけは同じ設定に従う(要件9.4)。
+        /// </remarks>
+        private static List<ImageModel> ReadImages(string sheetName, WorksheetPart worksheetPart, WorkbookReadOptions options)
+        {
+            var result = new List<ImageModel>();
+            var drawing = worksheetPart.DrawingsPart?.WorksheetDrawing;
+            if (drawing is null)
+            {
+                return result;
+            }
+
+            var drawingsPart = worksheetPart.DrawingsPart!;
+
+            foreach (var anchor in drawing.ChildElements)
+            {
+                var (fromMarker, picture) = anchor switch
+                {
+                    Xdr.TwoCellAnchor two => (two.FromMarker, two.GetFirstChild<Xdr.Picture>()),
+                    Xdr.OneCellAnchor one => (one.FromMarker, one.GetFirstChild<Xdr.Picture>()),
+                    _ => (null, null),
+                };
+
+                if (fromMarker is null || picture is null)
+                {
+                    continue;
+                }
+
+                if (!TryReadMarker(fromMarker, out var anchorCell, out var anchorOffset))
+                {
+                    continue;
+                }
+
+                var embedId = picture.BlipFill?.Blip?.Embed?.Value;
+                if (string.IsNullOrEmpty(embedId) || drawingsPart.GetPartById(embedId!) is not ImagePart imagePart)
+                {
+                    continue;
+                }
+
+                if (!SupportedImageContentTypes.Contains(imagePart.ContentType))
+                {
+                    if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                    {
+                        throw new UnsupportedWorkbookElementException(
+                            $"シート '{sheetName}' の画像形式 '{imagePart.ContentType}' には対応していません"
+                            + "(対応形式: PNG/JPEG/GIF/BMP)。帳票定義の unsupportedElements が 'error' のため中止します。",
+                            "UnsupportedImageFormat",
+                            options.ReportCode,
+                            sheetName);
+                    }
+
+                    continue;
+                }
+
+                ImageExtent? extent = anchor switch
+                {
+                    Xdr.TwoCellAnchor two when two.ToMarker is { } toMarker && TryReadMarker(toMarker, out var toCell, out var toOffset) =>
+                        new CellSpanImageExtent(toCell, toOffset),
+                    Xdr.OneCellAnchor { Extent: { Cx: { } cx, Cy: { } cy } } =>
+                        new FixedImageExtent(Units.EmusToPoints(cx.Value), Units.EmusToPoints(cy.Value)),
+                    _ => null,
+                };
+
+                if (extent is null)
+                {
+                    continue;
+                }
+
+                using var stream = imagePart.GetStream();
+                using var buffer = new MemoryStream();
+                stream.CopyTo(buffer);
+
+                result.Add(new ImageModel(buffer.ToArray(), imagePart.ContentType, anchorCell, anchorOffset, extent));
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// <c>xdr:from</c>/<c>xdr:to</c> のマーカー(0始まりの行/列 + セル内オフセット)を、
+        /// Utsushiの1始まりの <see cref="CellAddress"/> とポイント単位のオフセットに変換する。
+        /// </summary>
+        private static bool TryReadMarker(Xdr.MarkerType marker, out CellAddress cell, out PointPt offset)
+        {
+            cell = default;
+            offset = default;
+
+            if (marker.ColumnId?.Text is not { } columnText
+                || marker.RowId?.Text is not { } rowText
+                || !int.TryParse(columnText, NumberStyles.None, CultureInfo.InvariantCulture, out var zeroBasedColumn)
+                || !int.TryParse(rowText, NumberStyles.None, CultureInfo.InvariantCulture, out var zeroBasedRow))
+            {
+                return false;
+            }
+
+            var column = zeroBasedColumn + 1;
+            var row = zeroBasedRow + 1;
+            if (column < 1 || column > CellAddress.MaxColumn || row < 1 || row > CellAddress.MaxRow)
+            {
+                return false;
+            }
+
+            var offsetXEmu = marker.ColumnOffset?.Text is { } colOffsetText
+                && long.TryParse(colOffsetText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var x) ? x : 0L;
+            var offsetYEmu = marker.RowOffset?.Text is { } rowOffsetText
+                && long.TryParse(rowOffsetText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var y) ? y : 0L;
+
+            cell = new CellAddress(row, column);
+            offset = new PointPt(Units.EmusToPoints(offsetXEmu), Units.EmusToPoints(offsetYEmu));
+            return true;
         }
 
         private static PageSetupModel ReadPageSetup(
@@ -531,7 +661,15 @@ namespace Utsushi.Parsing.OpenXml
                     sheetName);
             }
 
-            if (drawingsPart is not null || worksheet.GetFirstChild<X.Drawing>() is not null)
+            // 画像(xdr:pic)は要件9として常に読み取り対象とするため、ここでは対象外とする(ReadImagesが担う)。
+            // 画像以外の描画オブジェクト(シェイプ・グループ・接続線等)が1つでもあれば引き続きサポート外要素とする。
+            // drawingsPartが解決できないのに<drawing>参照だけがある場合は中身を判定できないため、
+            // 従来どおり保守的にサポート外として扱う。
+            var hasUnsupportedDrawingObject = drawingsPart is not null
+                ? HasNonPictureDrawingObject(drawingsPart)
+                : worksheet.GetFirstChild<X.Drawing>() is not null;
+
+            if (hasUnsupportedDrawingObject)
             {
                 throw new UnsupportedWorkbookElementException(
                     $"シート '{sheetName}' に図形/画像(drawing)が含まれています。帳票定義の unsupportedElements が 'error' のため中止します。",
@@ -548,6 +686,37 @@ namespace Utsushi.Parsing.OpenXml
                     options.ReportCode,
                     sheetName);
             }
+        }
+
+        /// <summary>
+        /// <paramref name="drawingsPart"/> 内のアンカーに、画像(<c>xdr:pic</c>)以外の描画オブジェクト
+        /// (シェイプ・グループ・接続線・絶対座標アンカー等)が1つでも含まれるかどうかを判定する(要件9.5)。
+        /// </summary>
+        private static bool HasNonPictureDrawingObject(DrawingsPart drawingsPart)
+        {
+            var drawing = drawingsPart.WorksheetDrawing;
+            if (drawing is null)
+            {
+                return false;
+            }
+
+            foreach (var anchor in drawing.ChildElements)
+            {
+                var picture = anchor switch
+                {
+                    Xdr.TwoCellAnchor two => two.GetFirstChild<Xdr.Picture>(),
+                    Xdr.OneCellAnchor one => one.GetFirstChild<Xdr.Picture>(),
+                    // AbsoluteAnchor(絶対座標配置)は要件9.1/9.2の対象外のため、画像でもサポート外として扱う。
+                    _ => null,
+                };
+
+                if (picture is null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static List<string> ReadSharedStrings(WorkbookPart workbookPart)

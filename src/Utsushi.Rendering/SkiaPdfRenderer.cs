@@ -14,7 +14,8 @@ namespace Utsushi.Rendering
     /// <remarks>
     /// <para>
     /// 入力は <see cref="PagedLayout"/> のみで、Excel やレイアウト計算の知識を持たない。
-    /// 1ページ = 1 <see cref="SKCanvas"/> とし、命令は背景 → 罫線 → テキストの順(Layout が並べた順)に描画する。
+    /// 1ページ = 1 <see cref="SKCanvas"/> とし、命令は背景 → 罫線 → テキスト → 画像の順
+    /// (Layout が並べた順)に描画する。画像はExcelと同様に他のセル内容より最前面になる(要件9.3)。
     /// </para>
     /// <para>
     /// 一度メモリ上のストリームへ完全に書き出し、成功した場合のみ出力先へ転送する。
@@ -151,6 +152,10 @@ namespace Utsushi.Rendering
                         DrawText(canvas, text);
                         break;
 
+                    case ImageCommand image:
+                        DrawImage(canvas, image);
+                        break;
+
                     default:
                         throw new PdfRenderingException(
                             $"未知の描画命令です: {command.GetType().Name}");
@@ -168,6 +173,19 @@ namespace Utsushi.Rendering
             };
 
             canvas.DrawRect(ToSkRect(fill.Rect), paint);
+        }
+
+        /// <summary>画像を描画する(要件9)。他のセル内容より最前面に描画される。</summary>
+        private static void DrawImage(SKCanvas canvas, ImageCommand image)
+        {
+            using var bitmap = SKBitmap.Decode(image.Data);
+            if (bitmap is null)
+            {
+                throw new PdfRenderingException(
+                    $"画像(ContentType: {image.ContentType})をデコードできませんでした。");
+            }
+
+            canvas.DrawBitmap(bitmap, ToSkRect(image.Rect));
         }
 
         private static void DrawLine(SKCanvas canvas, LineCommand line)
