@@ -259,7 +259,7 @@
   - [ ] 14.5 Parsingレイヤー: 図形の塗りつぶし(`a:solidFill`/`a:gradFill`/`a:noFill`)と
         枠線(`a:ln`)を読み取る
     - グラデーションは先頭・末尾の `a:gs` の色のみ採用し、`a:lin/@ang` があれば角度として読み取る
-    - _Requirements: 10.6_
+    - _Requirements: 10.1, 10.6_
   - [ ] 14.6 Parsingレイヤー: 図形内テキスト(`xdr:txBody`)を段落・ラン単位で読み取る
     - `a:bodyPr/@anchor` を垂直配置、各 `a:p/a:pPr/@algn` を段落ごとの水平配置として読み取り、
       `a:r/a:rPr`(サイズ・太字・斜体・色・書体)と `a:t` から `FontStyle` と同じ型で
@@ -308,7 +308,7 @@
   - [ ] 14.15 Renderingレイヤー: 図形の塗りつぶし・枠線・回転を描画する
     - `SolidShapeFill`/`LinearGradientShapeFill`/`noFill`、`ShapeOutline` の描画と、
       `RotationDegrees` に応じた `canvas.Save`/`RotateDegrees`/`Restore` を実装する
-    - _Requirements: 10.5, 10.6_
+    - _Requirements: 10.1, 10.5, 10.6_
   - [ ] 14.16 Renderingレイヤー: 図形内テキストを描画する
     - セル内テキスト描画と同じフォント解決・太字/斜体合成ロジックを再利用し、
       図形本体と同じ回転変換の内側で `ShapeCommand.TextLines` を描画する
@@ -325,7 +325,7 @@
     - 対応済み/非対応プリセットの判定、調整ガイド値・回転・塗り/枠線・テキストの読み取り、
       図形個数/テキスト文字数の上限、画像と図形が混在する場合の `DrawingObjects` の
       出現順維持を検証する
-    - _Requirements: 10.1〜10.4, 10.7, 10.8_
+    - _Requirements: 10.1〜10.8_
   - [ ] 14.20 Layout層・Rendering層のユニットテストを追加する
     - 図形の座標変換・改ページをまたぐ図形の配置・テキスト折り返しをLayout層で、
       各プリセットのパス生成・塗り/枠線/回転・テキスト描画をRendering層で検証する
