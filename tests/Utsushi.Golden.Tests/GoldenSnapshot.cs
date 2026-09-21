@@ -60,36 +60,57 @@ namespace Utsushi.Golden.Tests
             return sb.ToString();
         }
 
-        private static IEnumerable<string> Describe(IReadOnlyList<DrawCommand> commands)
+        /// <summary>
+        /// 描画命令列を出現順に1行ずつ記述する。<see cref="GroupCommand"/>は自身の要約行に続けて
+        /// 子コマンドを1段インデントして再帰的に記述する(入れ子のグループも同様)。
+        /// </summary>
+        private static IEnumerable<string> Describe(IReadOnlyList<DrawCommand> commands, string indent = "")
         {
             foreach (var command in commands)
             {
-                yield return command switch
+                yield return indent + DescribeSingle(command);
+
+                if (command is GroupCommand group)
                 {
-                    FillRectCommand fill =>
-                        $"fill   rect={Rect(fill.Rect)} color={fill.Color}",
-
-                    LineCommand line =>
-                        $"line   from={Point(line.From)} to={Point(line.To)} "
-                        + $"color={line.Color} width={N(line.WidthPt)} dash={line.Dash}",
-
-                    TextCommand text =>
-                        $"text   origin={Point(text.Origin)} anchor={text.Anchor} "
-                        + $"font={Font(text)} clip={(text.ClipRect is { } c ? Rect(c) : "none")} "
-                        + $"value={Quote(text.Text)}",
-
-                    ImageCommand image =>
-                        $"image  rect={Rect(image.Rect)} contentType={image.ContentType} bytes={image.Data.Length}",
-
-                    ShapeCommand shape =>
-                        $"shape  rect={Rect(shape.Rect)} preset={shape.Preset} rotation={N(shape.RotationDegrees)} "
-                        + $"fill={Fill(shape.Fill)} outline={Outline(shape.Outline)} "
-                        + $"text=[{string.Join(";", shape.TextLines.Select(ShapeTextLine))}]",
-
-                    _ => $"unknown {command.GetType().Name}",
-                };
+                    foreach (var line in Describe(group.Children, indent + "  "))
+                    {
+                        yield return line;
+                    }
+                }
             }
         }
+
+        private static string DescribeSingle(DrawCommand command) => command switch
+        {
+            FillRectCommand fill =>
+                $"fill   rect={Rect(fill.Rect)} color={fill.Color}",
+
+            LineCommand line =>
+                $"line   from={Point(line.From)} to={Point(line.To)} "
+                + $"color={line.Color} width={N(line.WidthPt)} dash={line.Dash}",
+
+            TextCommand text =>
+                $"text   origin={Point(text.Origin)} anchor={text.Anchor} "
+                + $"font={Font(text)} clip={(text.ClipRect is { } c ? Rect(c) : "none")} "
+                + $"value={Quote(text.Text)}",
+
+            ImageCommand image =>
+                $"image  rect={Rect(image.Rect)} contentType={image.ContentType} bytes={image.Data.Length}",
+
+            ShapeCommand shape =>
+                $"shape  rect={Rect(shape.Rect)} preset={shape.Preset} rotation={N(shape.RotationDegrees)} "
+                + $"fill={Fill(shape.Fill)} outline={Outline(shape.Outline)} "
+                + $"text=[{string.Join(";", shape.TextLines.Select(ShapeTextLine))}]",
+
+            ConnectorCommand connector =>
+                $"connector rect={Rect(connector.Rect)} preset={connector.Preset} rotation={N(connector.RotationDegrees)} "
+                + $"flipH={connector.FlipHorizontal} flipV={connector.FlipVertical} outline={Outline(connector.Outline)}",
+
+            GroupCommand group =>
+                $"group  center={Point(group.Center)} rotation={N(group.RotationDegrees)} children={group.Children.Count}",
+
+            _ => $"unknown {command.GetType().Name}",
+        };
 
         private static string Fill(ShapeFill? fill) => fill switch
         {

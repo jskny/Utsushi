@@ -1,209 +1,209 @@
 report=invoice sheet=請求書 pages=1
 
 ## page 1 paper=A4/Portrait size=595.28x841.89 scale=1 rows=1-34 cols=1-6
-fill   rect=[50.4,210.5 21x13.5] color=#FFDCE6F1
-fill   rect=[71.4,210.5 147x13.5] color=#FFDCE6F1
-fill   rect=[218.4,210.5 42x13.5] color=#FFDCE6F1
-fill   rect=[260.4,210.5 31.5x13.5] color=#FFDCE6F1
-fill   rect=[291.9,210.5 63x13.5] color=#FFDCE6F1
-fill   rect=[354.9,210.5 73.5x13.5] color=#FFDCE6F1
+fill   rect=[50.4,231 21x13.5] color=#FFDCE6F1
+fill   rect=[71.4,231 147x13.5] color=#FFDCE6F1
+fill   rect=[218.4,231 42x13.5] color=#FFDCE6F1
+fill   rect=[260.4,231 31.5x13.5] color=#FFDCE6F1
+fill   rect=[291.9,231 63x13.5] color=#FFDCE6F1
+fill   rect=[354.9,231 73.5x13.5] color=#FFDCE6F1
 line   from=(50.4,105.5) to=(260.4,105.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,159.5) to=(428.4,159.5) color=#FF000000 width=1.5 dash=Solid
-line   from=(218.4,183.5) to=(428.4,183.5) color=#FF000000 width=1.5 dash=Solid
-line   from=(218.4,159.5) to=(218.4,183.5) color=#FF000000 width=1.5 dash=Solid
-line   from=(428.4,159.5) to=(428.4,183.5) color=#FF000000 width=1.5 dash=Solid
-line   from=(50.4,210.5) to=(71.4,210.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,224) to=(71.4,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,210.5) to=(50.4,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,210.5) to=(71.4,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,210.5) to=(218.4,210.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,224) to=(218.4,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,210.5) to=(218.4,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,210.5) to=(260.4,210.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,224) to=(260.4,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,210.5) to=(260.4,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,210.5) to=(291.9,210.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,224) to=(291.9,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,210.5) to=(291.9,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,210.5) to=(354.9,210.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,224) to=(354.9,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,210.5) to=(354.9,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,210.5) to=(428.4,210.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,224) to=(428.4,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,210.5) to=(428.4,224) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,237.5) to=(71.4,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,224) to=(50.4,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,224) to=(71.4,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,237.5) to=(218.4,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,224) to=(218.4,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,237.5) to=(260.4,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,224) to=(260.4,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,237.5) to=(291.9,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,224) to=(291.9,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,237.5) to=(354.9,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,224) to=(354.9,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,237.5) to=(428.4,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,224) to=(428.4,237.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,251) to=(71.4,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,237.5) to=(50.4,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,237.5) to=(71.4,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,251) to=(218.4,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,237.5) to=(218.4,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,251) to=(260.4,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,237.5) to=(260.4,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,251) to=(291.9,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,237.5) to=(291.9,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,251) to=(354.9,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,237.5) to=(354.9,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,251) to=(428.4,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,237.5) to=(428.4,251) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,264.5) to=(71.4,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,251) to=(50.4,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,251) to=(71.4,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,264.5) to=(218.4,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,251) to=(218.4,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,264.5) to=(260.4,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,251) to=(260.4,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,264.5) to=(291.9,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,251) to=(291.9,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,264.5) to=(354.9,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,251) to=(354.9,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,264.5) to=(428.4,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,251) to=(428.4,264.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,278) to=(71.4,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,264.5) to=(50.4,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,264.5) to=(71.4,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,278) to=(218.4,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,264.5) to=(218.4,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,278) to=(260.4,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,264.5) to=(260.4,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,278) to=(291.9,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,264.5) to=(291.9,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,278) to=(354.9,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,264.5) to=(354.9,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,278) to=(428.4,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,264.5) to=(428.4,278) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,291.5) to=(71.4,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,278) to=(50.4,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,278) to=(71.4,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,291.5) to=(218.4,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,278) to=(218.4,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,291.5) to=(260.4,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,278) to=(260.4,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,291.5) to=(291.9,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,278) to=(291.9,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,291.5) to=(354.9,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,278) to=(354.9,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,291.5) to=(428.4,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,278) to=(428.4,291.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,305) to=(71.4,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,291.5) to=(50.4,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,291.5) to=(71.4,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,305) to=(218.4,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,291.5) to=(218.4,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,305) to=(260.4,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,291.5) to=(260.4,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,305) to=(291.9,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,291.5) to=(291.9,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,305) to=(354.9,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,291.5) to=(354.9,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,305) to=(428.4,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,291.5) to=(428.4,305) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,318.5) to=(71.4,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,305) to=(50.4,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,305) to=(71.4,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,318.5) to=(218.4,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,305) to=(218.4,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,318.5) to=(260.4,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,305) to=(260.4,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,318.5) to=(291.9,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,305) to=(291.9,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,318.5) to=(354.9,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,305) to=(354.9,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,318.5) to=(428.4,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,305) to=(428.4,318.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,332) to=(71.4,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,318.5) to=(50.4,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,318.5) to=(71.4,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,332) to=(218.4,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,318.5) to=(218.4,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,332) to=(260.4,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,318.5) to=(260.4,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,332) to=(291.9,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,318.5) to=(291.9,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,332) to=(354.9,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,318.5) to=(354.9,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,332) to=(428.4,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,318.5) to=(428.4,332) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,345.5) to=(71.4,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,332) to=(50.4,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,332) to=(71.4,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,345.5) to=(218.4,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,332) to=(218.4,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,345.5) to=(260.4,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,332) to=(260.4,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,345.5) to=(291.9,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,332) to=(291.9,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,345.5) to=(354.9,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,332) to=(354.9,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,345.5) to=(428.4,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,332) to=(428.4,345.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,359) to=(71.4,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,345.5) to=(50.4,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,345.5) to=(71.4,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,359) to=(218.4,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,345.5) to=(218.4,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,359) to=(260.4,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,345.5) to=(260.4,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,359) to=(291.9,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,345.5) to=(291.9,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,359) to=(354.9,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,345.5) to=(354.9,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,359) to=(428.4,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,345.5) to=(428.4,359) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,372.5) to=(71.4,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,359) to=(50.4,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,359) to=(71.4,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,372.5) to=(218.4,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,359) to=(218.4,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,372.5) to=(260.4,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,359) to=(260.4,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,372.5) to=(291.9,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,359) to=(291.9,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,372.5) to=(354.9,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,359) to=(354.9,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,372.5) to=(428.4,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,359) to=(428.4,372.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,386) to=(71.4,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(50.4,372.5) to=(50.4,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,372.5) to=(71.4,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(71.4,386) to=(218.4,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,372.5) to=(218.4,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(218.4,386) to=(260.4,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,372.5) to=(260.4,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,386) to=(291.9,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,372.5) to=(291.9,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(291.9,386) to=(354.9,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,372.5) to=(354.9,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,386) to=(428.4,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,372.5) to=(428.4,386) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,399.5) to=(354.9,399.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,413) to=(354.9,413) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,399.5) to=(260.4,413) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,399.5) to=(354.9,413) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,399.5) to=(428.4,399.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,413) to=(428.4,413) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,399.5) to=(428.4,413) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,426.5) to=(354.9,426.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,413) to=(260.4,426.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,413) to=(354.9,426.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,426.5) to=(428.4,426.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,413) to=(428.4,426.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,440) to=(354.9,440) color=#FF000000 width=0.75 dash=Solid
-line   from=(260.4,426.5) to=(260.4,440) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,426.5) to=(354.9,440) color=#FF000000 width=0.75 dash=Solid
-line   from=(354.9,440) to=(428.4,440) color=#FF000000 width=0.75 dash=Solid
-line   from=(428.4,426.5) to=(428.4,440) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,180) to=(428.4,180) color=#FF000000 width=1.5 dash=Solid
+line   from=(218.4,204) to=(428.4,204) color=#FF000000 width=1.5 dash=Solid
+line   from=(218.4,180) to=(218.4,204) color=#FF000000 width=1.5 dash=Solid
+line   from=(428.4,180) to=(428.4,204) color=#FF000000 width=1.5 dash=Solid
+line   from=(50.4,231) to=(71.4,231) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,244.5) to=(71.4,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,231) to=(50.4,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,231) to=(71.4,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,231) to=(218.4,231) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,244.5) to=(218.4,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,231) to=(218.4,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,231) to=(260.4,231) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,244.5) to=(260.4,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,231) to=(260.4,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,231) to=(291.9,231) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,244.5) to=(291.9,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,231) to=(291.9,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,231) to=(354.9,231) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,244.5) to=(354.9,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,231) to=(354.9,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,231) to=(428.4,231) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,244.5) to=(428.4,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,231) to=(428.4,244.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,258) to=(71.4,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,244.5) to=(50.4,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,244.5) to=(71.4,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,258) to=(218.4,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,244.5) to=(218.4,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,258) to=(260.4,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,244.5) to=(260.4,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,258) to=(291.9,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,244.5) to=(291.9,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,258) to=(354.9,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,244.5) to=(354.9,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,258) to=(428.4,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,244.5) to=(428.4,258) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,271.5) to=(71.4,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,258) to=(50.4,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,258) to=(71.4,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,271.5) to=(218.4,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,258) to=(218.4,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,271.5) to=(260.4,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,258) to=(260.4,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,271.5) to=(291.9,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,258) to=(291.9,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,271.5) to=(354.9,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,258) to=(354.9,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,271.5) to=(428.4,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,258) to=(428.4,271.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,285) to=(71.4,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,271.5) to=(50.4,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,271.5) to=(71.4,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,285) to=(218.4,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,271.5) to=(218.4,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,285) to=(260.4,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,271.5) to=(260.4,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,285) to=(291.9,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,271.5) to=(291.9,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,285) to=(354.9,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,271.5) to=(354.9,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,285) to=(428.4,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,271.5) to=(428.4,285) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,298.5) to=(71.4,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,285) to=(50.4,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,285) to=(71.4,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,298.5) to=(218.4,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,285) to=(218.4,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,298.5) to=(260.4,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,285) to=(260.4,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,298.5) to=(291.9,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,285) to=(291.9,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,298.5) to=(354.9,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,285) to=(354.9,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,298.5) to=(428.4,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,285) to=(428.4,298.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,312) to=(71.4,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,298.5) to=(50.4,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,298.5) to=(71.4,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,312) to=(218.4,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,298.5) to=(218.4,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,312) to=(260.4,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,298.5) to=(260.4,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,312) to=(291.9,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,298.5) to=(291.9,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,312) to=(354.9,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,298.5) to=(354.9,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,312) to=(428.4,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,298.5) to=(428.4,312) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,325.5) to=(71.4,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,312) to=(50.4,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,312) to=(71.4,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,325.5) to=(218.4,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,312) to=(218.4,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,325.5) to=(260.4,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,312) to=(260.4,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,325.5) to=(291.9,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,312) to=(291.9,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,325.5) to=(354.9,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,312) to=(354.9,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,325.5) to=(428.4,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,312) to=(428.4,325.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,339) to=(71.4,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,325.5) to=(50.4,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,325.5) to=(71.4,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,339) to=(218.4,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,325.5) to=(218.4,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,339) to=(260.4,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,325.5) to=(260.4,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,339) to=(291.9,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,325.5) to=(291.9,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,339) to=(354.9,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,325.5) to=(354.9,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,339) to=(428.4,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,325.5) to=(428.4,339) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,352.5) to=(71.4,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,339) to=(50.4,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,339) to=(71.4,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,352.5) to=(218.4,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,339) to=(218.4,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,352.5) to=(260.4,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,339) to=(260.4,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,352.5) to=(291.9,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,339) to=(291.9,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,352.5) to=(354.9,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,339) to=(354.9,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,352.5) to=(428.4,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,339) to=(428.4,352.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,366) to=(71.4,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,352.5) to=(50.4,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,352.5) to=(71.4,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,366) to=(218.4,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,352.5) to=(218.4,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,366) to=(260.4,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,352.5) to=(260.4,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,366) to=(291.9,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,352.5) to=(291.9,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,366) to=(354.9,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,352.5) to=(354.9,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,366) to=(428.4,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,352.5) to=(428.4,366) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,379.5) to=(71.4,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,366) to=(50.4,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,366) to=(71.4,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,379.5) to=(218.4,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,366) to=(218.4,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,379.5) to=(260.4,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,366) to=(260.4,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,379.5) to=(291.9,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,366) to=(291.9,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,379.5) to=(354.9,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,366) to=(354.9,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,379.5) to=(428.4,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,366) to=(428.4,379.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,393) to=(71.4,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,379.5) to=(50.4,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,379.5) to=(71.4,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,393) to=(218.4,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,379.5) to=(218.4,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,393) to=(260.4,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,379.5) to=(260.4,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,393) to=(291.9,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,379.5) to=(291.9,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,393) to=(354.9,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,379.5) to=(354.9,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,393) to=(428.4,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,379.5) to=(428.4,393) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,406.5) to=(71.4,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(50.4,393) to=(50.4,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,393) to=(71.4,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(71.4,406.5) to=(218.4,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,393) to=(218.4,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(218.4,406.5) to=(260.4,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,393) to=(260.4,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,406.5) to=(291.9,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,393) to=(291.9,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(291.9,406.5) to=(354.9,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,393) to=(354.9,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,406.5) to=(428.4,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,393) to=(428.4,406.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,420) to=(354.9,420) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,433.5) to=(354.9,433.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,420) to=(260.4,433.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,420) to=(354.9,433.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,420) to=(428.4,420) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,433.5) to=(428.4,433.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,420) to=(428.4,433.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,447) to=(354.9,447) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,433.5) to=(260.4,447) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,433.5) to=(354.9,447) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,447) to=(428.4,447) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,433.5) to=(428.4,447) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,460.5) to=(354.9,460.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(260.4,447) to=(260.4,460.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,447) to=(354.9,460.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(354.9,460.5) to=(428.4,460.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(428.4,447) to=(428.4,460.5) color=#FF000000 width=0.75 dash=Solid
 text   origin=(239.4,74.04) anchor=Center font=MS PGothic@18pt/#FF000000,bold clip=none value="請求書"
 text   origin=(51.9,101.98) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,92 210x13.5] value="株式会社テスト製作所 御中"
 text   origin=(353.4,101.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="請求番号"
@@ -213,47 +213,53 @@ text   origin=(356.4,115.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=non
 text   origin=(51.9,128.83) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,119 210x13.5] value="件名: ゴールデンテスト用案件"
 text   origin=(353.4,128.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="支払期限"
 text   origin=(356.4,128.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="2026年4月30日"
-text   origin=(51.9,174.58) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="ご請求金額"
-text   origin=(426.9,175.42) anchor=Right font=MS PGothic@14pt/#FF000000,bold clip=[218.4,159.5 210x24] value="¥2,153,800"
-text   origin=(60.9,220.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="No."
-text   origin=(144.9,220.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="品名"
-text   origin=(239.4,220.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="数量"
-text   origin=(276.15,220.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="単位"
-text   origin=(323.4,220.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="単価"
-text   origin=(391.65,220.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="金額"
-text   origin=(60.9,233.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="1"
-text   origin=(72.9,233.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル設計費"
-text   origin=(258.9,233.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="1"
-text   origin=(276.15,233.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="式"
-text   origin=(353.4,233.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥320,000"
-text   origin=(426.9,233.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥320,000"
-text   origin=(60.9,247.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="2"
-text   origin=(72.9,247.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル実装費"
-text   origin=(258.9,247.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="24"
-text   origin=(276.15,247.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="人日"
-text   origin=(353.4,247.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥48,000"
-text   origin=(426.9,247.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥1,152,000"
-text   origin=(60.9,260.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="3"
-text   origin=(72.9,260.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル試験費"
-text   origin=(258.9,260.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="8"
-text   origin=(276.15,260.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="人日"
-text   origin=(353.4,260.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥42,000"
-text   origin=(426.9,260.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥336,000"
-text   origin=(60.9,274.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="4"
-text   origin=(72.9,274.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="ドキュメント作成"
-text   origin=(258.9,274.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="1"
-text   origin=(276.15,274.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="式"
-text   origin=(353.4,274.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥150,000"
-text   origin=(426.9,274.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥150,000"
-text   origin=(307.65,409.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="小計"
-text   origin=(426.9,409.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥1,958,000"
-text   origin=(307.65,422.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="消費税(10%)"
-text   origin=(426.9,422.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥195,800"
-text   origin=(307.65,436.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="合計"
-text   origin=(426.9,436.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥2,153,800"
-text   origin=(51.9,461.42) anchor=Left font=MS PGothic@9pt/#FF000000 clip=[50.4,453.5 378x67.5] value="備考:"
-text   origin=(51.9,472.22) anchor=Left font=MS PGothic@9pt/#FF000000 clip=[50.4,453.5 378x67.5] value="ゴールデンテストで固定した値です。"
+text   origin=(51.9,195.08) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="ご請求金額"
+text   origin=(426.9,195.92) anchor=Right font=MS PGothic@14pt/#FF000000,bold clip=[218.4,180 210x24] value="¥2,153,800"
+text   origin=(60.9,240.83) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="No."
+text   origin=(144.9,240.83) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="品名"
+text   origin=(239.4,240.83) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="数量"
+text   origin=(276.15,240.83) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="単位"
+text   origin=(323.4,240.83) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="単価"
+text   origin=(391.65,240.83) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=none value="金額"
+text   origin=(60.9,254.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="1"
+text   origin=(72.9,254.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル設計費"
+text   origin=(258.9,254.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="1"
+text   origin=(276.15,254.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="式"
+text   origin=(353.4,254.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥320,000"
+text   origin=(426.9,254.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥320,000"
+text   origin=(60.9,267.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="2"
+text   origin=(72.9,267.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル実装費"
+text   origin=(258.9,267.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="24"
+text   origin=(276.15,267.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="人日"
+text   origin=(353.4,267.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥48,000"
+text   origin=(426.9,267.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥1,152,000"
+text   origin=(60.9,281.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="3"
+text   origin=(72.9,281.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル試験費"
+text   origin=(258.9,281.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="8"
+text   origin=(276.15,281.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="人日"
+text   origin=(353.4,281.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥42,000"
+text   origin=(426.9,281.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥336,000"
+text   origin=(60.9,294.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="4"
+text   origin=(72.9,294.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="ドキュメント作成"
+text   origin=(258.9,294.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="1"
+text   origin=(276.15,294.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="式"
+text   origin=(353.4,294.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥150,000"
+text   origin=(426.9,294.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥150,000"
+text   origin=(307.65,429.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="小計"
+text   origin=(426.9,429.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥1,958,000"
+text   origin=(307.65,443.33) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="消費税(10%)"
+text   origin=(426.9,443.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥195,800"
+text   origin=(307.65,456.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=none value="合計"
+text   origin=(426.9,456.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥2,153,800"
+text   origin=(51.9,481.92) anchor=Left font=MS PGothic@9pt/#FF000000 clip=[50.4,474 378x67.5] value="備考:"
+text   origin=(51.9,492.72) anchor=Left font=MS PGothic@9pt/#FF000000 clip=[50.4,474 378x67.5] value="ゴールデンテストで固定した値です。"
 image  rect=[362.9,59 60x20] contentType=image/png bytes=300
-shape  rect=[50.4,177.5 70x22] preset=RoundRect rotation=-12 fill=none outline=#FFC00000/1pt text=[origin=(85.4,191.3) anchor=Center font=Calibri@10pt/#FF000000 value="見本"]
-shape  rect=[218.4,185.5 40x14] preset=RightArrow rotation=0 fill=solid:#FF2E8B57 outline=none text=[]
-shape  rect=[266.4,183.5 110x24] preset=WedgeRoundRectCallout rotation=0 fill=solid:#FFFFFFFF outline=#FF000000/1pt text=[origin=(321.4,198.3) anchor=Center font=Calibri@10pt/#FF000000 value="ご確認ください"]
+shape  rect=[50.4,198 70x22] preset=RoundRect rotation=-12 fill=none outline=#FFC00000/1pt text=[origin=(85.4,211.8) anchor=Center font=Calibri@10pt/#FF000000 value="見本"]
+shape  rect=[218.4,206 40x14] preset=RightArrow rotation=0 fill=solid:#FF2E8B57 outline=none text=[]
+shape  rect=[266.4,204 110x24] preset=WedgeRoundRectCallout rotation=0 fill=solid:#FFFFFFFF outline=#FF000000/1pt text=[origin=(321.4,218.8) anchor=Center font=Calibri@10pt/#FF000000 value="ご確認ください"]
+shape  rect=[50.4,134.5 42x28] preset=Star6 rotation=0 fill=linGradient:0:#FFFFF3B0,0.5:#FFFFC300,1:#FFC77800@45 outline=none text=[]
+shape  rect=[105.4,134.5 60x28] preset=FlowChartTerminator rotation=0 fill=radGradient:0:#FFE0F7FA,1:#FF0288D1@center(0.5,0.5) outline=#FF01579B/1pt text=[]
+connector rect=[180.4,136.5 46x24] preset=Bent3Segment rotation=0 flipH=False flipV=False outline=#FF444444/1pt
+group  center=(272.9,149.5) rotation=-8 children=2
+  shape  rect=[240.4,132.5 65x34] preset=Ellipse rotation=0 fill=none outline=#FFC00000/1pt text=[]
+  shape  rect=[252.4,141.5 41x16] preset=Rect rotation=0 fill=none outline=#FFC00000/1pt text=[]
