@@ -165,12 +165,16 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     に整形する(該当ガイドが無ければそのプリセットのECMA-376既定値を使う。既定値表は
     Renderingレイヤーに置く。詳細は後述)。パス生成そのものはRenderingレイヤーの責務であり、
     Parsingレイヤーは数値の抽出のみを行う。
-  - **塗りつぶし・枠線**: `xdr:spPr/a:solidFill` は単色、`a:gradFill/a:gsLst` は
-    先頭と末尾の `a:gs` の色のみを開始色・終了色として採用し(要件10.6)、
-    `a:lin/@ang`(60,000分の1度)があれば角度として読み取る(無ければ既定角度0度=左から右)。
+  - **塗りつぶし・枠線**: `xdr:spPr/a:solidFill` は単色。`a:gradFill/a:gsLst` は
+    全ての `a:gs`(位置`@pos`・色)を `GradientStop` のリストとして読み取る(要件10.6。
+    3点以上のグラデーションストップに対応)。角度は子要素が `a:lin` なら線形
+    (`LinearGradientShapeFill`、`@ang` を60,000分の1度から度に変換)、`a:path`
+    (`@path="circle"`)なら放射状(`RadialGradientShapeFill`。`a:fillToRect` があれば
+    その中心を放射の中心として読み取り、無ければ矩形中心)として`ShapeFill`の派生型を
+    分岐させる。`a:path` の `@path="rect"`/`"shape"` は放射状として近似する(要件10.6補足)。
     `a:noFill` は塗りなし(`Fill = null`)。枠線は `a:ln` の `a:solidFill` の色と
     `@w`(EMU)から変換した太さを読み取り、`a:ln` 自体が無い/`a:noFill` の場合は
-    `Outline = null` とする。
+    `Outline = null` とする(接続線も同じ`ReadShapeOutline`を流用する)。
   - **回転**: `xdr:spPr/a:xfrm/@rot`(60,000分の1度、時計回り)を `RotationDegrees`
     (度)に変換する。座標系が「Y軸下方向」(単位と座標系の節)のため、そのままの符号で
     時計回りの回転として扱える。
@@ -182,13 +186,50 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     段落・ランをそのまま保持するだけで折り返しは行わない。
   - **信頼できない入力に対する安全弁(要件10.8)**: 画像と同様、図形も無条件に信頼できる
     入力ではない。以下の上限を設ける。
-    - 1シートあたりの図形アンカー数の上限(既定50個。画像の上限とは独立にカウントする)。
-      超過分は `unsupportedElements` の設定に従う(`ElementKind = "TooManyShapes"`)。
+    - 1シートあたりの図形・接続線・グループ(グループ内部の子孫要素も含む)の合計個数の
+      上限(既定50個。画像の上限とは独立にカウントする)。超過分は `unsupportedElements`
+      の設定に従う(`ElementKind = "TooManyShapes"`。要件10.8の「合計個数」に対応するため
+      画像対応時からの名称をそのまま流用し、対象範囲を図形・接続線・グループへ拡張する)。
     - 図形1つに含まれる全テキスト(段落・ランを連結した文字数)の上限(既定2000文字)。
       超過時も同様(`ElementKind = "ShapeTextTooLong"`)。文字数を実際に折り返し計算へ
       渡す前に拒否することで、極端に長い文字列に対する折り返し計算量を避ける。
+    - グループのネスト段数の上限(既定5段)。超過した時点でそのグループ全体を拒否する
+      (`ElementKind = "GroupNestingTooDeep"`)。再帰的な子グループの展開によるスタック消費・
+      計算量の増大を防ぐ。
     - 幅・高さの計算に使う列/行数の上限(既定4096)は画像と共通の
       `SpanWidthPt`/`SpanHeightPt` をそのまま流用するため、別途の上限追加は不要。
+
+- **接続線(要件10.9)**: `xdr:cxnSp`(`xdr:sp`とは別の要素)のうち、
+  `xdr:spPr/a:prstGeom/@prst` が `straightConnector1`/`bentConnector2`/`bentConnector3`/
+  `curvedConnector2`/`curvedConnector3` のいずれかであるものを `ConnectorModel` として
+  読み取る。アンカー(セル位置・範囲)・回転・枠線は図形と同じ仕組み(`ReadAnchorExtent`/
+  `ReadShapeOutline`)を再利用する。接続線は塗りつぶし・テキストを持たないため
+  `ShapeModel` を流用せず専用の型とする。反転(`a:xfrm/@flipH`, `@flipV`)は接続線の
+  経路(どちら向きに折れる/曲がるか)を決めるため新たに読み取る(`FlipHorizontal`/
+  `FlipVertical`)。パス生成(実際にどう折れ線・曲線を引くか)はRenderingレイヤーの責務。
+  非対応プリセットの接続線(`bentConnector4`/`5`, `curvedConnector4`/`5` 等)は
+  `ElementKind = "UnsupportedShapePreset"` として扱う(図形と同じ判定ロジックを流用)。
+  接続線の個数は図形と合算した`MaxShapesPerSheet`でカウントする。
+
+- **グループ化された図形(要件10.10)**: `xdr:grpSp` を `GroupShapeModel` として読み取る。
+  グループの`grpSpPr/a:xfrm`(`TransformGroup`)から、グループ自身の回転
+  (`RotationDegrees`)と、子座標空間の原点・大きさ(`a:chOff`→`ChildOffset`、
+  `a:chExt`→`ChildExtent`。EMUからポイントへ変換)を読み取る。
+  グループの直接の子要素(`xdr:sp`/`xdr:pic`/`xdr:cxnSp`/入れ子の`xdr:grpSp`)を
+  出現順に列挙し、`GroupChildModel`(`GroupChildShape`/`GroupChildImage`/
+  `GroupChildConnector`/`GroupChildGroup`)へ変換する。子要素はセルアンカー
+  (`xdr:from`/`xdr:to`)を持たず、`a:xfrm/a:off`・`a:ext`(グループの子座標空間上の
+  絶対位置)で位置が決まる点が、シート直下の描画オブジェクトと異なる
+  (子要素の位置・サイズを最終的なページ座標へ変換する計算はLayoutレイヤーの責務。
+  「Layout レイヤー」の節を参照)。
+  - グループ内の要素のいずれか1つでも対応済みプリセット一覧に含まれない場合
+    (非対応プリセットの図形・接続線・`xdr:graphicFrame`等)は、要件10.10により
+    グループ全体を`ElementKind = "UnsupportedShapePreset"`のサポート外要素として扱う
+    (グループの一部だけを描画すると、Excel上の見た目・要素間の位置関係が意図せず崩れるため)。
+  - 入れ子のグループは同じ規則を再帰的に適用し、`MaxShapeNestingDepth`(既定5)を
+    超えた時点で全体を`ElementKind = "GroupNestingTooDeep"`として拒否する。
+  - グループ・接続線を含めたシート全体の描画オブジェクト総数(トップレベル+グループ内の
+    全子孫)が`MaxShapesPerSheet`を超える場合も同様に拒否する(要件10.8)。
 
 ### 2. ReportDefinition レイヤー (`Utsushi.ReportDefinition`)
 
@@ -288,6 +329,28 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     確定させる。回転の適用はRenderingレイヤーの責務とする(座標変換をLayoutに持ち込むと
     `PagedLayout`が回転行列という新しい概念を持つことになり、既存の「軸に平行な矩形の
     集まり」という単純なモデルから外れるため)。
+  - **接続線の配置(要件10.9)**: `ConnectorModel`は`DrawingObjectModel`のため、画像・図形と
+    全く同じ`TryComputeDrawingObjectRect`でページ矩形を求め、`ConnectorCommand`を生成する。
+    経路(実際にどう折れ線・曲線を引くか)はRenderingレイヤーの責務。
+  - **グループの展開(要件10.10)**: `GroupShapeModel`もまず`TryComputeDrawingObjectRect`で
+    グループ自身のページ矩形(`groupRect`)を求める。そのうえで、グループの子座標空間
+    (`ChildOffset`/`ChildExtent`)から`groupRect`への比例変換
+    (`scaleX = groupRect.Width / ChildExtent.X`、`scaleY = groupRect.Height / ChildExtent.Y`。
+    非一様倍率を許容する。Excel自体もグループのリサイズで子要素が縦横別倍率で伸縮しうるため)
+    を使って、各子要素の`LocalRect`(子座標空間上の位置・サイズ)を
+    `pageRect = groupRect.TopLeft + (LocalRect.TopLeft - ChildOffset) * (scaleX, scaleY)`
+    でページ座標へ変換し、`ShapeCommand`/`ImageCommand`/`ConnectorCommand`を生成する
+    (`GroupChildShape`のテキスト折り返しも通常の図形と同じロジックを流用する)。
+    入れ子の`GroupChildGroup`は、自身の`pageRect`を新たな`groupRect`として同じ変換を
+    再帰的に適用する。
+    こうして生成した子要素の`DrawCommand`列を、`GroupCommand(Center, RotationDegrees, Children)`
+    (`Center = groupRect`の中心、`RotationDegrees = `グループ自身の回転角)でまとめて包み、
+    1つの`DrawCommand`として`Commands`リストに追加する。グループの回転を子要素の座標
+    そのものに焼き込まず`GroupCommand`という薄いラッパーに持たせるのは、グループの回転が
+    「グループ全体を剛体として1回だけ回す」座標変換であり、子要素自身の個別の回転
+    (`ShapeModel.RotationDegrees`等)とは独立に合成される(Renderingレイヤーで
+    `canvas`の回転変換を入れ子にすることで自然に合成できる)ためである。
+    詳細はRenderingレイヤーの節を参照。
 - **主なインターフェース**:
   ```csharp
   public interface IReportLayoutEngine
@@ -307,10 +370,10 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       void Render(PagedLayout layout, Stream output);
   }
   ```
-- 1ページ = 1 `SKCanvas` への描画。矩形塗りつぶし(背景)→罫線→テキスト→**画像・図形**
-  (`drawing.xml`の出現順)の順で描画する。Excelはシート上に浮かぶ描画オブジェクト
-  (画像・図形等)をセルの内容より上のレイヤーとして描画するため、画像・図形は他のセル内容と
-  重なる場合に最前面へ来るようにする(要件9.3, 10.3)。
+- 1ページ = 1 `SKCanvas` への描画。矩形塗りつぶし(背景)→罫線→テキスト→
+  **画像・図形・接続線・グループ**(`drawing.xml`の出現順)の順で描画する。Excelはシート上に
+  浮かぶ描画オブジェクト(画像・図形等)をセルの内容より上のレイヤーとして描画するため、
+  これらは他のセル内容と重なる場合に最前面へ来るようにする(要件9.3, 10.3)。
 - **画像の描画(要件9)**: `ImageCommand` は `SKBitmap.Decode(byte[])`でデコードし、
   `SKCanvas.DrawBitmap(bitmap, destRect)` で `ImageCommand.Rect` へ描画する
   (SkiaSharp 2.88.8で利用可能な標準API)。既存の `ToSkRect(RectPt)` をそのまま使う。
@@ -341,6 +404,28 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       吹き出しの引き出し三角形を1つ追加する(既定値は実装時にPDFをラスタライズして
       目視確認し、左下方向に自然な引き出しになる値として選んだ。ECMA-376の一次資料への
       当たり直しはできていない)。
+    - `cloudCallout`(雲形吹き出し): 楕円本体の輪郭を、中心から一定間隔で並べた円弧
+      (バンプ)の和集合(`SKPath.Op(SKPathOp.Union)`)で近似した「雲」のシルエットに、
+      `wedgeEllipseCallout`と同じ引き出し三角形を追加する。バンプの個数・半径は固定値
+      (見た目のバランスを目視確認して決定)とし、調整ガイドには対応しない。
+    - `callout1`/`callout2`/`callout3`(引き出し線付き吹き出し): 本体は`rect`、
+      そこから矩形の外側の1点(既定は左下方向)へ向けて1〜3本の線分からなる
+      折れ線(引き出し線)を追加する汎用の「N本引き出し線」生成ロジックとして実装する
+      (N=1,2,3をパラメータ化。三角形の塗りつぶしではなく線のみの点でwedge系と異なる)。
+    - `star4`/`star5`/`star6`/`star8`(星形): 外接円の半径`R`(=`min(幅,高さ)/2`)と、
+      内側の頂点の半径比`adj1`(既定0.38前後。星の「尖り具合」)から、外側の頂点と
+      内側の頂点を交互に結ぶ`2 * N`角形を組む(`N`=4/5/6/8)。頂点の回転オフセットは
+      `star4`/`star8`は真上から、`star5`/`star6`はECMA-376の既定角度に合わせる。
+    - `flowChartProcess`(処理): `rect`と同じ矩形。
+    - `flowChartDecision`(判断): 矩形の上下左右の中点を結んだ菱形。
+    - `flowChartTerminator`(端子): 左右端を半円にした「スタジアム」形状
+      (`roundRect`の角丸半径を`高さ/2`に固定した特殊形として実装できる)。
+    - `flowChartInputOutput`(入出力): 上下の辺を左右にずらした平行四辺形。
+    - `flowChartDocument`(書類): 矩形の下辺を波形(1つの緩やかな凹み)にした形状。
+    - `flowChartPredefinedProcess`(定義済み処理): `rect`に加え、左右の辺の内側に
+      それぞれ縦線を1本ずつ追加する。
+    - `flowChartConnector`(結合子): `ellipse`と同じ楕円(正円になるようExcel側で
+      正方形のバウンディングボックスにするのが通常)。
     - 上記いずれのプリセットも「対応済み一覧に限定する」設計(要件10.1補足)のため、
       `custGeom`(自由曲線)や一覧外の`prst`値はParsingレイヤーの時点で
       サポート外要素として弾かれ、ここには到達しない。
@@ -352,11 +437,17 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       双方向矢印専用の既定値(0.25)に変更して解消した(`ShapeGeometryBuilder`)。
       その他の既定値は目視確認の範囲で明らかな破綻は見られなかったが、実際の帳票で使う段になって
       Excel生成XMLとの厳密な突き合わせが必要になった場合は改めて検証する。
-  - **塗りつぶし**: `Fill`が`SolidShapeFill`なら`SKPaint.Color`、
-    `LinearGradientShapeFill`なら`SKShader.CreateLinearGradient`で`Rect`の対角線相当の
-    2点(開始色→終了色、`AngleDegrees`をもとに`Rect`の中心から角度方向に伸ばした2点)を
-    グラデーションの始点・終点とするシェーダーを`SKPaint.Shader`に設定して`SKCanvas.DrawPath`
-    (`SKPaintStyle.Fill`)する。`Fill`が`null`(`noFill`)なら塗りつぶしを描画しない。
+  - **塗りつぶし**: `Fill`が`SolidShapeFill`なら`SKPaint.Color`。
+    `LinearGradientShapeFill`(`Stops: IReadOnlyList<GradientStop>`、2点以上)なら
+    `SKShader.CreateLinearGradient`で`Rect`の中心から`AngleDegrees`方向に対角線の半分
+    ぶん伸ばした2点を始点・終点とし、各`GradientStop.Position`(0.0〜1.0)と色を
+    `colors`/`colorPos`配列にそのまま渡す(3点以上のストップを正確に反映)。
+    `RadialGradientShapeFill`(`Stops`、`CenterFraction: PointPt`)なら
+    `SKShader.CreateRadialGradient`で、中心を`Rect.Left + Rect.Width * CenterFraction.X`,
+    `Rect.Top + Rect.Height * CenterFraction.Y`、半径を`Rect`の対角線の半分とする
+    (`a:fillToRect`が矩形中心以外を指す場合、中心がずれた放射状グラデーションになる)。
+    いずれもシェーダーを`SKPaint.Shader`に設定して`SKCanvas.DrawPath`(`SKPaintStyle.Fill`)
+    する。`Fill`が`null`(`noFill`)なら塗りつぶしを描画しない。
   - **枠線**: `Outline`があれば同じ`SKPath`を`SKPaintStyle.Stroke`・`StrokeWidth = WidthPt`で
     描画する。`null`なら描画しない。
   - **テキスト**: `TextLines`の各`ShapeTextLine`を、セル内テキスト描画と同じフォント解決・
@@ -364,6 +455,31 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     座標はLayoutレイヤーが算出済みの(回転前の)ローカル座標であり、
     シェイプ本体と同じ`Save`/`RotateDegrees`/`Restore`のブロック内で描画することで
     回転が正しく反映される。
+- **接続線の描画(要件10.9)**: `ConnectorCommand`ごとに、`FlipHorizontal`/`FlipVertical`を
+  反映した向きで経路(`SKPath`、塗りつぶし無しの開いたパス)を`ConnectorGeometryBuilder`
+  (`ShapeGeometryBuilder`とは別に新設。接続線は塗りつぶし・調整ガイドを持たず責務が
+  異なるため)で組み立てる。
+  - `straightConnector1`: 矩形の対角(反転に応じた2頂点)を結ぶ直線。
+  - `bentConnector2`: 中間点1つで直角に折れる2辺(水平→垂直、または反転により
+    垂直→水平)。
+  - `bentConnector3`: 中間点2つで直角に2回折れる3辺(既定は中央で折り返す)。
+  - `curvedConnector2`: 2頂点を結ぶ1本の2次ベジェ曲線(制御点は`bentConnector2`と
+    同じ折れ点)。
+  - `curvedConnector3`: `bentConnector3`の折れ点を通る2本のベジェ曲線によるS字カーブ。
+  - `Outline`があれば`SKPaintStyle.Stroke`で描画する(`null`の場合、Excel上は既定の
+    黒い実線1ptで表示されるため、`Outline`が無い接続線にも既定の線色・太さを補う)。
+    回転(`RotationDegrees`)がある場合は図形と同じ`Save`/`RotateDegrees`/`Restore`を使う。
+- **グループの描画(要件10.10)**: `GroupCommand`ごとに、`canvas.Save()` →
+  `canvas.RotateDegrees(RotationDegrees, Center.X, Center.Y)` → `Children`の各
+  `DrawCommand`を(`FillRectCommand`等を除く、`ShapeCommand`/`ImageCommand`/
+  `ConnectorCommand`/入れ子の`GroupCommand`を対象に)既存のコマンド振り分けロジックを
+  再帰的に呼び出して描画 → `canvas.Restore()`。`DrawPage`内のコマンド振り分け
+  (`switch`文)を`DrawCommand(SKCanvas, DrawCommand, reportCode, sheetName)`という
+  1コマンド分の描画ヘルパーへ切り出し、`DrawPage`の`foreach`と`GroupCommand`の内部
+  展開の両方から呼べるようにする。子要素自身の回転(`ShapeCommand.RotationDegrees`等)は、
+  この`canvas`変換がすでに適用された座標系の内側でさらに`Save`/`RotateDegrees`/`Restore`
+  するため、グループの回転と子要素個別の回転が正しく合成される(`canvas`の変換行列の
+  スタックに任せることで、Renderingレイヤー側で回転の合成を数式的に計算する必要が無い)。
 - 出力するPDFのバージョンは SkiaSharp の PDF バックエンドが生成する **PDF 1.4** とする(要件5.3)。
 - 対象帳票が使用するフォントが実行環境に存在しない場合は `FontNotAvailableException` で失敗させる
   (`FontResolver` の既定は厳格モード)。実行時の暗黙フォールバックによる見た目崩れを避けるため。
@@ -407,7 +523,7 @@ public sealed record SheetModel(
     IReadOnlySet<int> HiddenColumns,      // 非表示行/列は印刷されないため保持する
     IReadOnlySet<int> HiddenRows,
     PageSetupModel PageSetup,
-    IReadOnlyList<DrawingObjectModel> DrawingObjects); // シート上の画像・図形(要件9, 10)。drawing.xmlの出現順(=重なり順)。
+    IReadOnlyList<DrawingObjectModel> DrawingObjects); // シート上の画像・図形・接続線・グループ(要件9, 10)。drawing.xmlの出現順(=重なり順)。
 
 // シートに浮かぶ描画オブジェクト(画像・図形)の共通の位置決め情報。
 public abstract record DrawingObjectModel(
@@ -440,11 +556,20 @@ public enum ShapePresetType
     Rect, RoundRect, Ellipse, Triangle,
     RightArrow, LeftArrow, UpArrow, DownArrow, LeftRightArrow, UpDownArrow,
     WedgeRectCallout, WedgeRoundRectCallout, WedgeEllipseCallout,
+    CloudCallout, Callout1, Callout2, Callout3,             // 追加(拡張フェーズ)
+    Star4, Star5, Star6, Star8,                             // 追加(拡張フェーズ)
+    FlowChartProcess, FlowChartDecision, FlowChartTerminator,
+    FlowChartInputOutput, FlowChartDocument,
+    FlowChartPredefinedProcess, FlowChartConnector,          // 追加(拡張フェーズ)
 }
 
 public abstract record ShapeFill;
 public sealed record SolidShapeFill(ArgbColor Color) : ShapeFill;
-public sealed record LinearGradientShapeFill(ArgbColor StartColor, ArgbColor EndColor, double AngleDegrees) : ShapeFill;
+// 3点以上のグラデーションストップに対応(拡張フェーズ)。Positionは0.0〜1.0。
+public sealed record GradientStop(double Position, ArgbColor Color);
+public sealed record LinearGradientShapeFill(IReadOnlyList<GradientStop> Stops, double AngleDegrees) : ShapeFill;
+// 放射状グラデーション(拡張フェーズ)。CenterFractionはRectに対する中心位置の割合(既定0.5,0.5)。
+public sealed record RadialGradientShapeFill(IReadOnlyList<GradientStop> Stops, PointPt CenterFraction) : ShapeFill;
 
 public sealed record ShapeOutline(ArgbColor Color, double WidthPt);
 
@@ -456,6 +581,44 @@ public sealed record ShapeTextParagraph(
     IReadOnlyList<ShapeTextRun> Runs,
     HorizontalAlignment HAlign);          // a:pPr/@algn
 public sealed record ShapeTextRun(string Text, FontStyle Font);
+
+// 接続線(要件10.9)。塗りつぶし・テキストを持たない。
+public sealed record ConnectorModel(
+    ConnectorPresetType Preset,
+    double RotationDegrees,
+    bool FlipHorizontal,
+    bool FlipVertical,
+    ShapeOutline? Outline,
+    CellAddress AnchorCell,
+    PointPt AnchorOffset,
+    AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
+
+public enum ConnectorPresetType { Straight, Bent2Segment, Bent3Segment, Curved2Segment, Curved3Segment }
+
+// グループ化された図形(要件10.10)。トップレベルの描画オブジェクトとしてはセルアンカーを持つが、
+// 内部の子要素(Children)は独自の子座標空間(ChildOffset/ChildExtent)上の位置で決まる。
+public sealed record GroupShapeModel(
+    PointPt ChildOffset,                  // a:chOff(pt換算)。子要素の座標系の原点
+    PointPt ChildExtent,                  // a:chExt(pt換算)。X=幅, Y=高さ
+    IReadOnlyList<GroupChildModel> Children,
+    double RotationDegrees,
+    CellAddress AnchorCell,
+    PointPt AnchorOffset,
+    AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
+
+// グループ内の子要素の位置(LocalRect)は、グループのChildOffset/ChildExtent上の座標(pt)であり、
+// ページ座標への変換(平行移動+拡大縮小)はLayoutレイヤーが行う。
+public abstract record GroupChildModel(RectPt LocalRect);
+public sealed record GroupChildShape(
+    RectPt LocalRect, ShapePresetType Preset, IReadOnlyList<double> AdjustmentValues,
+    double RotationDegrees, ShapeFill? Fill, ShapeOutline? Outline, ShapeTextBody? Text) : GroupChildModel(LocalRect);
+public sealed record GroupChildImage(RectPt LocalRect, byte[] Data, string ContentType) : GroupChildModel(LocalRect);
+public sealed record GroupChildConnector(
+    RectPt LocalRect, ConnectorPresetType Preset, double RotationDegrees,
+    bool FlipHorizontal, bool FlipVertical, ShapeOutline? Outline) : GroupChildModel(LocalRect);
+public sealed record GroupChildGroup(
+    RectPt LocalRect, double RotationDegrees, PointPt ChildOffset, PointPt ChildExtent,
+    IReadOnlyList<GroupChildModel> Children) : GroupChildModel(LocalRect);
 
 public abstract record AnchorExtent;
 
@@ -499,7 +662,7 @@ public sealed record PageLayout(
     PageOrientation Orientation,
     double WidthPt,                       // 向きを適用した実寸
     double HeightPt,
-    IReadOnlyList<DrawCommand> Commands,  // 背景 → 罫線 → テキスト → 画像の順
+    IReadOnlyList<DrawCommand> Commands,  // 背景 → 罫線 → テキスト → 画像/図形/接続線/グループの順
     int PageNumber,
     (int First, int Last) RowRange,       // 診断・テスト用
     (int First, int Last) ColumnRange,
@@ -525,6 +688,23 @@ public sealed record ShapeCommand(
     IReadOnlyList<ShapeTextLine> TextLines) : DrawCommand;
 
 public sealed record ShapeTextLine(PointPt Origin, string Text, FontStyle Font, TextAnchor Anchor);
+
+// 接続線(要件10.9)。塗りつぶし・テキストを持たない。
+public sealed record ConnectorCommand(
+    RectPt Rect,
+    ConnectorPresetType Preset,
+    double RotationDegrees,
+    bool FlipHorizontal,
+    bool FlipVertical,
+    ShapeOutline? Outline) : DrawCommand;
+
+// グループ(要件10.10)。Childrenはすでにページ座標へ変換済み(グループ自身の回転は未適用)。
+// Renderingレイヤーがcanvasの回転変換でChildrenをまとめて囲むことで、グループの回転と
+// 子要素個別の回転を合成する。
+public sealed record GroupCommand(
+    PointPt Center,
+    double RotationDegrees,
+    IReadOnlyList<DrawCommand> Children) : DrawCommand;
 ```
 
 `TextCommand.Origin` の X は `Anchor`(Left/Center/Right)の基準点、Y はベースライン位置を表す。
@@ -536,12 +716,14 @@ public sealed record ShapeTextLine(PointPt Origin, string Text, FontStyle Font, 
 - 例外階層は `UtsushiException`(`Utsushi.Core.Exceptions`)を基底とし、以下を派生させる。
   - `ReportDefinitionNotFoundException`(要件1.4)
   - `ReportStructureMismatchException`(要件1.4: シート名・セル番地の不一致)
-  - `UnsupportedWorkbookElementException`(要件1.5, 9.4, 9.6, 10.7, 10.8。`ElementKind`は
-    `"Drawing"`/`"Chart"`/`"LegacyDrawing"`/`"ExternalReference"`に加え、デコード不能または
-    申告と実バイト列が一致しない画像形式を示す`"UnsupportedImageFormat"`、画像枚数の上限超過を
-    示す`"TooManyImages"`、画像サイズの上限超過を示す`"ImageTooLarge"`、対応済み一覧に無い
-    プリセットジオメトリを示す`"UnsupportedShapePreset"`、図形個数の上限超過を示す
-    `"TooManyShapes"`、図形内テキストの文字数上限超過を示す`"ShapeTextTooLong"`を持つ)
+  - `UnsupportedWorkbookElementException`(要件1.5, 9.4, 9.6, 10.7, 10.8, 10.9, 10.10。
+    `ElementKind`は`"Drawing"`/`"Chart"`/`"LegacyDrawing"`/`"ExternalReference"`に加え、
+    デコード不能または申告と実バイト列が一致しない画像形式を示す`"UnsupportedImageFormat"`、
+    画像枚数の上限超過を示す`"TooManyImages"`、画像サイズの上限超過を示す`"ImageTooLarge"`、
+    対応済み一覧に無いプリセットジオメトリ(図形・接続線どちらの場合も共通)を示す
+    `"UnsupportedShapePreset"`、図形・接続線・グループの合計個数の上限超過を示す
+    `"TooManyShapes"`、図形内テキストの文字数上限超過を示す`"ShapeTextTooLong"`、
+    グループのネスト段数の上限超過を示す`"GroupNestingTooDeep"`を持つ)
   - `SubstitutionKeyNotFoundException` / `RequiredSubstitutionValueMissingException`(要件2.3, 2.4)
   - `InvalidCellOverrideAddressException`(要件2.8。セル番地直接指定がA1形式として解釈できない場合)
   - `NonAnchorMergedCellOverrideException`(要件2.9。セル番地直接指定の対象が結合セル範囲の非アンカー位置の場合)
@@ -612,15 +794,29 @@ public sealed record ShapeTextLine(PointPt Origin, string Text, FontStyle Font, 
   EMF/WMF(Excelがベクタ図形やクリップボード貼り付け画像を保存する際によく使う形式)は
   SkiaSharpが直接デコードできず、対応するには追加の変換ライブラリ(ライセンス確認が必要)か
   自前のパーサが要る。対象帳票で実際に必要になった時点で改めて検討する。
-- **図形プリセットの拡張・接続線・グループ化**(要件10.1, 10.3, 10.7): 対応済みプリセットは
-  自社帳票での実用上の必要性から選んだ13種にとどめており、星形・フローチャート記号・
-  自由曲線(`custGeom`)は「サポート外要素」のままである。接続線(`xdr:cxnSp`)と
-  グループ化された図形(`xdr:grpSp`)も対象外(補足10.3)。いずれも対象帳票で
-  実際に必要になった時点で要件を追記して拡張する。
-- **グラデーションの多段階・角度の完全再現**(要件10.6): 現時点では開始色・終了色の2点のみの
-  線形グラデーションで近似しており、3点以上のグラデーションストップやExcel特有の
-  グラデーション角度の細かい仕様は再現しない。対象帳票で見た目の差異が問題になった場合に
-  改めて検討する。
+- **図形プリセットのさらなる拡張**(要件10.1, 10.7): 拡張フェーズで星形4種・
+  フローチャート記号7種・吹き出し4種(雲形・引き出し線1〜3本)・接続線5種を追加したが、
+  フローチャート記号の残り(`flowChartOr`等)・自由曲線(`custGeom`)・より複雑な星形
+  (`star10`以上)は引き続き「サポート外要素」である。対象帳票で実際に必要になった時点で
+  一覧に追記する。
+- **接続線の接続点(コネクションサイト)解決**(要件10.9): 接続線が実際にどの図形の
+  どの辺に接続されているか(`xdr:cxnSp`の`stCxn`/`endCxn`)は解決せず、接続線自身の
+  アンカー矩形と反転フラグのみから経路を決める。Excel上で接続先の図形を移動すると
+  接続線も追従して経路が変わるが、本プロダクトは静的なテンプレートを変換するだけの
+  ため、テンプレート保存時点の見た目がそのまま再現されれば十分という判断である。
+- **グループの回転と子要素の回転の合成の精度**(要件10.10): `GroupCommand`による
+  `canvas`変換の入れ子でグループの回転・子要素個別の回転を合成する設計は、単体の
+  目視確認では正しく動作することを確認したが、「グループ自身が回転しており、かつ
+  グループの子座標空間の拡大縮小が非一様(縦横で倍率が異なる)」という組み合わせでは、
+  回転と非一様スケールの適用順序によって見た目が変わりうる(アフィン変換は一般に
+  可換ではないため)。Excel自身がこの組み合わせをどう扱うかの一次資料での裏取りは
+  していない。対象帳票で実際に問題になった場合に改めて検証する。
+- **雲形吹き出し(`cloudCallout`)・星形の近似精度**(要件10.1): 雲形は固定個数の円弧の
+  和集合で、星形は単純な2N角形でそれぞれ近似しており、調整ガイド値(`a:avLst`)による
+  微調整には対応しない。Excel側で既定値から変更されている場合、見た目がわずかに異なる。
+- **放射状グラデーションの`a:path`種別**(要件10.6): `a:path type="circle"`のみを
+  厳密に扱い、`"rect"`/`"shape"`は同じ放射状近似にフォールバックする。矩形・図形に
+  沿った塗りつぶしの厳密な再現は行わない。
 - **OOXMLパーツ全体の非圧縮サイズに対する上限が無い**(security-reviewer指摘、要件6.1系の
   信頼できない入力に対する安全弁の一部として今後検討): `SpreadsheetDocument.Open` は
   `OpenSettings`(`MaxCharactersInPart`等)を指定せずに呼んでいるため、`drawing.xml`を含む

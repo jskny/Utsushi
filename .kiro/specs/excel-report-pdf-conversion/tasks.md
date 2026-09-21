@@ -3,10 +3,11 @@
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
-> **状況**: 全タスク完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21、
+> **状況**: タスク1〜14完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21、
 > タスク14: 2026-09-21)。`dotnet build` / `dotnet test`(311件、2026-09-21時点)/ `dotnet format`
-> はグリーン。実装時に決定した事項・判明した制約は `design.md` に反映済み。
-> タスク文面どおりに実現できなかった項目には各タスクに注記を付けた。
+> はグリーン。タスク15(接続線・グループ・追加プリセット・多段階/放射状グラデーション)は
+> 要件10拡張・設計を確定し、実装に着手する段階。実装時に決定した事項・判明した制約は
+> `design.md` に反映済み。タスク文面どおりに実現できなかった項目には各タスクに注記を付けた。
 
 - [x] 1. ソリューション基盤のセットアップ
   - `.kiro/steering/structure.md` の構成に従い、`Utsushi.sln` と各レイヤーの `.NET 5` クラスライブラリプロジェクト(Parsing/ReportDefinition/Substitution/Layout/Rendering)、および対応するテストプロジェクトを作成する
@@ -375,3 +376,105 @@
       既存の`FontStyle`と同じ確立済みパターンであり本PR起因の新規逸脱ではないため対応不要
       と判断
     - _Requirements: 10.7, 10.8, 6.4_
+
+- [ ] 15. 図形対応の拡張(接続線・グループ・追加プリセット・多段階/放射状グラデーション)
+  - [ ] 15.1 Parsingレイヤー: 接続線のデータモデル(`ConnectorModel` / `ConnectorPresetType`)を定義する
+    - _Requirements: 10.9_
+  - [ ] 15.2 Parsingレイヤー: グループのデータモデル(`GroupShapeModel` / `GroupChildModel`
+        階層: `GroupChildShape`/`GroupChildImage`/`GroupChildConnector`/`GroupChildGroup`)を定義する
+    - _Requirements: 10.10_
+  - [ ] 15.3 Parsingレイヤー: グラデーションのデータモデルを拡張する(`GradientStop`,
+        `LinearGradientShapeFill`を複数ストップ対応に変更, `RadialGradientShapeFill`を追加)
+    - 既存の`LinearGradientShapeFill(StartColor, EndColor, AngleDegrees)`を
+      `LinearGradientShapeFill(IReadOnlyList<GradientStop> Stops, AngleDegrees)`に変更するため、
+      既存の呼び出し箇所(Rendering層の`CreateShapeFillPaint`等)・テストの追随が必要
+    - _Requirements: 10.6_
+  - [ ] 15.4 Parsingレイヤー: 追加プリセット(星形4種・フローチャート記号7種・
+        追加吹き出し4種)を`ShapePresetType`と`SupportedShapePresets`マッピング表に追加する
+    - _Requirements: 10.1_
+  - [ ] 15.5 Parsingレイヤー: 多段階・放射状グラデーションを読み取る
+    - `a:gsLst`内の全`a:gs`(位置・色)を`GradientStop`のリストとして読み取り、
+      `a:lin`/`a:path`(`@path="circle"`のみ厳密対応、`"rect"`/`"shape"`は放射状に
+      フォールバック)を判別して`LinearGradientShapeFill`/`RadialGradientShapeFill`を
+      構築する
+    - _Requirements: 10.6_
+  - [ ] 15.6 Parsingレイヤー: 接続線(`xdr:cxnSp`)を読み取る(`ReadConnector`)
+    - 対応済みプリセット(`straightConnector1`/`bentConnector2`/`bentConnector3`/
+      `curvedConnector2`/`curvedConnector3`)の判定、反転(`flipH`/`flipV`)・回転・枠線の
+      読み取りを行う。非対応プリセットは`UnsupportedShapePreset`として扱う
+    - _Requirements: 10.9_
+  - [ ] 15.7 Parsingレイヤー: グループ(`xdr:grpSp`)を読み取る(`ReadGroupShape`)
+    - `grpSpPr/a:xfrm`から`ChildOffset`/`ChildExtent`/回転を読み取り、直接の子要素
+      (`xdr:sp`/`xdr:pic`/`xdr:cxnSp`/入れ子の`xdr:grpSp`)を出現順に`GroupChildModel`へ
+      変換する再帰処理を実装する
+    - _Requirements: 10.10_
+  - [ ] 15.8 Parsingレイヤー: `DetectUnsupportedElements`/`HasUnsupportedDrawingObject`を
+        拡張し、`xdr:cxnSp`/`xdr:grpSp`を構造的に許容する
+    - 既存の「`xdr:pic`/`xdr:sp`以外は`Drawing`」の判定に`xdr:cxnSp`/`xdr:grpSp`を追加する
+    - _Requirements: 10.9, 10.10_
+  - [ ] 15.9 Parsingレイヤー: グループ内に非対応要素が1つでもあればグループ全体を
+        サポート外要素として扱う
+    - グループの子孫(再帰的に)を検証し、対応済みプリセット一覧に含まれない図形・接続線・
+      `xdr:graphicFrame`等が1つでもあれば、グループ全体を`UnsupportedShapePreset`として
+      `unsupportedElements`ポリシーに従う
+    - _Requirements: 10.10_
+  - [ ] 15.10 セキュリティ対策: 接続線・グループを含めた合計個数上限とグループのネスト
+        段数上限を設ける
+    - 図形・接続線・グループ(グループ内部の子孫要素を含む)の合計個数を共通の
+      `MaxShapesPerSheet`でカウントする。グループのネスト段数の上限
+      (既定5段、`ElementKind = "GroupNestingTooDeep"`)を設ける
+    - _Requirements: 10.8_
+  - [ ] 15.11 Layoutレイヤー: 接続線のページ座標変換を実装する(`ConnectorCommand`生成)
+    - 画像・図形と共通の`TryComputeDrawingObjectRect`をそのまま流用する
+    - _Requirements: 10.9_
+  - [ ] 15.12 Layoutレイヤー: グループの子座標空間からページ座標への変換を実装する
+    - グループ自身のページ矩形を求めたうえで、`ChildOffset`/`ChildExtent`から
+      各子要素の`LocalRect`を比例変換(非一様倍率)しページ座標へ変換する再帰処理を実装し、
+      結果を`GroupCommand`にまとめる
+    - _Requirements: 10.10_
+  - [ ] 15.13 Layoutレイヤー: グループ内図形のテキスト折り返しを既存ロジックで対応する
+    - `GroupChildShape.Text`を`BuildShapeTextLines`/`WrapShapeText`と同じロジックで
+      折り返す(トップレベルの図形と処理を共通化する)
+    - _Requirements: 10.10, 10.4_
+  - [ ] 15.14 Renderingレイヤー: `DrawPage`のコマンド振り分けを再利用可能なヘルパーへ
+        切り出す
+    - `GroupCommand`の内部展開から個々の子コマンドを描画する際に同じ振り分けロジックを
+      再帰的に使うための準備(既存の`switch`文を`DrawSingleCommand`等へ抽出)
+    - _Requirements: 10.10_
+  - [ ] 15.15 Renderingレイヤー: 追加プリセット(星形・フローチャート記号)のパス生成を実装する
+    - _Requirements: 10.1_
+  - [ ] 15.16 Renderingレイヤー: 追加の吹き出し(`cloudCallout`, `callout1`/`callout2`/`callout3`)の
+        パス生成を実装する
+    - 雲形は円弧の和集合、引き出し線付き吹き出しはN本の折れ線を汎用ロジックで生成する
+    - _Requirements: 10.1_
+  - [ ] 15.17 Renderingレイヤー: 多段階・放射状グラデーションの描画を実装する
+    - `SKShader.CreateLinearGradient`/`CreateRadialGradient`に複数ストップを渡すよう
+      `CreateShapeFillPaint`を拡張する
+    - _Requirements: 10.6_
+  - [ ] 15.18 Renderingレイヤー: 接続線のパス生成(`ConnectorGeometryBuilder`)と描画を実装する
+    - _Requirements: 10.9_
+  - [ ] 15.19 Renderingレイヤー: グループの描画(`GroupCommand`)を実装する
+    - `canvas.Save`/`RotateDegrees(Center)`/子コマンドの再帰描画/`Restore`で、グループの
+      回転と子要素個別の回転が正しく合成されることを確認する
+    - _Requirements: 10.10, 10.5_
+  - [ ] 15.20 `Utsushi.SampleGenerator` に接続線・グループ・追加プリセット・多段階/放射状
+        グラデーションの埋め込み機能を追加する
+    - _Requirements: 8.3_
+  - [ ] 15.21 サンプル帳票に拡張分の図形を配置し、ゴールデンテストを更新する
+    - CLIで実際にPDFを生成しラスタライズして目視確認したうえでゴールデンファイルを更新する
+    - _Requirements: 10.1, 10.6, 10.9, 10.10, 8.3_
+  - [ ] 15.22 Parsing層のユニットテストを追加する
+    - 接続線・グループの読み取り、グループ内非対応要素の検出、合計個数/ネスト段数の上限、
+      多段階/放射状グラデーションの読み取りを検証する
+    - _Requirements: 10.1, 10.6, 10.8, 10.9, 10.10_
+  - [ ] 15.23 Layout層のユニットテストを追加する
+    - 接続線の座標変換、グループの子座標空間変換(非一様倍率を含む)、入れ子グループの
+      再帰変換を検証する
+    - _Requirements: 10.9, 10.10_
+  - [ ] 15.24 Rendering層のユニットテストを追加する
+    - 追加プリセットのパス生成、多段階/放射状グラデーションの描画、接続線の経路生成、
+      グループの回転合成(グループ回転+子要素個別回転)を検証する
+    - _Requirements: 10.1, 10.6, 10.9, 10.10_
+  - [ ] 15.25 レビュー対応
+    - `code-reviewer`/`layout-fidelity-reviewer`/`security-reviewer` の指摘に対応する
+    - _Requirements: 10.8, 10.9, 10.10, 6.4_
