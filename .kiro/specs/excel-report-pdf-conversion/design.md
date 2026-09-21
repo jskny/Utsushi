@@ -99,12 +99,20 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   `ContentType` が `image/png` / `image/jpeg` / `image/gif` / `image/bmp` のいずれでもない場合
   (EMF/WMF等のベクタ形式を含む)は「サポート外要素」として扱い、既存の
   `DetectUnsupportedElements`(`OpenXmlWorkbookReader`)と同じ `unsupportedElements` ポリシーに
-  従う(`ElementKind = "UnsupportedImageFormat"`)。Skiaでのデコード可否ではなく
-  `ContentType` の静的な許可リストで判定する(RenderingレイヤーのSkiaSharpにParsingレイヤーが
-  依存しないため。`.kiro/steering/structure.md`のレイヤー依存方向)。
-  `xdr:sp`(オートシェイプ)・`xdr:graphicFrame`(グラフ)・`xdr:grpSp`(グループ)は
-  画像ではないため、要件1.5の既存フローで引き続き「サポート外要素」として検出する
-  (要件9.5、図形対応は別フェーズ)。
+  従う(`ElementKind = "UnsupportedImageFormat"`)。対応形式かどうかは
+  `ContentType` の静的な許可リストのみで判定し、SkiaSharpによる実デコード確認はしない
+  (Rendering層のSkiaSharpにParsing層が依存しないため。`.kiro/steering/structure.md`の
+  レイヤー依存方向)。実際にSkiaSharpでデコードできない不正なバイナリだった場合は
+  Renderingレイヤーで `PdfRenderingException` になる。
+  - **既存の`DetectUnsupportedElements`との整合(要修正点)**: 現状の実装
+    (`OpenXmlWorkbookReader.cs:534`)は `DrawingsPart is not null` の時点で無条件に
+    `UnsupportedWorkbookElementException("Drawing")` を送出しており、中身が画像だけでも
+    即座に止まってしまう。画像対応の実装では、この判定を「`DrawingsPart` 内のアンカーを
+    列挙し、`xdr:pic` 以外(`xdr:sp`/`xdr:grpSp`/`xdr:cxnSp` 等)が1つでもあれば
+    `ElementKind = "Drawing"` として例外化、`xdr:pic` のみで構成される場合は例外化せず
+    画像読み取りへ進む」という分岐に置き換える必要がある(`xdr:graphicFrame` = グラフは
+    既存どおり525行目で先に個別検出される)。この置き換えを行わない限り、画像を1つでも
+    含むシートは `unsupportedElements: "error"` の帳票定義で常に失敗し続ける。
 
 ### 2. ReportDefinition レイヤー (`Utsushi.ReportDefinition`)
 
@@ -185,8 +193,7 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   - **画像の配置(要件9)**: `SheetModel.Images` の各画像について、アンカー(セル+セル内オフセット)を
     ページ左上原点のポイント座標へ変換する。座標変換自体は結合セルの矩形計算(`SheetGrid` の
     列幅/行高累積・印刷範囲切り出し・拡大縮小の適用)と同じ仕組みを再利用する。
-    アンカー左上セルが属するページにのみ画像全体を配置する(画像が改ページ位置をまたぐ場合の
-    ページ間分割描画は本フェーズでは対象外。「未決事項」参照)。
+    改ページ位置をまたぐ画像の扱いは「未決事項」を参照。
 - **主なインターフェース**:
   ```csharp
   public interface IReportLayoutEngine

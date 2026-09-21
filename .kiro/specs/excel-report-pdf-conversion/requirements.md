@@ -171,8 +171,11 @@
 > どちらも自社帳票のロゴ配置で使われうるため両方に対応する。絶対座標アンカー(absoluteAnchor)は
 > 対象帳票での使用実績が無いため対象外とする。
 >
-> 補足(要件9.4): SkiaSharpが直接デコードできるラスター形式(PNG/JPEG/GIF/BMP)のみを
-> 「画像」として扱い、Excel特有のベクタ形式(EMF/WMF)は現時点で対象外とする
+> 補足(要件9.4): 対応するのはRenderingレイヤーのSkiaSharpがデコードできるラスター形式
+> (PNG/JPEG/GIF/BMP)のみとする。判定自体はSkiaSharpによる実デコードではなく、
+> Parsingレイヤーで画像の`ContentType`を静的な許可リストと突き合わせる方法で行う
+> (design.md「Parsing レイヤー」参照。ParsingレイヤーがRenderingレイヤーのSkiaSharpに
+> 依存しないため)。Excel特有のベクタ形式(EMF/WMF)は現時点で対象外とする
 > (`.kiro/steering/tech.md`が禁止する商用ライブラリを追加しない限り変換手段がないため)。
 >
 > 補足(要件9.5): 図形(シェイプ)対応は画像よりスコープが大きく
