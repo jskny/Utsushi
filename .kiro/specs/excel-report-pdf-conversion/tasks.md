@@ -3,16 +3,17 @@
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
-> **状況**: タスク1〜14完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21、
-> タスク14: 2026-09-21)。タスク15(接続線・グループ・追加プリセット・多段階/放射状グラデーション)は
-> 15.1〜15.24が完了(データモデル定義、Parsing/Layout/Renderingの3層すべてでの接続線・グループ
-> 対応、多段階/放射状グラデーション、星形・フローチャート記号・雲形/引き出し線付き吹き出しの
-> ジオメトリ、SampleGeneratorへの機能追加とサンプル帳票への配置・ゴールデンテスト更新、
-> 各層のユニットテスト追加)。CLIで生成したPDFを`pdftoppm`でラスタライズして目視確認済み。
-> `dotnet build` / `dotnet test`(427件、2026-09-21時点)/ `dotnet format` はグリーン。
-> code-reviewer/security-reviewer/layout-fidelity-reviewerによるレビューを実施し、
-> 指摘(shapeCount上限のグループ経由での超過、画像検証順序の後退、グラデーションストップ数
-> 無制限、負のa:ext値による未処理例外)はいずれも修正済み。残りは15.25(最終レビュー対応)のみ。
+> **状況**: タスク1〜15完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13〜14:
+> 2026-09-21、タスク15: 2026-09-21)。タスク15(接続線・グループ・追加プリセット・多段階/放射状
+> グラデーション)では、データモデル定義、Parsing/Layout/Renderingの3層すべてでの接続線・
+> グループ対応、多段階/放射状グラデーション、星形・フローチャート記号・雲形/引き出し線付き
+> 吹き出しのジオメトリ、SampleGeneratorへの機能追加とサンプル帳票への配置・ゴールデンテスト
+> 更新、各層のユニットテスト追加、最終レビュー対応まで完了した。CLIで生成したPDFを
+> `pdftoppm`でラスタライズして目視確認済み。`dotnet build` / `dotnet test`(427件、
+> 2026-09-21時点)/ `dotnet format` はグリーン。code-reviewer/security-reviewer/
+> layout-fidelity-reviewer/doc-reviewerによるレビューを実施し、指摘(shapeCount上限の
+> グループ経由での超過、画像検証順序の後退、グラデーションストップ数無制限、負のa:ext値に
+> よる未処理例外、requirements.mdの補足の掲載順・あいまいな相互参照)はいずれも修正済み。
 > 実装時に決定した事項・判明した制約は `design.md` に反映済み。タスク文面どおりに
 > 実現できなかった項目には各タスクに注記を付けた。
 
@@ -524,6 +525,13 @@
       `ShapeGeometryBuilderTests.cs`/`ConnectorGeometryBuilderTests.cs`/
       `SkiaPdfRendererTests.cs`で検証した(test-writerが作成、Rendering層のテスト計163件)
     - _Requirements: 10.1, 10.6, 10.9, 10.10_
-  - [ ] 15.25 レビュー対応
-    - `code-reviewer`/`layout-fidelity-reviewer`/`security-reviewer` の指摘に対応する
+  - [x] 15.25 レビュー対応
+    - `code-reviewer`(shapeCount上限のグループ経由での超過、画像検証順序の後退、
+      TooManyShapesメッセージの不正確さを修正)、`security-reviewer`(グラデーション
+      ストップ数無制限を修正、OpenXml SDK再帰のStackOverflowリスクをdesign.mdに記録)、
+      `layout-fidelity-reviewer`(座標変換ロジックは問題なしと確認、Layout/Renderingの
+      ユニットテスト不足を指摘→15.23/15.24で対応)の指摘にすべて対応した。
+      最後に`doc-reviewer`でrequirements.md/design.md/tasks.mdの最終整合性を確認し、
+      補足の掲載順(要件10.1→10.6→10.7→10.8→10.9→10.10)と「下記補足」のあいまいな
+      使い回しをrequirements.mdで修正した(Critical該当なし)
     - _Requirements: 10.8, 10.9, 10.10, 6.4_
