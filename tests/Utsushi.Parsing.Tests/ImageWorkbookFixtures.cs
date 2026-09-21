@@ -118,9 +118,8 @@ namespace Utsushi.Parsing.Tests
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
 
         /// <summary>
-        /// 画像でも対応済みプリセットの図形でもない描画オブジェクト(<c>xdr:cxnSp</c>接続線)だけを
-        /// 含む最小の .xlsx を作る。図形(要件10)対応後もこの種の要素は構造的に
-        /// サポート外(<c>ElementKind = "Drawing"</c>)であり続けることを検証するためのフィクスチャ。
+        /// 対応済みプリセット(<c>straightConnector1</c>)の接続線(<c>xdr:cxnSp</c>)だけを
+        /// 含む最小の .xlsx を作る(要件10.9)。
         /// </summary>
         public static string CreateWithConnectionShape()
         {

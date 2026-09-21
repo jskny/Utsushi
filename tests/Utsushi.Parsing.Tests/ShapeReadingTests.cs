@@ -337,8 +337,12 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void グループ化された図形はunsupportedElementsがerrorなら例外になる()
+        public void grpSpPrにa_xfrmが無いグループは壊れたアンカーとして無視される()
         {
+            // xdr:grpSpは要件10.10により構造的にサポート対象となったため「Drawing」例外は
+            // もう発生しない。ただしa:xfrm(グループの子座標空間)が無ければ位置・サイズが
+            // 決定できないため、ToMarker/Extent欠落時の画像・図形と同じ方針(壊れたアンカーは
+            // Error/Ignoreいずれのモードでも静かに無視する)に従う。
             var groupShape = new DocumentFormat.OpenXml.Drawing.Spreadsheet.GroupShape(
                 new DocumentFormat.OpenXml.Drawing.Spreadsheet.NonVisualGroupShapeProperties(
                     new DocumentFormat.OpenXml.Drawing.Spreadsheet.NonVisualDrawingProperties { Id = 2U, Name = "Group" },
@@ -361,8 +365,8 @@ namespace Utsushi.Parsing.Tests
                 var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("Drawing", ex.ElementKind);
+                var workbook = _reader.Read(stream, options);
+                Assert.Empty(workbook.Sheets[0].DrawingObjects);
             }
             finally
             {

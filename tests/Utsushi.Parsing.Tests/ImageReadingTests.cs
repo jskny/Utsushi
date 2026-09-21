@@ -117,16 +117,19 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 接続線はunsupportedElementsがerrorなら引き続き例外になる()
+        public void 対応済みプリセットの接続線はunsupportedElementsがerrorでも例外にならない()
         {
+            // 要件10.9(接続線対応)により、straightConnector1等の対応済みプリセットは
+            // 構造的なサポート外(旧: ElementKind="Drawing")の対象から外れ、ConnectorModelとして読み取られる。
             var path = ImageWorkbookFixtures.CreateWithConnectionShape();
             try
             {
                 var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("Drawing", ex.ElementKind);
+                var workbook = _reader.Read(stream, options);
+                var connector = Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<ConnectorModel>().ToList());
+                Assert.Equal(ConnectorPresetType.Straight, connector.Preset);
             }
             finally
             {

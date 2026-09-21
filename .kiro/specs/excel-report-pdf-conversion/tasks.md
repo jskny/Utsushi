@@ -5,10 +5,14 @@
 
 > **状況**: タスク1〜14完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21、
 > タスク14: 2026-09-21)。タスク15(接続線・グループ・追加プリセット・多段階/放射状グラデーション)は
-> 実装中。15.1〜15.5・15.17(データモデル定義・追加プリセットのマッピング表・多段階/放射状
-> グラデーションの読み取りと描画)完了、`dotnet build` / `dotnet test`(326件、2026-09-21時点)/
-> `dotnet format` はグリーン。15.6以降(接続線・グループの読み取り、レイアウト変換、
-> 星形/フローチャート/吹き出しのジオメトリ描画、サンプル・テスト追加)は未着手。
+> 実装中。15.1〜15.10・15.17(データモデル定義・追加プリセットのマッピング表・多段階/放射状
+> グラデーションの読み取りと描画・接続線とグループのParsing読み取り・DoS上限)完了、
+> `dotnet build` / `dotnet test`(326件、2026-09-21時点)/ `dotnet format` はグリーン。
+> ただしLayout/Renderingレイヤーはまだ`ConnectorModel`/`GroupShapeModel`を扱わないため、
+> 現時点ではこれらはPDFに出力されず`SheetModel.DrawingObjects`に読み取られるのみ
+> (Layoutの`switch`文が非対応の型を素通りするだけで、既存の画像・図形描画への影響は無い)。
+> 15.11以降(Layoutでの座標変換・GroupCommand生成、Renderingでの新規プリセット・接続線・
+> グループ描画、サンプル・回帰テスト追加、15.6〜15.10のユニットテスト追加)は未着手。
 > 実装時に決定した事項・判明した制約は `design.md` に反映済み。タスク文面どおりに
 > 実現できなかった項目には各タスクに注記を付けた。
 
@@ -405,31 +409,34 @@
       フォールバック)を判別して`LinearGradientShapeFill`/`RadialGradientShapeFill`を
       構築する
     - _Requirements: 10.6_
-  - [ ] 15.6 Parsingレイヤー: 接続線(`xdr:cxnSp`)を読み取る(`ReadConnector`)
+  - [x] 15.6 Parsingレイヤー: 接続線(`xdr:cxnSp`)を読み取る(`ReadConnector`)
     - 対応済みプリセット(`straightConnector1`/`bentConnector2`/`bentConnector3`/
       `curvedConnector2`/`curvedConnector3`)の判定、反転(`flipH`/`flipV`)・回転・枠線の
       読み取りを行う。非対応プリセットは`UnsupportedShapePreset`として扱う
     - _Requirements: 10.7, 10.9_
-  - [ ] 15.7 Parsingレイヤー: グループ(`xdr:grpSp`)を読み取る(`ReadGroupShape`)
+  - [x] 15.7 Parsingレイヤー: グループ(`xdr:grpSp`)を読み取る(`ReadGroupShape`)
     - `grpSpPr/a:xfrm`から`ChildOffset`/`ChildExtent`/回転を読み取り、直接の子要素
       (`xdr:sp`/`xdr:pic`/`xdr:cxnSp`/入れ子の`xdr:grpSp`)を出現順に`GroupChildModel`へ
-      変換する再帰処理を実装する
+      変換する再帰処理を実装した(`ReadGroupChildren`/`ReadGroupChildShape`/
+      `ReadGroupChildImage`/`ReadGroupChildConnector`/`ReadGroupChildGroup`)
     - _Requirements: 10.10_
-  - [ ] 15.8 Parsingレイヤー: `DetectUnsupportedElements`/`HasUnsupportedDrawingObject`を
+  - [x] 15.8 Parsingレイヤー: `DetectUnsupportedElements`/`HasUnsupportedDrawingObject`を
         拡張し、`xdr:cxnSp`/`xdr:grpSp`を構造的に許容する
-    - 既存の「`xdr:pic`/`xdr:sp`以外は`Drawing`」の判定に`xdr:cxnSp`/`xdr:grpSp`を追加する
+    - 既存の「`xdr:pic`/`xdr:sp`以外は`Drawing`」の判定に`xdr:cxnSp`/`xdr:grpSp`を追加した
     - _Requirements: 10.9, 10.10_
-  - [ ] 15.9 Parsingレイヤー: グループ内に非対応要素が1つでもあればグループ全体を
+  - [x] 15.9 Parsingレイヤー: グループ内に非対応要素が1つでもあればグループ全体を
         サポート外要素として扱う
-    - グループの子孫(再帰的に)を検証し、対応済みプリセット一覧に含まれない図形・接続線・
-      `xdr:graphicFrame`等が1つでもあれば、グループ全体を`UnsupportedShapePreset`として
-      `unsupportedElements`ポリシーに従う
+    - `ReadGroupChildren`が子孫(再帰的に)を検証し、対応済みプリセット一覧に含まれない
+      図形・接続線・`xdr:graphicFrame`等が1つでもあれば、Errorモードは即座に例外を送出し、
+      Ignoreモードは`null`を返してグループ全体を破棄する(トップレベル/ネストいずれも
+      呼び出し元が`null`を伝播させて全体を`unsupportedElements`ポリシーに従わせる)
     - _Requirements: 10.10_
-  - [ ] 15.10 セキュリティ対策: 接続線・グループを含めた合計個数上限とグループのネスト
+  - [x] 15.10 セキュリティ対策: 接続線・グループを含めた合計個数上限とグループのネスト
         段数上限を設ける
     - 図形・接続線・グループ(グループ内部の子孫要素を含む)の合計個数を共通の
-      `MaxShapesPerSheet`でカウントする。グループのネスト段数の上限
-      (既定5段、`ElementKind = "GroupNestingTooDeep"`)を設ける
+      `MaxShapesPerSheet`でカウントする(画像は引き続き独立の`MaxImagesPerSheet`でカウント)。
+      グループのネスト段数の上限(既定5段、`ElementKind = "GroupNestingTooDeep"`。
+      トップレベルのグループ自身を1段目とする)を`MaxShapeNestingDepth`として追加した
     - _Requirements: 10.8_
   - [ ] 15.11 Layoutレイヤー: 接続線のページ座標変換を実装する(`ConnectorCommand`生成)
     - 画像・図形と共通の`TryComputeDrawingObjectRect`をそのまま流用する
