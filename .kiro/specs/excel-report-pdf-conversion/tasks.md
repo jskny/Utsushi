@@ -385,7 +385,7 @@
       と判断
     - _Requirements: 10.7, 10.8, 6.4_
 
-- [ ] 15. 図形対応の拡張(接続線・グループ・追加プリセット・多段階/放射状グラデーション)
+- [x] 15. 図形対応の拡張(接続線・グループ・追加プリセット・多段階/放射状グラデーション)
   - [x] 15.1 Parsingレイヤー: 接続線のデータモデル(`ConnectorModel` / `ConnectorPresetType`)を定義する
     - _Requirements: 10.9_
   - [x] 15.2 Parsingレイヤー: グループのデータモデル(`GroupShapeModel` / `GroupChildModel`
