@@ -428,7 +428,7 @@ namespace Utsushi.Golden.Tests
         public void ConvertToFileは入力ファイルが存在しない場合UtsushiExceptionに変換する()
         {
             // File.OpenReadが投げる生のFileNotFoundExceptionをそのまま漏らすと、
-            // ストリーム版(Convert)と異なりUtsushiException階層で一貫して扱えなくなる(要件6.4)。
+            // ストリーム版(Convert)と異なりUtsushiException階層で一貫して扱えなくなる(要件6.4, 6.5)。
             using var fontResolver = new FontResolver(FontResolverOptions.AllowFallback());
             using var converter = new ReportPdfConverter(
                 new OpenXmlWorkbookReader(),
@@ -440,10 +440,17 @@ namespace Utsushi.Golden.Tests
                 fontResolver);
 
             var missingPath = Path.Combine(TestPaths.RepositoryRoot, "存在しない.xlsx");
-
-            var ex = Assert.Throws<InvalidExcelFileException>(() => converter.ConvertToFile(
-                "invoice", missingPath, new Dictionary<string, string>(), Path.GetTempFileName()));
-            Assert.Equal(ProcessingStage.Parsing, ex.Stage);
+            var outputPath = Path.GetTempFileName();
+            try
+            {
+                var ex = Assert.Throws<InvalidExcelFileException>(() => converter.ConvertToFile(
+                    "invoice", missingPath, new Dictionary<string, string>(), outputPath));
+                Assert.Equal(ProcessingStage.Parsing, ex.Stage);
+            }
+            finally
+            {
+                File.Delete(outputPath);
+            }
         }
 
         /// <summary>SkiaPdfRenderer以外のIPdfRenderer実装を想定したテスト用の最小実装。</summary>

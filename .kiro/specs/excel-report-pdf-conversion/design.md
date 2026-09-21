@@ -296,7 +296,7 @@ public sealed record TextCommand(
   - `SubstitutionKeyNotFoundException` / `RequiredSubstitutionValueMissingException`(要件2.3, 2.4)
   - `InvalidCellOverrideAddressException`(要件2.8。セル番地直接指定がA1形式として解釈できない場合)
   - `NonAnchorMergedCellOverrideException`(要件2.9。セル番地直接指定の対象が結合セル範囲の非アンカー位置の場合)
-  - `InvalidExcelFileException`(要件6.1, 6.2。`Reason` で非xlsx/破損/パスワード保護を区別する)
+  - `InvalidExcelFileException`(要件6.1, 6.2, 6.5。`Reason` で非xlsx/破損/パスワード保護/ファイルを開けない(存在しない・アクセス不可)を区別する)
   - `ReportDefinitionSchemaException`(要件6.3。問題のあったプロパティパスを保持する)
   - `LayoutComputationException` / `PdfRenderingException` / `FontNotAvailableException`
 - すべての例外は、帳票コード・シート名・セル番地・処理段階(Parsing/Substitution/Layout/Rendering)を構造化プロパティとして保持し、ログ出力時に特定できるようにする(要件6.4)。

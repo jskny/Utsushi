@@ -208,7 +208,7 @@ namespace Utsushi
 
         /// <summary>
         /// 入力Excelファイルを開く。ファイルが無い/開けない場合も、<see cref="Convert"/>(ストリーム版)と
-        /// 同様に <see cref="UtsushiException"/> 階層(Stage=Parsing)へ統一する(要件6.4)。
+        /// 同様に <see cref="UtsushiException"/> 階層(Stage=Parsing)へ統一する(要件6.4, 6.5)。
         /// </summary>
         private static FileStream OpenInputFile(string xlsxPath, string? reportCode)
         {

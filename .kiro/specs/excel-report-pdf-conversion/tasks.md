@@ -30,6 +30,12 @@
     - _Requirements: 1.5_
   - [x] 2.5 破損ファイル・非xlsx形式・パスワード保護ファイルに対する明確な例外を実装する
     - _Requirements: 6.1, 6.2_
+  - [x] 2.6 入力ファイルが存在しない/アクセス権限がなく開けない場合も `InvalidExcelFileException` に統一する
+    - _Requirements: 6.5_
+    - 注記: 当初 `ReportPdfConverter.ConvertToFile` は `File.OpenRead` の失敗(存在しない等)を
+      未加工の `IOException` 系のまま呼び出し元へ伝播していた。ストリーム版 `Convert` との挙動統一のため、
+      2026-09-21のリファクタリングで `UtsushiException` 階層(Stage=Parsing)へ変換するよう修正し、
+      要件6.5として追記した。
 
 - [x] 3. ReportDefinitionレイヤー: 帳票定義のロードと突合
   - [x] 3.1 帳票定義JSONのスキーマを定義し、ロード時のスキーマ検証を実装する
