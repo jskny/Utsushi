@@ -515,6 +515,79 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void グループ自身を1件として数える時点で上限に達する場合はignoreならグループ全体が破棄される()
+        {
+            // 子要素の処理自体はどれも上限に抵触せず成功するが(47→48→49→50)、
+            // グループ自身を1件として数える直前の再チェックで上限(50)に達しているため、
+            // グループ全体を破棄する。子要素の走査中に失敗する共有カウント上限のテスト
+            // (直前のテストケース)とは異なるコードパス(グループ自身の計上時の再チェック)を
+            // 検証する。
+            var topLevelCount = OpenXmlWorkbookReader.MaxShapesPerSheet - 3; // 47
+            var anchors = new List<OpenXmlElement>();
+            for (var i = 0; i < topLevelCount; i++)
+            {
+                anchors.Add(ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.Rectangle, row: i + 1, id: (uint)(i + 2)));
+            }
+
+            var groupChildren = new OpenXmlElement[]
+            {
+                ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(A.ShapeTypeValues.Rectangle, 0L, 0L, 300000L, 300000L, id: 900U),
+                ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(A.ShapeTypeValues.Ellipse, 300000L, 0L, 300000L, 300000L, id: 901U),
+                ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(A.ShapeTypeValues.Triangle, 600000L, 0L, 300000L, 300000L, id: 902U),
+            };
+            var group = ConnectorAndGroupWorkbookFixtures.GroupShapeElement(
+                groupChildren, 0L, 0L, 900000L, 300000L, id: (uint)(topLevelCount + 10));
+            anchors.Add(ConnectorAndGroupWorkbookFixtures.WrapInOneCellAnchor(group, row: topLevelCount + 1));
+
+            var path = ShapeWorkbookFixtures.CreateWorkbook(anchors.ToArray());
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                Assert.Equal(topLevelCount, sheet.DrawingObjects.OfType<ShapeModel>().Count());
+                Assert.Empty(sheet.DrawingObjects.OfType<GroupShapeModel>());
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void グループ自身を1件として数える時点で上限に達する場合はerrorなら例外になる()
+        {
+            var topLevelCount = OpenXmlWorkbookReader.MaxShapesPerSheet - 3; // 47
+            var anchors = new List<OpenXmlElement>();
+            for (var i = 0; i < topLevelCount; i++)
+            {
+                anchors.Add(ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.Rectangle, row: i + 1, id: (uint)(i + 2)));
+            }
+
+            var groupChildren = new OpenXmlElement[]
+            {
+                ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(A.ShapeTypeValues.Rectangle, 0L, 0L, 300000L, 300000L, id: 900U),
+                ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(A.ShapeTypeValues.Ellipse, 300000L, 0L, 300000L, 300000L, id: 901U),
+                ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(A.ShapeTypeValues.Triangle, 600000L, 0L, 300000L, 300000L, id: 902U),
+            };
+            var group = ConnectorAndGroupWorkbookFixtures.GroupShapeElement(
+                groupChildren, 0L, 0L, 900000L, 300000L, id: (uint)(topLevelCount + 10));
+            anchors.Add(ConnectorAndGroupWorkbookFixtures.WrapInOneCellAnchor(group, row: topLevelCount + 1));
+
+            var path = ShapeWorkbookFixtures.CreateWorkbook(anchors.ToArray());
+            try
+            {
+                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                using var stream = File.OpenRead(path);
+
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
+                Assert.Equal("TooManyShapes", ex.ElementKind);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void グループのみのシートはunsupportedElementsがerrorでも例外にならない()
         {
             var leaf = ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(
