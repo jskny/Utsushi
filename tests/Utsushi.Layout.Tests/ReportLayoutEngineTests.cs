@@ -977,5 +977,38 @@ namespace Utsushi.Layout.Tests
                 c => Assert.IsType<ImageCommand>(c),
                 c => Assert.IsType<ShapeCommand>(c));
         }
+
+        [Fact]
+        public void 図形内テキストの折り返しは拡大縮小率によらず同じ行数になる()
+        {
+            // 回帰テスト(layout-fidelity-reviewer指摘): 図形の矩形はToPageRectで_scaleが
+            // 掛かって縮むのに、内側のテキストのフォントサイズ・余白に_scaleが適用されていないと、
+            // 縮小率を持つ帳票では同じ文字数でもより多くの行に折り返されてしまっていた。
+            // 矩形とフォントの両方に同じ_scaleが掛かれば、折り返し行数は縮小率によらず一定になるはず。
+            var font = new FontStyle("Calibri", 10.0, false, false, UnderlineStyle.None, false, ArgbColor.Black);
+            var text = new ShapeTextBody(
+                new[] { new ShapeTextParagraph(new[] { new ShapeTextRun("AAAAAAAAAA", font) }, HorizontalAlignment.Left) },
+                VerticalAlignment.Top);
+
+            ShapeCommand Build(PageScaling scaling)
+            {
+                var sheet = UniformSheet(
+                    rows: 2, columns: 2, columnWidth: 40.0, rowHeightPt: 60.0, pageSetup: NoMarginA4(scaling: scaling));
+                var shape = new ShapeModel(
+                    ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, text,
+                    CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(33.0, 60.0));
+                sheet = sheet with { DrawingObjects = new[] { shape } };
+
+                var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider());
+                var page = Assert.Single(engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+                return Assert.Single(page.Commands.OfType<ShapeCommand>());
+            }
+
+            var full = Build(PageScaling.Normal);
+            var half = Build(new PageScaling(50, null, null));
+
+            Assert.Equal(2, full.TextLines.Count);
+            Assert.Equal(full.TextLines.Count, half.TextLines.Count);
+        }
     }
 }

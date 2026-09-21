@@ -61,6 +61,20 @@ namespace Utsushi.Rendering.Tests
         }
 
         [Fact]
+        public void 吹き出しの引き出し先端は極端な調整値でも有限の範囲にクランプされる()
+        {
+            // security-reviewer指摘の回帰テスト: a:gd/@fmlaは理論上Int32の全域を100000で
+            // 割った値(最大約±21474.8)まで取りうるが、そのまま使うと座標が極端に大きくなる。
+            using var path = ShapeGeometryBuilder.Build(
+                ShapePresetType.WedgeRectCallout, new[] { 100000.0, -100000.0 }, Rect);
+
+            Assert.False(float.IsNaN(path.Bounds.Left));
+            Assert.False(float.IsInfinity(path.Bounds.Left));
+            Assert.True(path.Bounds.Width < Rect.Width * 20, $"Width={path.Bounds.Width}");
+            Assert.True(path.Bounds.Height < Rect.Height * 20, $"Height={path.Bounds.Height}");
+        }
+
+        [Fact]
         public void RightArrowの先端は矩形の右端にある()
         {
             using var path = ShapeGeometryBuilder.Build(ShapePresetType.RightArrow, Array.Empty<double>(), Rect);

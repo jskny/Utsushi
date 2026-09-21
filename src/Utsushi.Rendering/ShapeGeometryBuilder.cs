@@ -31,6 +31,13 @@ namespace Utsushi.Rendering
         private const double DefaultCalloutTipXAdj = -0.25;
         private const double DefaultCalloutTipYAdj = 0.75;
 
+        /// <summary>
+        /// 吹き出しの引き出し先端の調整値(本体の幅・高さに対する比率)の絶対値の上限。
+        /// ファイル由来の値をそのまま使うと極端な座標になりうるため、本体の数倍程度まで
+        /// 外側にはみ出す吹き出しは許容しつつ有限の妥当な範囲に収める(security-reviewer指摘)。
+        /// </summary>
+        private const double CalloutTipAdjLimit = 5.0;
+
         public static SKPath Build(ShapePresetType preset, IReadOnlyList<double> adjustmentValues, SKRect rect) =>
             preset switch
             {
@@ -210,8 +217,13 @@ namespace Utsushi.Rendering
         /// </summary>
         private static SKPath WedgeCalloutPath(SKRect rect, BodyKind body, IReadOnlyList<double> adjustmentValues)
         {
-            var tipXAdj = Adj(adjustmentValues, 0, DefaultCalloutTipXAdj);
-            var tipYAdj = Adj(adjustmentValues, 1, DefaultCalloutTipYAdj);
+            // 他の調整値と異なり、引き出し先端は0〜1の範囲外(本体の外)を指すのが通常のため
+            // 上限で丸めはしないが、ファイル由来の値(理論上はInt32の全域を100000で割った
+            // 値域まで取りうる)をそのまま使うと極端に大きな座標がSKPathに渡ってしまう
+            // (security-reviewer指摘)。本体の外側へ大きくはみ出す吹き出しを許容しつつ
+            // 座標を有限の妥当な範囲に収めるため、絶対値で適度な上限にクランプする。
+            var tipXAdj = Math.Max(-CalloutTipAdjLimit, Math.Min(CalloutTipAdjLimit, Adj(adjustmentValues, 0, DefaultCalloutTipXAdj)));
+            var tipYAdj = Math.Max(-CalloutTipAdjLimit, Math.Min(CalloutTipAdjLimit, Adj(adjustmentValues, 1, DefaultCalloutTipYAdj)));
 
             var path = body switch
             {

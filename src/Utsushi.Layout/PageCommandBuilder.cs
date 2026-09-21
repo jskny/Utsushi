@@ -210,11 +210,15 @@ namespace Utsushi.Layout
         /// <summary>図形内テキストを矩形幅で折り返し、水平/垂直配置に基づく各行のローカル座標を確定させる(要件10.4)。</summary>
         private IReadOnlyList<ShapeTextLine> BuildShapeTextLines(ShapeTextBody text, RectPt rect)
         {
+            // 拡大縮小率はセル内テキスト(EmitText)と同様、余白・フォントサイズの両方に適用する
+            // (layout-fidelity-reviewer指摘: 図形の矩形自体はToPageRectで_scaleが掛かるのに、
+            // 内側のテキストが原寸のままだと、印刷倍率を持つ帳票でテキストが矩形からはみ出す)。
+            var paddingPt = ShapeTextPaddingPt * _scale;
             var contentRect = RectPt.FromBounds(
-                rect.Left + ShapeTextPaddingPt,
-                rect.Top + ShapeTextPaddingPt,
-                rect.Right - ShapeTextPaddingPt,
-                rect.Bottom - ShapeTextPaddingPt);
+                rect.Left + paddingPt,
+                rect.Top + paddingPt,
+                rect.Right - paddingPt,
+                rect.Bottom - paddingPt);
 
             if (contentRect.Width <= 0 || contentRect.Height <= 0)
             {
@@ -260,11 +264,13 @@ namespace Utsushi.Layout
                     continue;
                 }
 
-                var font = paragraph.Runs[0].Font;
+                // 拡大縮小率はフォントサイズにも適用する(セル内テキストのEmitTextと同様。
+                // 座標だけを縮めると文字が矩形に収まらなくなるため)。
+                var scaledFont = paragraph.Runs[0].Font with { SizePt = paragraph.Runs[0].Font.SizePt * _scale };
                 var paragraphText = string.Concat(paragraph.Runs.Select(run => run.Text));
-                foreach (var line in WrapLines(font, paragraphText, availableWidthPt))
+                foreach (var line in WrapLines(scaledFont, paragraphText, availableWidthPt))
                 {
-                    lines.Add((line, paragraph.HAlign, font));
+                    lines.Add((line, paragraph.HAlign, scaledFont));
                 }
             }
 

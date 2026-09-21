@@ -683,25 +683,21 @@ namespace Utsushi.Parsing.OpenXml
             var rotationDegrees = (shapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
             var fill = ReadShapeFill(shapeProperties);
             var outline = ReadShapeOutline(shapeProperties);
-            var text = ReadShapeText(shape.TextBody);
+            var text = ReadShapeText(shape.TextBody, out var textTooLong);
 
-            if (text is { } nonNullText)
+            if (textTooLong)
             {
-                var totalLength = nonNullText.Paragraphs.Sum(p => p.Runs.Sum(r => r.Text.Length));
-                if (totalLength > MaxShapeTextLength)
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
                 {
-                    if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                    {
-                        throw new UnsupportedWorkbookElementException(
-                            $"シート '{sheetName}' の図形のテキストが上限({MaxShapeTextLength}文字)を超えています。"
-                            + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                            "ShapeTextTooLong",
-                            options.ReportCode,
-                            sheetName);
-                    }
-
-                    return null;
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形のテキストが上限({MaxShapeTextLength}文字)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "ShapeTextTooLong",
+                        options.ReportCode,
+                        sheetName);
                 }
+
+                return null;
             }
 
             shapeCount++;
@@ -819,14 +815,22 @@ namespace Utsushi.Parsing.OpenXml
             ArgbColor.TryParseHex(stop.RgbColorModelHex?.Val?.Value, out color);
 
         /// <summary>図形内テキスト(<c>xdr:txBody</c>)を段落・ラン単位で読み取る(要件10.4)。</summary>
-        private static ShapeTextBody? ReadShapeText(Xdr.TextBody? textBody)
+        /// <summary>
+        /// 図形内テキストを読み取る。合計文字数が<see cref="MaxShapeTextLength"/>を超えた時点で
+        /// 即座に打ち切り、<paramref name="textTooLong"/>を立てて返す(security-reviewer指摘)。
+        /// フォント・色の解析(<see cref="ReadShapeRunFont"/>)は上限を超えていないランに対してのみ
+        /// 行うため、極端に大量のランを仕込んだ入力でも処理コストが合計文字数の上限で頭打ちになる。
+        /// </summary>
+        private static ShapeTextBody? ReadShapeText(Xdr.TextBody? textBody, out bool textTooLong)
         {
+            textTooLong = false;
             if (textBody is null)
             {
                 return null;
             }
 
             var paragraphs = new List<ShapeTextParagraph>();
+            var totalLength = 0;
             foreach (var paragraph in textBody.Elements<Dr.Paragraph>())
             {
                 var runs = new List<ShapeTextRun>();
@@ -836,6 +840,13 @@ namespace Utsushi.Parsing.OpenXml
                     if (string.IsNullOrEmpty(text))
                     {
                         continue;
+                    }
+
+                    totalLength += text!.Length;
+                    if (totalLength > MaxShapeTextLength)
+                    {
+                        textTooLong = true;
+                        return null;
                     }
 
                     runs.Add(new ShapeTextRun(text!, ReadShapeRunFont(run.RunProperties)));

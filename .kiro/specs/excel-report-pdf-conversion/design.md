@@ -619,3 +619,20 @@ public sealed record ShapeTextLine(PointPt Origin, string Text, FontStyle Font, 
   線形グラデーションで近似しており、3点以上のグラデーションストップやExcel特有の
   グラデーション角度の細かい仕様は再現しない。対象帳票で見た目の差異が問題になった場合に
   改めて検討する。
+- **OOXMLパーツ全体の非圧縮サイズに対する上限が無い**(security-reviewer指摘、要件6.1系の
+  信頼できない入力に対する安全弁の一部として今後検討): `SpreadsheetDocument.Open` は
+  `OpenSettings`(`MaxCharactersInPart`等)を指定せずに呼んでいるため、`drawing.xml`を含む
+  各パーツ全体のDOM展開自体には上限が無い。要件9.6・10.8で設けた画像枚数・図形個数・
+  図形内テキスト文字数の上限は、あくまで「DOM展開後、実際のデコード・折り返し計算等の
+  重い処理へ進む前」の安全弁であり、DOM展開そのものを止める仕組みではない。画像対応時から
+  存在する既存のギャップだが、図形内テキスト(`xdr:txBody`)という「XML中に際限なく
+  埋め込める」経路が増えたことで実害が生じやすくなったため、対象帳票で問題になった場合は
+  `OpenSettings.MaxCharactersInPart`の設定を検討する。
+- **画像・図形の上限がシート単位でありワークブック単位の合算上限が無い**(security-reviewer指摘):
+  `MaxImagesPerSheet`/`MaxShapesPerSheet`はシートごとにリセットされるカウンタであり、
+  ワークブック全体でシートをまたいだ合算上限は無い。`ReportPdfConverter.Convert`は
+  常に帳票定義の`sheetName`1枚に処理対象を絞る(`WorkbookReadOptions.SheetNameFilter`)ため
+  現状の呼び出し経路では実害は無いが、`IWorkbookReader`/`OpenXmlWorkbookReader`は
+  `public`であり、`SheetNameFilter`を指定しない(全シート読み取り)呼び出し方をする
+  将来のコードが現れた場合はシート数倍の積み上げに対する上限が無い。対象帳票で
+  実際に必要になった時点でワークブック単位の合算上限を検討する。
