@@ -78,11 +78,10 @@ namespace Utsushi.ReportDefinitions
                         field.Cell);
                 }
 
-                var merged = sheet.FindMergedRange(field.Cell);
-                if (merged is not null && merged.Anchor != field.Cell)
+                if (sheet.IsNonAnchorMergedCell(field.Cell, out var merged))
                 {
                     throw new ReportStructureMismatchException(
-                        $"置換キー '{field.Key}' の対象セル {field.Cell} は結合範囲 {merged.Range} の内側にあります。"
+                        $"置換キー '{field.Key}' の対象セル {field.Cell} は結合範囲 {merged!.Range} の内側にあります。"
                         + $"結合範囲の左上セル {merged.Anchor} を指定してください。",
                         definition.ReportCode,
                         sheet.Name,

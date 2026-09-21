@@ -2,6 +2,7 @@ using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.ReportDefinitions;
 using Utsushi.ReportDefinitions.Model;
+using Utsushi.TestSupport;
 using Xunit;
 
 namespace Utsushi.ReportDefinition.Tests

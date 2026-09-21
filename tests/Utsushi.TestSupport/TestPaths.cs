@@ -1,19 +1,26 @@
 using System;
 using System.IO;
 
-namespace Utsushi.Parsing.Tests
+namespace Utsushi.TestSupport
 {
-    /// <summary>テストからリポジトリ内のサンプルを参照するためのパス解決。</summary>
-    internal static class TestPaths
+    /// <summary>各テストプロジェクトからリポジトリ内のサンプル・ゴールデンファイルを参照するためのパス解決。</summary>
+    public static class TestPaths
     {
         public static string RepositoryRoot { get; } = FindRepositoryRoot();
 
         public static string SampleReportsRoot { get; } = Path.Combine(RepositoryRoot, "samples", "reports");
 
+        /// <summary>ゴールデンファイルの配置ルート(`.kiro/steering/structure.md`「命名規則」)。</summary>
+        public static string FixturesRoot { get; } =
+            Path.Combine(RepositoryRoot, "tests", "Utsushi.Golden.Tests", "Fixtures");
+
         /// <summary>帳票サンプルのテンプレート(.xlsx)のパスを返す。</summary>
         public static string SampleTemplate(string reportCode) =>
             Path.Combine(SampleReportsRoot, reportCode, "template.xlsx");
 
+        /// <summary>
+        /// テスト実行ディレクトリ(bin/Debug/netX.0)から上へ辿り、リポジトリのルートを探す。
+        /// </summary>
         private static string FindRepositoryRoot()
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);

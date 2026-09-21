@@ -173,44 +173,38 @@ namespace Utsushi.ReportDefinitions
             };
         }
 
-        private static double ReadTolerance(JsonElement root, string reportCode, string? definitionPath)
+        private static double ReadTolerance(JsonElement root, string reportCode, string? definitionPath) =>
+            ReadOptionalRangedDouble(
+                root, "toleranceMm", reportCode, definitionPath,
+                ReportDefinition.DefaultToleranceMm, minValue: 0, minInclusive: true, rangeDescription: "0以上");
+
+        private static double ReadMaxDigitWidth(JsonElement root, string reportCode, string? definitionPath) =>
+            ReadOptionalRangedDouble(
+                root, "maxDigitWidthPx", reportCode, definitionPath,
+                ReportDefinition.DefaultMaxDigitWidthPx, minValue: 0, minInclusive: false, rangeDescription: "正の数");
+
+        /// <summary>下限付きの任意の数値プロパティを読む。未指定時は <paramref name="defaultValue"/> を返す。</summary>
+        private static double ReadOptionalRangedDouble(
+            JsonElement root, string propertyName, string reportCode, string? definitionPath,
+            double defaultValue, double minValue, bool minInclusive, string rangeDescription)
         {
-            if (!root.TryGetProperty("toleranceMm", out var value))
+            if (!root.TryGetProperty(propertyName, out var value))
             {
-                return ReportDefinition.DefaultToleranceMm;
+                return defaultValue;
             }
 
-            if (value.ValueKind != JsonValueKind.Number || !value.TryGetDouble(out var tolerance))
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetDouble(out var number))
             {
-                throw Schema("'toleranceMm' は数値である必要があります。", reportCode, definitionPath, "toleranceMm");
+                throw Schema($"'{propertyName}' は数値である必要があります。", reportCode, definitionPath, propertyName);
             }
 
-            if (tolerance < 0)
+            if (minInclusive ? number < minValue : number <= minValue)
             {
-                throw Schema("'toleranceMm' は0以上である必要があります。", reportCode, definitionPath, "toleranceMm");
+                throw Schema(
+                    $"'{propertyName}' は{rangeDescription}である必要があります。", reportCode, definitionPath, propertyName);
             }
 
-            return tolerance;
-        }
-
-        private static double ReadMaxDigitWidth(JsonElement root, string reportCode, string? definitionPath)
-        {
-            if (!root.TryGetProperty("maxDigitWidthPx", out var value))
-            {
-                return ReportDefinition.DefaultMaxDigitWidthPx;
-            }
-
-            if (value.ValueKind != JsonValueKind.Number || !value.TryGetDouble(out var width))
-            {
-                throw Schema("'maxDigitWidthPx' は数値である必要があります。", reportCode, definitionPath, "maxDigitWidthPx");
-            }
-
-            if (width <= 0)
-            {
-                throw Schema("'maxDigitWidthPx' は正の数である必要があります。", reportCode, definitionPath, "maxDigitWidthPx");
-            }
-
-            return width;
+            return number;
         }
 
         private static UnsupportedElementPolicy ReadUnsupportedPolicy(

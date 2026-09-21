@@ -3,8 +3,8 @@
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
-> **状況**: 全タスク完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20)。
-> `dotnet build` / `dotnet test`(210件)/ `dotnet format` がグリーン。
+> **状況**: 全タスク完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20)。以降もリファクタリングを継続中。
+> `dotnet build` / `dotnet test`(215件、2026-09-21時点)/ `dotnet format` がグリーン。
 > 実装時に決定した事項・判明した制約は `design.md` に反映済み。
 > タスク文面どおりに実現できなかった項目には各タスクに注記を付けた。
 
@@ -15,6 +15,9 @@
   - 注記: ソリューションファイルは `Utsushi.sln` ではなく新形式の `Utsushi.slnx` とした。
     また、例外階層とレイヤー共通の値型を置く `Utsushi.Core`、呼び出し元が参照するファサード
     `Utsushi` を追加している(`.kiro/steering/structure.md` 更新済み)。
+    さらに、呼び出し元プロダクトの開発環境がVisual Studio 2019(C# 9.0まで)であることが判明したため、
+    ファイルスコープ名前空間は不採用とし、`LangVersion` を明示的に `9.0` に固定した
+    (`.kiro/steering/tech.md`「Visual Studio 2019 対応」参照)。
 
 - [x] 2. Parsingレイヤー: WorkbookModel の実装
   - [x] 2.1 `DocumentFormat.OpenXml` を依存に追加し、`.xlsx` からセル値・スタイル(フォント/罫線/配置/数値書式/背景色)を読み取る `IWorkbookReader` を実装する

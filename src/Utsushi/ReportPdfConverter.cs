@@ -119,7 +119,7 @@ namespace Utsushi
             string outputPath,
             IReadOnlyDictionary<string, string>? cellOverrides = null)
         {
-            using var input = File.OpenRead(xlsxPath);
+            using var input = OpenInputFile(xlsxPath, reportCode);
             var layout = ComputeLayout(reportCode, input, values, cellOverrides);
 
             if (_renderer is SkiaPdfRenderer skia)
@@ -203,6 +203,23 @@ namespace Utsushi
             {
                 throw new ReportStructureMismatchException(
                     ex.Message, definition.ReportCode, definition.SheetName, innerException: ex);
+            }
+        }
+
+        /// <summary>
+        /// 入力Excelファイルを開く。ファイルが無い/開けない場合も、<see cref="Convert"/>(ストリーム版)と
+        /// 同様に <see cref="UtsushiException"/> 階層(Stage=Parsing)へ統一する(要件6.4)。
+        /// </summary>
+        private static FileStream OpenInputFile(string xlsxPath, string? reportCode)
+        {
+            try
+            {
+                return File.OpenRead(xlsxPath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                throw new InvalidExcelFileException(
+                    $"入力ファイルを開けません: {xlsxPath}", InvalidExcelFileReason.Unknown, reportCode, ex);
             }
         }
 

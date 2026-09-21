@@ -73,6 +73,24 @@ namespace Utsushi.Parsing.Model
             return null;
         }
 
+        /// <summary>
+        /// 指定セルが結合範囲の内側にあり、かつ先頭(アンカー)セルではないかどうかを判定する。
+        /// </summary>
+        /// <param name="address">判定対象のセル。</param>
+        /// <param name="merged">非アンカー位置だった場合、そのセルが属する結合範囲。それ以外は null。</param>
+        public bool IsNonAnchorMergedCell(CellAddress address, out MergedRange? merged)
+        {
+            var found = FindMergedRange(address);
+            if (found is not null && found.Anchor != address)
+            {
+                merged = found;
+                return true;
+            }
+
+            merged = null;
+            return false;
+        }
+
         /// <summary>セルが存在する範囲(使用範囲)。セルが1つも無い場合は null。</summary>
         public CellRange? GetUsedRange()
         {
