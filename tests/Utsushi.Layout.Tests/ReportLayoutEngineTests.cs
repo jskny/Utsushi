@@ -437,7 +437,7 @@ namespace Utsushi.Layout.Tests
                 new HashSet<int>(),
                 new HashSet<int>(),
                 NoMarginA4(),
-                Array.Empty<ImageModel>());
+                Array.Empty<DrawingObjectModel>());
 
             var lines = Lines(Assert.Single(Compute(sheet).Pages)).ToList();
 
@@ -485,7 +485,7 @@ namespace Utsushi.Layout.Tests
                 new HashSet<int>(),
                 new HashSet<int>(),
                 NoMarginA4(rowBreaks: new[] { 2 }),
-                Array.Empty<ImageModel>());
+                Array.Empty<DrawingObjectModel>());
 
             var layout = Compute(sheet);
             Assert.Equal(2, layout.PageCount);
@@ -741,8 +741,8 @@ namespace Utsushi.Layout.Tests
                 "image/png",
                 CellAddress.Parse("B2"),
                 new PointPt(2.0, 3.0),
-                new FixedImageExtent(15.0, 8.0));
-            sheet = sheet with { Images = new[] { image } };
+                new FixedAnchorExtent(15.0, 8.0));
+            sheet = sheet with { DrawingObjects = new[] { image } };
 
             var page = Assert.Single(Compute(sheet).Pages);
             var command = Assert.Single(Images(page));
@@ -770,8 +770,8 @@ namespace Utsushi.Layout.Tests
                 "image/png",
                 CellAddress.Parse("A1"),
                 new PointPt(0.0, 0.0),
-                new CellSpanImageExtent(CellAddress.Parse("C2"), new PointPt(4.0, 5.0)));
-            sheet = sheet with { Images = new[] { image } };
+                new CellSpanAnchorExtent(CellAddress.Parse("C2"), new PointPt(4.0, 5.0)));
+            sheet = sheet with { DrawingObjects = new[] { image } };
 
             var page = Assert.Single(Compute(sheet).Pages);
             var command = Assert.Single(Images(page));
@@ -802,8 +802,8 @@ namespace Utsushi.Layout.Tests
                 CellAddress.Parse("C1"),
                 new PointPt(0.0, 0.0),
                 // 印刷範囲(A1:C3)の外にあるE2まで(D列・E列は印刷範囲外)。
-                new CellSpanImageExtent(CellAddress.Parse("E2"), new PointPt(0.0, 0.0)));
-            sheet = sheet with { Images = new[] { image } };
+                new CellSpanAnchorExtent(CellAddress.Parse("E2"), new PointPt(0.0, 0.0)));
+            sheet = sheet with { DrawingObjects = new[] { image } };
 
             var page = Assert.Single(Compute(sheet).Pages);
             var command = Assert.Single(Images(page));
@@ -821,8 +821,8 @@ namespace Utsushi.Layout.Tests
                 rows: 4, columns: 2, columnWidth: 10.0, rowHeightPt: 20.0,
                 pageSetup: NoMarginA4(rowBreaks: new[] { 3 }));
             var image = new ImageModel(
-                Array.Empty<byte>(), "image/png", CellAddress.Parse("A1"), default, new FixedImageExtent(5.0, 5.0));
-            sheet = sheet with { Images = new[] { image } };
+                Array.Empty<byte>(), "image/png", CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new[] { image } };
 
             var layout = Compute(sheet);
             Assert.Equal(2, layout.PageCount);

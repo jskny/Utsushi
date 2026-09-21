@@ -215,7 +215,7 @@ namespace Utsushi.Parsing.OpenXml
                 hiddenColumns,
                 hiddenRows,
                 pageSetup,
-                images);
+                images.Cast<DrawingObjectModel>().ToList());
         }
 
         /// <summary>
@@ -458,12 +458,12 @@ namespace Utsushi.Parsing.OpenXml
                     continue;
                 }
 
-                ImageExtent? extent = anchor switch
+                AnchorExtent? extent = anchor switch
                 {
                     Xdr.TwoCellAnchor two when two.ToMarker is { } toMarker && TryReadMarker(toMarker, out var toCell, out var toOffset) =>
-                        new CellSpanImageExtent(toCell, toOffset),
+                        new CellSpanAnchorExtent(toCell, toOffset),
                     Xdr.OneCellAnchor { Extent: { Cx: { } cx, Cy: { } cy } } =>
-                        new FixedImageExtent(Units.EmusToPoints(cx.Value), Units.EmusToPoints(cy.Value)),
+                        new FixedAnchorExtent(Units.EmusToPoints(cx.Value), Units.EmusToPoints(cy.Value)),
                     _ => null,
                 };
 

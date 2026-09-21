@@ -43,7 +43,7 @@ namespace Utsushi.Layout.Tests
                 new HashSet<int>(),
                 new HashSet<int>(),
                 pageSetup ?? PageSetupModel.Default,
-                Array.Empty<ImageModel>());
+                Array.Empty<DrawingObjectModel>());
         }
 
         public static ReportDefinition Definition(

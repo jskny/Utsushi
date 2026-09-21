@@ -48,7 +48,7 @@ namespace Utsushi.Substitution.Tests
                 HiddenColumns: new HashSet<int>(),
                 HiddenRows: new HashSet<int>(),
                 PageSetup: PageSetupModel.Default,
-                Images: Array.Empty<ImageModel>());
+                DrawingObjects: Array.Empty<DrawingObjectModel>());
         }
 
         public static ReportModel Report(ReportDefinition definition, SheetModel sheet) =>

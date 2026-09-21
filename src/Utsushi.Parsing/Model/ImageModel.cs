@@ -15,20 +15,5 @@ namespace Utsushi.Parsing.Model
         string ContentType,
         CellAddress AnchorCell,
         PointPt AnchorOffset,
-        ImageExtent Extent);
-
-    /// <summary>画像のサイズ・終端の決め方。</summary>
-    public abstract record ImageExtent;
-
-    /// <summary>
-    /// OOXMLの <c>xdr:oneCellAnchor</c> 相当。セルに対して固定サイズを持ち、
-    /// セルの拡大縮小に連動しない。
-    /// </summary>
-    public sealed record FixedImageExtent(double WidthPt, double HeightPt) : ImageExtent;
-
-    /// <summary>
-    /// OOXMLの <c>xdr:twoCellAnchor</c> 相当。対角のセル+オフセットで範囲が決まり、
-    /// セルの拡大縮小に連動する。
-    /// </summary>
-    public sealed record CellSpanImageExtent(CellAddress ToCell, PointPt ToOffset) : ImageExtent;
+        AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
 }

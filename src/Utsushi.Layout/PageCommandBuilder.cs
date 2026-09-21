@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Utsushi.Core;
 using Utsushi.Layout.Model;
 using Utsushi.Layout.Text;
@@ -128,7 +129,7 @@ namespace Utsushi.Layout
             double[] rowOffsets,
             double[] columnOffsets)
         {
-            foreach (var image in _sheet.Images)
+            foreach (var image in _sheet.DrawingObjects.OfType<ImageModel>())
             {
                 if (!rowIndex.TryGetValue(image.AnchorCell.Row, out var r)
                     || !columnIndex.TryGetValue(image.AnchorCell.Column, out var c))
@@ -141,8 +142,8 @@ namespace Utsushi.Layout
 
                 var (widthPt, heightPt) = image.Extent switch
                 {
-                    FixedImageExtent fixedExtent => (fixedExtent.WidthPt, fixedExtent.HeightPt),
-                    CellSpanImageExtent span => (
+                    FixedAnchorExtent fixedExtent => (fixedExtent.WidthPt, fixedExtent.HeightPt),
+                    CellSpanAnchorExtent span => (
                         SpanWidthPt(image.AnchorCell.Column, image.AnchorOffset.X, span.ToCell.Column, span.ToOffset.X),
                         SpanHeightPt(image.AnchorCell.Row, image.AnchorOffset.Y, span.ToCell.Row, span.ToOffset.Y)),
                     _ => (0.0, 0.0),
@@ -168,7 +169,7 @@ namespace Utsushi.Layout
         }
 
         /// <summary>
-        /// 2セルアンカー(<see cref="CellSpanImageExtent"/>)の幅を求める。列幅の合計は
+        /// 2セルアンカー(<see cref="CellSpanAnchorExtent"/>)の幅を求める。列幅の合計は
         /// <see cref="_grid"/>(印刷範囲にクリップされた格子)ではなく <see cref="_sheet"/> から
         /// 直接取得する。<see cref="_grid"/> は印刷範囲外の列を「幅0」として保持しないため、
         /// 対角セルが印刷範囲のすぐ外にあるだけで画像が実際より小さく計算されてしまう
