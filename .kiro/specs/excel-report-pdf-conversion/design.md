@@ -93,6 +93,18 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   汎用の数値書式エンジンではなく、自社帳票が使う範囲(金額・数量・日付・パーセント)のサブセット実装とする。
   解釈できない書式(指数表記・分数表記など)は例外にせず General 相当へフォールバックし、
   表示の崩れはゴールデンテストで検出する。
+- **画像(要件9)**: `WorksheetPart.DrawingsPart.WorksheetDrawing` 配下の `xdr:twoCellAnchor` /
+  `xdr:oneCellAnchor` のうち `xdr:pic`(画像)のみを対象とする。`a:blip` の `r:embed` から
+  `ImagePart` を解決し、バイナリ(`GetStream()`)と `ContentType` を読み取る。
+  `ContentType` が `image/png` / `image/jpeg` / `image/gif` / `image/bmp` のいずれでもない場合
+  (EMF/WMF等のベクタ形式を含む)は「サポート外要素」として扱い、既存の
+  `DetectUnsupportedElements`(`OpenXmlWorkbookReader`)と同じ `unsupportedElements` ポリシーに
+  従う(`ElementKind = "UnsupportedImageFormat"`)。Skiaでのデコード可否ではなく
+  `ContentType` の静的な許可リストで判定する(RenderingレイヤーのSkiaSharpにParsingレイヤーが
+  依存しないため。`.kiro/steering/structure.md`のレイヤー依存方向)。
+  `xdr:sp`(オートシェイプ)・`xdr:graphicFrame`(グラフ)・`xdr:grpSp`(グループ)は
+  画像ではないため、要件1.5の既存フローで引き続き「サポート外要素」として検出する
+  (要件9.5、図形対応は別フェーズ)。
 
 ### 2. ReportDefinition レイヤー (`Utsushi.ReportDefinition`)
 
@@ -170,6 +182,11 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   - ページヘッダー/フッターの書式コード展開と配置(要件3.7〜3.9)
   - 結合セルの矩形統合
   - セル内テキストのフォントメトリクスに基づく配置(左右/上下揃え、インデント、縮小表示)
+  - **画像の配置(要件9)**: `SheetModel.Images` の各画像について、アンカー(セル+セル内オフセット)を
+    ページ左上原点のポイント座標へ変換する。座標変換自体は結合セルの矩形計算(`SheetGrid` の
+    列幅/行高累積・印刷範囲切り出し・拡大縮小の適用)と同じ仕組みを再利用する。
+    アンカー左上セルが属するページにのみ画像全体を配置する(画像が改ページ位置をまたぐ場合の
+    ページ間分割描画は本フェーズでは対象外。「未決事項」参照)。
 - **主なインターフェース**:
   ```csharp
   public interface IReportLayoutEngine
@@ -189,7 +206,13 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       void Render(PagedLayout layout, Stream output);
   }
   ```
-- 1ページ = 1 `SKCanvas` への描画。矩形塗りつぶし(背景)→罫線→テキストの順で描画し、Excelの重なり順を再現する。
+- 1ページ = 1 `SKCanvas` への描画。矩形塗りつぶし(背景)→罫線→テキスト→**画像**の順で描画する。
+  Excelはシート上に浮かぶ描画オブジェクト(画像等)をセルの内容より上のレイヤーとして描画するため、
+  画像は他のセル内容と重なる場合に最前面へ来るようにする(要件9.3)。
+- **画像の描画(要件9)**: `ImageCommand` は `SKBitmap.Decode(byte[])`(または `SKImage.FromEncodedData`)
+  でデコードし、`SKCanvas.DrawBitmap(bitmap, destRect)` で `ImageCommand.Rect` へ描画する
+  (SkiaSharp 2.88.8で利用可能な標準API)。既存の `ToSkRect(RectPt)` をそのまま使う。
+  ページ境界外にはみ出す部分は `SKCanvas` が自然にクリップするため、追加のクリップ処理は不要。
 - 出力するPDFのバージョンは SkiaSharp の PDF バックエンドが生成する **PDF 1.4** とする(要件5.3)。
 - 対象帳票が使用するフォントが実行環境に存在しない場合は `FontNotAvailableException` で失敗させる
   (`FontResolver` の既定は厳格モード)。実行時の暗黙フォールバックによる見た目崩れを避けるため。
@@ -232,7 +255,24 @@ public sealed record SheetModel(
     double DefaultRowHeight,
     IReadOnlySet<int> HiddenColumns,      // 非表示行/列は印刷されないため保持する
     IReadOnlySet<int> HiddenRows,
-    PageSetupModel PageSetup);
+    PageSetupModel PageSetup,
+    IReadOnlyList<ImageModel> Images);    // シートに埋め込まれた画像(要件9)
+
+// 画像(要件9)。ContentTypeがラスター形式の許可リスト外の場合はサポート外要素として扱う。
+public sealed record ImageModel(
+    byte[] Data,
+    string ContentType,                   // 例: "image/png"
+    CellAddress AnchorCell,               // アンカー左上セル
+    PointPt AnchorOffset,                 // アンカーセル左上からのオフセット(pt)
+    ImageExtent Extent);
+
+public abstract record ImageExtent;
+
+// oneCellAnchor相当: セルに対して固定サイズ(セルの拡大縮小に連動しない)。
+public sealed record FixedImageExtent(double WidthPt, double HeightPt) : ImageExtent;
+
+// twoCellAnchor相当: 対角のセル+オフセットで範囲が決まる(セルの拡大縮小に連動)。
+public sealed record CellSpanImageExtent(CellAddress ToCell, PointPt ToOffset) : ImageExtent;
 
 public sealed record CellModel(
     string? Value,                        // Excelが保持している生の値
@@ -268,7 +308,7 @@ public sealed record PageLayout(
     PageOrientation Orientation,
     double WidthPt,                       // 向きを適用した実寸
     double HeightPt,
-    IReadOnlyList<DrawCommand> Commands,  // 背景 → 罫線 → テキストの順
+    IReadOnlyList<DrawCommand> Commands,  // 背景 → 罫線 → テキスト → 画像の順
     int PageNumber,
     (int First, int Last) RowRange,       // 診断・テスト用
     (int First, int Last) ColumnRange,
@@ -281,6 +321,7 @@ public sealed record LineCommand(
     PointPt From, PointPt To, ArgbColor Color, double WidthPt, LineDashStyle Dash) : DrawCommand;
 public sealed record TextCommand(
     PointPt Origin, string Text, FontStyle Font, TextAnchor Anchor, RectPt? ClipRect) : DrawCommand;
+public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType) : DrawCommand;
 ```
 
 `TextCommand.Origin` の X は `Anchor`(Left/Center/Right)の基準点、Y はベースライン位置を表す。
@@ -292,7 +333,9 @@ public sealed record TextCommand(
 - 例外階層は `UtsushiException`(`Utsushi.Core.Exceptions`)を基底とし、以下を派生させる。
   - `ReportDefinitionNotFoundException`(要件1.4)
   - `ReportStructureMismatchException`(要件1.4: シート名・セル番地の不一致)
-  - `UnsupportedWorkbookElementException`(要件1.5)
+  - `UnsupportedWorkbookElementException`(要件1.5, 9.4。`ElementKind`は`"Drawing"`/`"Chart"`/
+    `"LegacyDrawing"`/`"ExternalReference"`に加え、デコード不能な画像形式を示す
+    `"UnsupportedImageFormat"`を持つ)
   - `SubstitutionKeyNotFoundException` / `RequiredSubstitutionValueMissingException`(要件2.3, 2.4)
   - `InvalidCellOverrideAddressException`(要件2.8。セル番地直接指定がA1形式として解釈できない場合)
   - `NonAnchorMergedCellOverrideException`(要件2.9。セル番地直接指定の対象が結合セル範囲の非アンカー位置の場合)
@@ -352,3 +395,19 @@ public sealed record TextCommand(
   対象帳票で必要になった時点で要件化する。
   `&F`(ファイル名)は、Utsushi が Stream を入力に取り元のファイル名を持たないため、
   帳票コードを代わりに展開している。
+- **改ページをまたぐ画像**(要件9): 画像のアンカー左上セルが属するページにのみ画像全体を
+  配置し、他のページには何も描画しない(結合セルのような「見えている部分だけ切り出す」対応は
+  行わない)。ページ全体からはみ出す部分は `SKCanvas` が自然にクリップするため見た目が崩れる
+  ことはないが、Excel側で画像が2ページ目に一部かかるレイアウトを組んでいる場合、
+  そのページには何も表示されない点でExcelの見た目と異なる。会社ロゴのような
+  「常に1ページの決まった位置に収まる」用途を主眼に置いた割り切りであり、
+  対象帳票で実際に問題になった場合に改めて対応する。
+- **図形(シェイプ)対応**(要件9.5): テキストボックス・矢印・オートシェイプ・グループ化された
+  図形などは、画像とは別のプリセット形状ごとのパス生成・テキスト描画が必要でスコープが大きいため、
+  意図的に別フェーズとする。現時点では要件1.5の「サポート外要素」のまま
+  (`unsupportedElements`設定に従い無視/エラー)。対応時は本設計書に新しい節を追加し、
+  `.kiro/specs/`に要件を追記してから着手する。
+- **画像形式の拡張**(要件9.4): 現時点でサポートするのはPNG/JPEG/GIF/BMPのみ。
+  EMF/WMF(Excelがベクタ図形やクリップボード貼り付け画像を保存する際によく使う形式)は
+  SkiaSharpが直接デコードできず、対応するには追加の変換ライブラリ(ライセンス確認が必要)か
+  自前のパーサが要る。対象帳票で実際に必要になった時点で改めて検討する。
