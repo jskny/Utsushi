@@ -303,22 +303,27 @@
   - [x] 14.12 Layoutレイヤー: 改ページをまたぐ図形をアンカー側のページにのみ配置する
     - 画像(13.7)と同じ割り切りを図形にも適用する
     - _Requirements: 10.1_
-  - [ ] 14.13 Renderingレイヤー: 対応済みプリセットのパス生成(`ShapeGeometryBuilder`)を実装する
+  - [x] 14.13 Renderingレイヤー: 対応済みプリセットのパス生成(`ShapeGeometryBuilder`)を実装する
     - `rect`/`roundRect`/`ellipse`/`triangle` と、`rightArrow`/`leftArrow`/`upArrow`/
-      `downArrow`/`leftRightArrow`/`upDownArrow` のパス生成を、ECMA-376の既定調整値
-      (design.md記載)をフォールバックとして実装する
+      `downArrow`/`leftRightArrow`/`upDownArrow` のパス生成を、既定調整値をフォールバックとして
+      実装した。矢印は「右向き・幅=進行方向」のローカル座標で組み立て、明示的なアフィン変換
+      (`TransformArrowLocalPath`)で4方向に配置する。双方向矢印(leftRightArrow/upDownArrow)は
+      単方向矢印と同じ既定矢尻長さ比(0.5)を使うと両端の矢尻で幅を使い切り菱形に潰れるため、
+      専用の既定値(0.25)を設けた(単一の`.pdf`をラスタライズして目視確認済み)
     - _Requirements: 10.1_
-  - [ ] 14.14 Renderingレイヤー: 吹き出し(`wedgeRectCallout`/`wedgeRoundRectCallout`/
+  - [x] 14.14 Renderingレイヤー: 吹き出し(`wedgeRectCallout`/`wedgeRoundRectCallout`/
         `wedgeEllipseCallout`)のパス生成を実装する
-    - 本体形状(矩形/角丸矩形/楕円)に引き出し三角形を追加する2段階のパス構築とする
+    - 本体形状(矩形/角丸矩形/楕円)に、引き出し先端(調整値2つを本体の幅・高さに対する
+      比率とみなす)から最も近い辺へ向けた引き出し三角形を追加する2段階のパス構築とした
     - _Requirements: 10.1_
-  - [ ] 14.15 Renderingレイヤー: 図形の塗りつぶし・枠線・回転を描画する
+  - [x] 14.15 Renderingレイヤー: 図形の塗りつぶし・枠線・回転を描画する
     - `SolidShapeFill`/`LinearGradientShapeFill`/`noFill`、`ShapeOutline` の描画と、
-      `RotationDegrees` に応じた `canvas.Save`/`RotateDegrees`/`Restore` を実装する
+      `RotationDegrees` に応じた `canvas.Save`/`RotateDegrees`/`Restore` を実装した
     - _Requirements: 10.1, 10.5, 10.6_
-  - [ ] 14.16 Renderingレイヤー: 図形内テキストを描画する
-    - セル内テキスト描画と同じフォント解決・太字/斜体合成ロジックを再利用し、
-      図形本体と同じ回転変換の内側で `ShapeCommand.TextLines` を描画する
+  - [x] 14.16 Renderingレイヤー: 図形内テキストを描画する
+    - `ShapeTextLine` を一時的な `TextCommand`(ClipRectなし)に変換し、セル内テキストと同じ
+      `DrawText` を再利用することでフォント解決・太字/斜体合成ロジックを重複させずに実装した。
+      図形本体と同じ回転変換の内側(`Save`/`Restore`の間)で描画するため回転が反映される
     - _Requirements: 10.4, 10.5_
   - [ ] 14.17 `Utsushi.SampleGenerator` に図形埋め込み機能を追加する
     - `SpreadsheetBuilder.SetShape`(プリセット・塗り/枠線・回転・テキストを指定できる)を実装する
