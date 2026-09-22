@@ -216,6 +216,25 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   非対応プリセットの接続線(`bentConnector4`/`5`, `curvedConnector4`/`5` 等)は
   `ElementKind = "UnsupportedShapePreset"` として扱う(図形と同じ判定ロジックを流用)。
   接続線の個数は図形と合算した`MaxShapesPerSheet`でカウントする。
+  - **接続点の参照(要件10.11)**: `xdr:cxnSp/xdr:nvCxnSpPr/xdr:cNvCxnSpPr`配下の
+    `a:stCxn`/`a:endCxn`(いずれも`@id`+`@idx`の属性を持つ空要素。無くてもよい)を、
+    `ConnectorModel.StartConnection`/`EndConnection`
+    (`ConnectionRef(uint ShapeId, uint SiteIndex)?`。要素が無ければ`null`)として
+    読み取る。接続点の実際の解決(`ShapeId`から参照先の矩形を引き、`SiteIndex`から
+    矩形上の座標を求める)はLayoutレイヤーの責務とする(Parsingの時点では他の描画
+    オブジェクトの最終ページ座標がまだ確定していない。ページ分割・グループ展開は
+    Layoutが行うため)。グループ内の`GroupChildConnector`も同じ形で
+    `StartConnection`/`EndConnection`を持つ。
+
+- **接続点解決のための図形ID読み取り(要件10.11)**: `stCxn`/`endCxn`が参照する`id`は、
+  参照先の`xdr:sp`/`xdr:pic`/`xdr:grpSp`(トップレベル・グループ内問わず)が持つ
+  `NonVisualDrawingProperties/@id`と同じ値である。このため`ShapeModel`/`ImageModel`/
+  `GroupShapeModel`、およびグループ内の`GroupChildShape`/`GroupChildImage`/
+  `GroupChildGroup`(`GroupChildConnector`は接続先として参照される対象ではないため
+  不要)に`Id: uint`を追加し、読み取り時にそのまま保持する。IDの妥当性(参照先の存在確認、
+  同一ページ上にあるか)はLayoutレイヤーでの解決時に判定する。IDが重複していた場合や
+  接続先が見つからない場合も例外にはせず、要件10.11の既定動作にフォールバックするだけで
+  済ませる(接続点解決は見た目向上のための機能であり、変換の可否を左右しないため)。
 
 - **グループ化された図形(要件10.10)**: `xdr:grpSp` を `GroupShapeModel` として読み取る。
   グループの`grpSpPr/a:xfrm`(`TransformGroup`)から、グループ自身の回転
@@ -357,6 +376,31 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     (`ShapeModel.RotationDegrees`等)とは独立に合成される(Renderingレイヤーで
     `canvas`の回転変換を入れ子にすることで自然に合成できる)ためである。
     詳細はRenderingレイヤーの節を参照。
+  - **接続点(コネクションサイト)の解決(要件10.11)**: `Build(rows, columns)`は
+    画像・図形・グループ(接続線を除く)を処理する際、それぞれの`Id`
+    (トップレベルは`ImageModel`/`ShapeModel`/`GroupShapeModel`自身、グループ内は
+    `GroupChildShape`/`GroupChildImage`/`GroupChildGroup`)をキーとする
+    `Dictionary<uint, (RectPt Rect, ShapePresetType? Preset)>`(このページに限定した
+    解決テーブル。画像・グループ自身は`Preset = null`)を同時に組み立てる。グループ内
+    要素は`ToGroupChildRect`変換後の最終ページ矩形を記録する。
+    接続線(トップレベルの`ConnectorModel`、グループ内の`GroupChildConnector`)は、
+    このテーブルが完成した後に処理する(`StartConnection`/`EndConnection`が指す`Id`が
+    出現順で自分より後に描画される図形を参照している場合があるため、1回のループでは
+    解決できない)。`StartConnection`/`EndConnection`の`ShapeId`がテーブルに存在すれば、
+    `ConnectionSiteResolver.Resolve(rect, preset, siteIndex)`で実際の座標(`PointPt`)を
+    求め、`ConnectorCommand.ResolvedStart`/`ResolvedEnd`(`PointPt?`)に格納する。
+    存在しない場合(参照先がこのページに無い、IDが実在しない、`StartConnection`/
+    `EndConnection`が`null`)は`null`のままとし、Renderingレイヤーが要件10.9の
+    既定動作(アンカー矩形+反転)にフォールバックする。
+    `ConnectionSiteResolver.Resolve`は既定では矩形の上下左右の中点
+    (`siteIndex % 4`。0=上,1=左,2=下,3=右。ECMA-376で`cxnLst`を持たない図形の既定の
+    接続点と同じ考え方)を返す。`preset`が`FlowChartInputOutput`の場合は上下の接続点を
+    平行四辺形の傾いた辺の中点(`ShapeGeometryBuilder`の`InputOutputSkewRatio`と同じ
+    比率で`x`座標を補正)、`FlowChartDocument`の場合は下の接続点を波形の谷の中心点
+    (同じく`DocumentWaveDepthRatio`と同じ比率で`y`座標を補正)にそれぞれ調整する。
+    それ以外のプリセット・画像・グループ(`preset = null`)は既定の4方向をそのまま使う。
+    この解決テーブルはページごとに作り直す(接続線と参照先が異なるページに分かれる場合は
+    解決できない。改ページをまたぐ画像・図形の既存の割り切りと同じ理由)。
 - **主なインターフェース**:
   ```csharp
   public interface IReportLayoutEngine
@@ -410,22 +454,32 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       吹き出しの引き出し三角形を1つ追加する(既定値は実装時にPDFをラスタライズして
       目視確認し、左下方向に自然な引き出しになる値として選んだ。ECMA-376の一次資料への
       当たり直しはできていない)。
-    - `cloudCallout`(雲形吹き出し): 楕円本体の輪郭を、中心から一定間隔で並べた円弧
-      (バンプ)の和集合(`SKPath.Op(SKPathOp.Union)`)で近似した「雲」のシルエットに、
-      `wedgeEllipseCallout`と同じ引き出し三角形を追加する。バンプの個数・半径は固定値
-      (見た目のバランスを目視確認して決定)とし、調整ガイドには対応しない。
+    - `cloudCallout`(雲形吹き出し、要件10.13): 楕円本体の輪郭を、中心から一定間隔で
+      並べた円弧(バンプ)の和集合(`SKPath.Op(SKPathOp.Union)`)で近似した「雲」の
+      シルエットに、`wedgeEllipseCallout`と同じ引き出し三角形を追加する。バンプの
+      個数・半径は固定値(見た目のバランスを目視確認して決定)のままとし調整ガイドには
+      対応しないが、引き出し三角形の先端位置は`wedgeRectCallout`等と同様に`adj1`/`adj2`
+      (ファイルに無ければ既定値 -0.25, 0.75)から読み取る(`ShapeAdjustmentGuideNames`に
+      `["adj1", "adj2"]`を追加し、`CloudCalloutPath`のシグネチャに`adjustmentValues`を
+      追加する)。ECMA-376上も雲形の輪郭自体(バンプ)は固定のパスであり、
+      調整ガイドは引き出し位置のみに影響するため、この変更は輪郭の近似精度には影響しない。
     - `callout1`/`callout2`/`callout3`(引き出し線付き吹き出し): 本体は`rect`、
       そこから矩形の外側の1点(既定は左下方向)へ向けて1〜3本の線分からなる
       折れ線(引き出し線)を追加する汎用の「N本引き出し線」生成ロジックとして実装する
       (N=1,2,3をパラメータ化。三角形の塗りつぶしではなく線のみの点でwedge系と異なる)。
-    - `star4`/`star5`/`star6`/`star8`(星形): 外接円の半径`R`(=`min(幅,高さ)/2`)と、
-      内側の頂点の半径比(ECMA-376既定の調整ガイド名は`adj1`ではなく単一の`adj`。
-      既定値はプリセットごとに実装時にPowerPoint/Excelの目視確認で決定する。
-      0.38前後を暫定値とするが、ECMA-376仕様書の一次資料でプリセットごとの正確な
-      既定`avLst`値を裏取りできていない点に注意。実装時に要確認)から、外側の頂点と
-      内側の頂点を交互に結ぶ`2 * N`角形を組む(`N`=4/5/6/8)。頂点の回転オフセットは
-      `star4`/`star8`は真上から、`star5`/`star6`はECMA-376の既定角度に合わせる
-      (これも同様に未検証。目視確認で微調整すること)。
+    - `star4`/`star5`/`star6`/`star8`(星形、要件10.12): 外接円の半径`R`(=`min(幅,高さ)/2`)と、
+      内側の頂点の半径比(ECMA-376既定の調整ガイド名は単一の`adj`)から、外側の頂点と
+      内側の頂点を交互に結ぶ`2 * N`角形を組む(`N`=4/5/6/8)。`adj`の既定値(ファイルに
+      `a:avLst`の指定が無い場合)はプリセットごとに異なり、`既定値 ÷ 50000`が実際の
+      半径比になる: `star4`=12500(0.25)、`star5`=19098(0.382)、`star6`=28868(0.577)、
+      `star8`=37500(0.75)(`DefaultStarInnerRadiusRatio`を`ShapePresetType`ごとの
+      定数に分割する)。この既定値は二次資料(ECMA-376の実装を参照する複数のOSS
+      プロジェクトの記述)を突き合わせて確認したものであり、ECMA-376一次資料そのものへの
+      当たり直しはできていない。頂点の回転オフセットは`star4`/`star5`/`star6`/`star8`
+      いずれも最初の外側の頂点を真上(-90度)に置く同一の規則を使う(単一の調整ガイドで
+      頂点を交互に結ぶ一般的な星形の描画方式は全プリセット共通であるため、既存の実装
+      (`StarPath`)のとおりで変更不要。旧設計メモにあった「star5/star6は異なる既定角度」
+      という記載は誤りだったため削除する)。
     - `flowChartProcess`(処理): `rect`と同じ矩形。
     - `flowChartDecision`(判断): 矩形の上下左右の中点を結んだ菱形。
     - `flowChartTerminator`(端子): 左右端を半円にした「スタジアム」形状
@@ -465,10 +519,15 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     座標はLayoutレイヤーが算出済みの(回転前の)ローカル座標であり、
     シェイプ本体と同じ`Save`/`RotateDegrees`/`Restore`のブロック内で描画することで
     回転が正しく反映される。
-- **接続線の描画(要件10.9)**: `ConnectorCommand`ごとに、`FlipHorizontal`/`FlipVertical`を
+- **接続線の描画(要件10.9, 10.11)**: `ConnectorCommand`ごとに、`FlipHorizontal`/`FlipVertical`を
   反映した向きで経路(`SKPath`、塗りつぶし無しの開いたパス)を`ConnectorGeometryBuilder`
   (`ShapeGeometryBuilder`とは別に新設。接続線は塗りつぶし・調整ガイドを持たず責務が
-  異なるため)で組み立てる。
+  異なるため)で組み立てる。`ConnectorCommand.ResolvedStart`/`ResolvedEnd`(`PointPt?`。
+  Layoutレイヤーが要件10.11の接続点解決に成功した場合のみ値を持つ)が両方とも非`null`の
+  場合、`ConnectorGeometryBuilder.Build`はこの2点をそのまま始点・終点として使う
+  (`Rect`と`FlipHorizontal`/`FlipVertical`は無視する)。片方または両方が`null`の場合は
+  従来どおり`Rect`の対角(反転に応じた2頂点)を始点・終点とする。始点・終点が決まった後の
+  折れ線・曲線の組み立て方(`bentConnector2`等)はどちらの経路でも共通のロジックを使う。
   - `straightConnector1`: 矩形の対角(反転に応じた2頂点)を結ぶ直線。
   - `bentConnector2`: 中間点1つで直角に折れる2辺(水平→垂直、または反転により
     垂直→水平)。
@@ -543,7 +602,9 @@ public abstract record DrawingObjectModel(
     AnchorExtent Extent);
 
 // 画像(要件9)。ContentTypeがラスター形式の許可リスト外の場合はサポート外要素として扱う。
+// Id(NonVisualDrawingProperties/@id)は接続線の接続先解決(要件10.11)のために保持する。
 public sealed record ImageModel(
+    uint Id,
     byte[] Data,
     string ContentType,                   // 例: "image/png"
     CellAddress AnchorCell,
@@ -551,7 +612,9 @@ public sealed record ImageModel(
     AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
 
 // 図形(要件10)。対応済みプリセット一覧に含まれないprstGeomはサポート外要素として扱う。
+// Idはimageと同じ理由(要件10.11)で保持する。
 public sealed record ShapeModel(
+    uint Id,
     ShapePresetType Preset,
     IReadOnlyList<double> AdjustmentValues, // a:avLstのガイド値。プリセットごとに定めた順序で並ぶ。空なら既定値を使う
     double RotationDegrees,               // a:xfrm/@rotから変換。時計回り
@@ -594,21 +657,30 @@ public sealed record ShapeTextParagraph(
 public sealed record ShapeTextRun(string Text, FontStyle Font);
 
 // 接続線(要件10.9)。塗りつぶし・テキストを持たない。
+// StartConnection/EndConnection(要件10.11)は、a:stCxn/a:endCxnがあれば読み取る。
+// 解決(参照先の矩形取得・接続点計算)はLayoutレイヤーの責務。
 public sealed record ConnectorModel(
     ConnectorPresetType Preset,
     double RotationDegrees,
     bool FlipHorizontal,
     bool FlipVertical,
     ShapeOutline? Outline,
+    ConnectionRef? StartConnection,
+    ConnectionRef? EndConnection,
     CellAddress AnchorCell,
     PointPt AnchorOffset,
     AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
 
 public enum ConnectorPresetType { Straight, Bent2Segment, Bent3Segment, Curved2Segment, Curved3Segment }
 
+// a:stCxn/a:endCxnの@id(参照先のNonVisualDrawingProperties/@id)と@idx(接続点番号)。
+public sealed record ConnectionRef(uint ShapeId, uint SiteIndex);
+
 // グループ化された図形(要件10.10)。トップレベルの描画オブジェクトとしてはセルアンカーを持つが、
 // 内部の子要素(Children)は独自の子座標空間(ChildOffset/ChildExtent)上の位置で決まる。
+// Idはimage/shapeと同じ理由(要件10.11)で保持する。
 public sealed record GroupShapeModel(
+    uint Id,
     PointPt ChildOffset,                  // a:chOff(pt換算)。子要素の座標系の原点
     PointPt ChildExtent,                  // a:chExt(pt換算)。X=幅, Y=高さ
     IReadOnlyList<GroupChildModel> Children,
@@ -621,14 +693,15 @@ public sealed record GroupShapeModel(
 // ページ座標への変換(平行移動+拡大縮小)はLayoutレイヤーが行う。
 public abstract record GroupChildModel(RectPt LocalRect);
 public sealed record GroupChildShape(
-    RectPt LocalRect, ShapePresetType Preset, IReadOnlyList<double> AdjustmentValues,
+    uint Id, RectPt LocalRect, ShapePresetType Preset, IReadOnlyList<double> AdjustmentValues,
     double RotationDegrees, ShapeFill? Fill, ShapeOutline? Outline, ShapeTextBody? Text) : GroupChildModel(LocalRect);
-public sealed record GroupChildImage(RectPt LocalRect, byte[] Data, string ContentType) : GroupChildModel(LocalRect);
+public sealed record GroupChildImage(uint Id, RectPt LocalRect, byte[] Data, string ContentType) : GroupChildModel(LocalRect);
 public sealed record GroupChildConnector(
     RectPt LocalRect, ConnectorPresetType Preset, double RotationDegrees,
-    bool FlipHorizontal, bool FlipVertical, ShapeOutline? Outline) : GroupChildModel(LocalRect);
+    bool FlipHorizontal, bool FlipVertical, ShapeOutline? Outline,
+    ConnectionRef? StartConnection, ConnectionRef? EndConnection) : GroupChildModel(LocalRect);
 public sealed record GroupChildGroup(
-    RectPt LocalRect, double RotationDegrees, PointPt ChildOffset, PointPt ChildExtent,
+    uint Id, RectPt LocalRect, double RotationDegrees, PointPt ChildOffset, PointPt ChildExtent,
     IReadOnlyList<GroupChildModel> Children) : GroupChildModel(LocalRect);
 
 public abstract record AnchorExtent;
@@ -700,14 +773,18 @@ public sealed record ShapeCommand(
 
 public sealed record ShapeTextLine(PointPt Origin, string Text, FontStyle Font, TextAnchor Anchor);
 
-// 接続線(要件10.9)。塗りつぶし・テキストを持たない。
+// 接続線(要件10.9, 10.11)。塗りつぶし・テキストを持たない。
+// ResolvedStart/ResolvedEndは要件10.11の接続点解決に成功した場合のみ非null。
+// 両方とも非nullならRect/FlipHorizontal/FlipVerticalの代わりにこの2点を始点・終点とする。
 public sealed record ConnectorCommand(
     RectPt Rect,
     ConnectorPresetType Preset,
     double RotationDegrees,
     bool FlipHorizontal,
     bool FlipVertical,
-    ShapeOutline? Outline) : DrawCommand;
+    ShapeOutline? Outline,
+    PointPt? ResolvedStart,
+    PointPt? ResolvedEnd) : DrawCommand;
 
 // グループ(要件10.10)。Childrenはすでにページ座標へ変換済み(グループ自身の回転は未適用)。
 // Renderingレイヤーがcanvasの回転変換でChildrenをまとめて囲むことで、グループの回転と
@@ -810,11 +887,19 @@ public sealed record GroupCommand(
   フローチャート記号の残り(`flowChartOr`等)・自由曲線(`custGeom`)・より複雑な星形
   (`star10`以上)は引き続き「サポート外要素」である。対象帳票で実際に必要になった時点で
   一覧に追記する。
-- **接続線の接続点(コネクションサイト)解決**(要件10.9): 接続線が実際にどの図形の
-  どの辺に接続されているか(`xdr:cxnSp`の`stCxn`/`endCxn`)は解決せず、接続線自身の
-  アンカー矩形と反転フラグのみから経路を決める。Excel上で接続先の図形を移動すると
-  接続線も追従して経路が変わるが、本プロダクトは静的なテンプレートを変換するだけの
-  ため、テンプレート保存時点の見た目がそのまま再現されれば十分という判断である。
+- **接続線の接続点(コネクションサイト)解決の残存する限界**(要件10.11): 要件10.11で
+  `stCxn`/`endCxn`の解決に対応したが、以下の点は引き続き限界として残る。
+  - 接続点の位置は、既定では配置矩形の上下左右の中点(4方向)で近似する。
+    `flowChartInputOutput`/`flowChartDocument`のみ実際の輪郭に合わせて補正するが、
+    それ以外のプリセット(星形・矢印・吹き出し・三角形等)・画像・グループは4方向の
+    近似のままであり、実際にExcel上で図形の辺・頂点以外の位置に接続点を作っている場合
+    (例: 矢印の先端、星形の頂点)は見た目がずれる。
+  - 接続先が接続線と異なるページに配置される場合(改ページで分割された場合)は解決せず、
+    要件10.9の既定動作にフォールバックする。
+  - 接続点の位置(4方向の近似、`flowChartInputOutput`/`flowChartDocument`の補正)は
+    ECMA-376の一次資料(`presetShapeDefinitions.xml`)への当たり直しができておらず、
+    実装時にPDFをラスタライズして目視確認した推定値である。対象帳票で実際に見た目が
+    ずれる場合に改めて検証する。
 - **グループの回転と子要素の回転の合成の精度**(要件10.10): `GroupCommand`による
   `canvas`変換の入れ子でグループの回転・子要素個別の回転を合成する設計は、単体の
   目視確認では正しく動作することを確認したが、「グループ自身が回転しており、かつ
@@ -822,9 +907,14 @@ public sealed record GroupCommand(
   回転と非一様スケールの適用順序によって見た目が変わりうる(アフィン変換は一般に
   可換ではないため)。Excel自身がこの組み合わせをどう扱うかの一次資料での裏取りは
   していない。対象帳票で実際に問題になった場合に改めて検証する。
-- **雲形吹き出し(`cloudCallout`)・星形の近似精度**(要件10.1): 雲形は固定個数の円弧の
-  和集合で、星形は単純な2N角形でそれぞれ近似しており、調整ガイド値(`a:avLst`)による
-  微調整には対応しない。Excel側で既定値から変更されている場合、見た目がわずかに異なる。
+- **雲形吹き出し(`cloudCallout`)・星形の近似精度の残存する限界**(要件10.12, 10.13):
+  要件10.12/10.13で星形の既定内側半径比・雲形の引き出し位置の精度を改善したが、以下は
+  引き続き近似のままである。雲形の輪郭(バンプの個数・半径)自体は固定値のままで
+  `a:avLst`による微調整には対応しない(ECMA-376上も雲形の輪郭自体は調整ガイドを
+  持たないため、これは近似ではなく仕様どおりである)。星形の既定内側半径比は二次資料の
+  突き合わせによる推定値であり、ECMA-376一次資料そのものへの当たり直しはできていない。
+  Excel側でファイルに`a:avLst`の指定がある場合はその値をそのまま使うため、既定値の
+  精度が問題になるのはファイルに指定が無い場合のみである。
 - **グループのネストに対するOpenXml SDK自体のDOM構築コスト**(要件10.8。security-reviewer指摘):
   `MaxShapeNestingDepth`(既定5段)は`ReadGroupChildGroup`のアプリケーションコード側の
   再帰にのみ効き、`WorksheetDrawing`への初回アクセス時に`DocumentFormat.OpenXml` SDKが
