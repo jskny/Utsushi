@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Utsushi.Core;
 using Utsushi.Layout.HeaderFooter;
 using Utsushi.Layout.Model;
 using Utsushi.Layout.Text;
@@ -103,10 +104,64 @@ namespace Utsushi.Layout.Tests
         [Fact]
         public void 未対応の書式コードは読み飛ばす()
         {
-            // &G(画像)と &Krrggbb(文字色)は対象外。例外にせず、文字列部分だけを残す。
-            var parts = HeaderFooterParser.Parse("&C&G&KFF0000テキスト", Context());
+            // &G(画像)は対象外。例外にせず、文字列部分だけを残す。
+            var parts = HeaderFooterParser.Parse("&C&Gテキスト", Context());
 
             Assert.Equal("テキスト", TextOf(parts, HeaderFooterSection.Center));
+        }
+
+        [Fact]
+        public void 文字色の指定がフォントに反映される()
+        {
+            var parts = HeaderFooterParser.Parse("&C通常&KFF0000赤字&K0000FF青字", Context());
+
+            var runs = RunsOf(parts, HeaderFooterSection.Center);
+
+            Assert.Equal(3, runs.Count);
+            Assert.Equal(FontStyle.Default.Color, runs[0].Font.Color);
+            Assert.Equal("通常", runs[0].Text);
+            Assert.Equal(new ArgbColor(0xFF, 0xFF, 0x00, 0x00), runs[1].Font.Color);
+            Assert.Equal("赤字", runs[1].Text);
+            Assert.Equal(new ArgbColor(0xFF, 0x00, 0x00, 0xFF), runs[2].Font.Color);
+            Assert.Equal("青字", runs[2].Text);
+        }
+
+        [Fact]
+        public void 不正な文字色指定は既定色のまま処理を継続する()
+        {
+            // 16進以外の文字が6文字続く場合、例外にせず既定色のまま後続の文字列を残す。
+            var nonHex = HeaderFooterParser.Parse("&C&KZZZZZZ不正", Context());
+            var nonHexRun = Assert.Single(RunsOf(nonHex, HeaderFooterSection.Center));
+            Assert.Equal(FontStyle.Default.Color, nonHexRun.Font.Color);
+            Assert.Equal("不正", nonHexRun.Text);
+
+            // 文字列の残りが6文字に満たないまま終わる場合も、範囲外アクセスにならず
+            // 既定色のまま何も出力せずに終了する。
+            var truncated = HeaderFooterParser.Parse("&C&KFF", Context());
+            Assert.Empty(RunsOf(truncated, HeaderFooterSection.Center));
+        }
+
+        [Fact]
+        public void 文字色と太字を組み合わせると両方反映される()
+        {
+            var parts = HeaderFooterParser.Parse("&C&B&KFF0000重要", Context());
+
+            var run = Assert.Single(RunsOf(parts, HeaderFooterSection.Center));
+
+            Assert.True(run.Font.Bold);
+            Assert.Equal(new ArgbColor(0xFF, 0xFF, 0x00, 0x00), run.Font.Color);
+        }
+
+        [Fact]
+        public void セクション切り替えで文字色も既定に戻る()
+        {
+            var parts = HeaderFooterParser.Parse("&L&KFF0000左は赤&C中央は既定色", Context());
+
+            var leftRun = Assert.Single(RunsOf(parts, HeaderFooterSection.Left));
+            var centerRun = Assert.Single(RunsOf(parts, HeaderFooterSection.Center));
+
+            Assert.Equal(new ArgbColor(0xFF, 0xFF, 0x00, 0x00), leftRun.Font.Color);
+            Assert.Equal(FontStyle.Default.Color, centerRun.Font.Color);
         }
 
         [Fact]

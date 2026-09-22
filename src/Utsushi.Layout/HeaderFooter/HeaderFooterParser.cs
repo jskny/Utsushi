@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using Utsushi.Core;
 using Utsushi.Parsing.Model;
 
 namespace Utsushi.Layout.HeaderFooter
@@ -73,10 +74,11 @@ namespace Utsushi.Layout.HeaderFooter
     ///   <item><term>&amp;B / &amp;I / &amp;U / &amp;S</term><description>太字 / 斜体 / 下線 / 取り消し線の切り替え</description></item>
     ///   <item><term>&amp;"フォント名,スタイル"</term><description>フォントの切り替え</description></item>
     ///   <item><term>&amp;nn(数字)</term><description>フォントサイズの切り替え</description></item>
+    ///   <item><term>&amp;Krrggbb</term><description>文字色の指定</description></item>
     ///   <item><term>&amp;&amp;</term><description>文字としての &amp;</description></item>
     /// </list>
     /// <para>
-    /// 上記以外の書式コード(画像の <c>&amp;G</c>、色指定の <c>&amp;K</c> など)は読み飛ばす。
+    /// 上記以外の書式コード(画像の <c>&amp;G</c> など)は読み飛ばす。
     /// 未知のコードで例外にはせず、その帳票で必要になった時点で対応を追加する方針とする。
     /// </para>
     /// </remarks>
@@ -196,8 +198,7 @@ namespace Utsushi.Layout.HeaderFooter
                     return ApplyFontName(text, index, builder);
 
                 case 'K' or 'k':
-                    // &Krrggbb は文字色指定。読み飛ばす(6桁の16進が続く)。
-                    return Math.Min(text.Length, index + 2 + 6);
+                    return ApplyFontColor(text, index, builder);
 
                 case 'G' or 'g':
                     // 画像は対象外。
@@ -236,6 +237,24 @@ namespace Utsushi.Layout.HeaderFooter
 
             builder.SetFontStyleFromName(style);
             return close + 1;
+        }
+
+        /// <summary>
+        /// &amp;Krrggbb(文字色)を処理する。<paramref name="text"/>の<paramref name="index"/>+2から
+        /// 6桁を色として解釈できた場合のみフォント色に反映する。桁数不足・16進以外の文字が
+        /// 含まれる場合は既定色のまま変更しない(例外にはしない)。いずれの場合も6桁ぶんは
+        /// 読み飛ばす(Excel自身も不正な値をそのまま消費する挙動に合わせる)。
+        /// </summary>
+        private static int ApplyFontColor(string text, int index, SectionBuilder builder)
+        {
+            var end = Math.Min(text.Length, index + 2 + 6);
+            var hex = text.Substring(index + 2, end - (index + 2));
+            if (hex.Length == 6 && ArgbColor.TryParseHex(hex, out var color))
+            {
+                builder.SetFontColor(color);
+            }
+
+            return end;
         }
 
         /// <summary>&amp;nn(数字)を処理する。</summary>
@@ -303,6 +322,8 @@ namespace Utsushi.Layout.HeaderFooter
             public void ToggleStrike() => ChangeFont(_font with { Strike = !_font.Strike });
 
             public void SetFontName(string name) => ChangeFont(_font with { Name = name });
+
+            public void SetFontColor(ArgbColor color) => ChangeFont(_font with { Color = color });
 
             public void SetFontSize(double sizePt) => ChangeFont(_font with { SizePt = sizePt });
 
