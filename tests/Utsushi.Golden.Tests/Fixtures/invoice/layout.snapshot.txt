@@ -253,8 +253,8 @@ text   origin=(307.65,456.83) anchor=Center font=MS PGothic@11pt/#FF000000 clip=
 text   origin=(426.9,456.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="¥2,153,800"
 text   origin=(51.9,481.92) anchor=Left font=MS PGothic@9pt/#FF000000 clip=[50.4,474 378x67.5] value="備考:"
 text   origin=(51.9,492.72) anchor=Left font=MS PGothic@9pt/#FF000000 clip=[50.4,474 378x67.5] value="ゴールデンテストで固定した値です。"
-image  rect=[362.9,59 60x20] contentType=image/png bytes=300
-image  rect=[490.4,132.5 30x30] contentType=image/png bytes=96
+image  rect=[362.9,59 60x20] contentType=image/png bytes=300 rotation=0
+image  rect=[490.4,132.5 30x30] contentType=image/png bytes=96 rotation=20
 shape  rect=[50.4,198 70x22] preset=RoundRect rotation=-12 fill=none outline=#FFC00000/1pt text=[origin=(85.4,211.8) anchor=Center font=Calibri@10pt/#FF000000 value="見本"]
 shape  rect=[218.4,206 40x14] preset=RightArrow rotation=0 fill=solid:#FF2E8B57 outline=none text=[]
 shape  rect=[266.4,204 110x24] preset=WedgeRoundRectCallout rotation=0 fill=solid:#FFFFFFFF outline=#FF000000/1pt text=[origin=(321.4,218.8) anchor=Center font=Calibri@10pt/#FF000000 value="ご確認ください"]

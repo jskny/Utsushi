@@ -681,6 +681,6 @@
     - Rendering: 回転が非ゼロの場合に`canvas`へ`Save`/`RotateDegrees`/`Restore`が
       適用されること(既存の図形回転テストと同様の検証方法)を確認する
     - _Requirements: 9.7_
-  - [ ] 18.6 レビュー対応
+  - [x] 18.6 レビュー対応
     - `code-reviewer`/`layout-fidelity-reviewer`の指摘に対応する
     - _Requirements: 9.7_
