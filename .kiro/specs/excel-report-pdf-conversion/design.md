@@ -232,9 +232,12 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   `GroupShapeModel`、およびグループ内の`GroupChildShape`/`GroupChildImage`/
   `GroupChildGroup`(`GroupChildConnector`は接続先として参照される対象ではないため
   不要)に`Id: uint`を追加し、読み取り時にそのまま保持する。IDの妥当性(参照先の存在確認、
-  同一ページ上にあるか)はLayoutレイヤーでの解決時に判定する。IDが重複していた場合や
-  接続先が見つからない場合も例外にはせず、要件10.11の既定動作にフォールバックするだけで
-  済ませる(接続点解決は見た目向上のための機能であり、変換の可否を左右しないため)。
+  同一ページ上にあるか)はLayoutレイヤーでの解決時に判定する。接続先が見つからない場合は
+  例外にはせず、要件10.11の既定動作にフォールバックする(接続点解決は見た目向上のための
+  機能であり、変換の可否を左右しないため)。IDが重複していた場合は例外にはせず、
+  `BuildConnectionTargetTable`(id→矩形テーブル)が出現順で後から見つかった方の図形の
+  座標を採用する(`@id`はOOXMLスキーマ上必須かつExcelが重複させないため通常は起こらない。
+  code-reviewer指摘によりこの割り切りを明記)。
 
 - **グループ化された図形(要件10.10)**: `xdr:grpSp` を `GroupShapeModel` として読み取る。
   グループの`grpSpPr/a:xfrm`(`TransformGroup`)から、グループ自身の回転

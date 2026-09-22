@@ -536,7 +536,7 @@
       使い回しをrequirements.mdで修正した(Critical該当なし)
     - _Requirements: 10.8, 10.9, 10.10, 6.4_
 
-- [ ] 16. 接続線の接続点(コネクションサイト)解決と星形・雲形吹き出しの近似精度向上
+- [x] 16. 接続線の接続点(コネクションサイト)解決と星形・雲形吹き出しの近似精度向上
   - [x] 16.1 Parsingレイヤー: 図形・画像・グループのID読み取り
     - `NonVisualDrawingProperties/@id`を`ShapeModel`/`ImageModel`/`GroupShapeModel`、
       グループ内の`GroupChildShape`/`GroupChildImage`/`GroupChildGroup`に`Id: uint`
@@ -623,7 +623,7 @@
       星形の内側半径比がプリセットごとに異なること、雲形吹き出しの引き出し位置が
       `adjustmentValues`に応じて変わることを検証する
     - _Requirements: 10.11, 10.12, 10.13_
-  - [ ] 16.13 レビュー対応
+  - [x] 16.13 レビュー対応
     - `code-reviewer`/`layout-fidelity-reviewer`/`security-reviewer`の指摘に対応する
       (ID解決テーブルの構築コスト、接続点解決が改ページ・グループネストと絡む場合の
       エッジケースを重点的に確認する)

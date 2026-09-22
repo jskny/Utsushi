@@ -179,6 +179,12 @@ namespace Utsushi.Layout
         /// (単純な算術のみでコストは無視できる。design.md参照)。接続線自身は接続先として
         /// 参照される対象ではないため、このテーブルには含めない。
         /// </summary>
+        /// <remarks>
+        /// <c>@id</c>はOOXMLスキーマ上必須かつExcelが重複させないため通常は起こらないが、
+        /// 万一同一シート内で重複していた場合、このテーブルは出現順で後から見つかった方の
+        /// 図形の座標で上書きする(先勝ちでも後勝ちでもどちらかの図形を選ぶしかなく、
+        /// 「解決しない」よりは実害が小さいための割り切り。code-reviewer指摘)。
+        /// </remarks>
         private Dictionary<uint, (RectPt Rect, ShapePresetType? Preset)> BuildConnectionTargetTable(
             IReadOnlyDictionary<int, int> rowIndex,
             IReadOnlyDictionary<int, int> columnIndex,
