@@ -47,6 +47,70 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 図形のIdはNonVisualDrawingProperties_idを反映する()
+        {
+            // 要件10.11: 接続線の接続先解決のキーとなるIdを図形側でも保持する。
+            var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.Rectangle, id: 42U);
+            var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                var shape = Assert.Single(sheet.DrawingObjects.OfType<ShapeModel>());
+
+                Assert.Equal(42u, shape.Id);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 雲形吹き出しのadj1とadj2を引き出し位置として読み取る()
+        {
+            // 要件10.13: cloudCalloutのadj1(X方向)/adj2(Y方向)は引き出し三角形の位置を表す
+            // 調整ガイドとして読み取る(輪郭自体は固定形状のまま調整ガイドに対応しない)。
+            var anchor = ShapeWorkbookFixtures.ShapeAnchor(
+                A.ShapeTypeValues.CloudCallout,
+                adjustValueList: ShapeWorkbookFixtures.AdjustValues(("adj1", 15000), ("adj2", -20000)));
+            var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                var shape = Assert.Single(sheet.DrawingObjects.OfType<ShapeModel>());
+
+                Assert.Equal(ShapePresetType.CloudCallout, shape.Preset);
+                Assert.Equal(2, shape.AdjustmentValues.Count);
+                Assert.Equal(0.15, shape.AdjustmentValues[0], 3);
+                Assert.Equal(-0.2, shape.AdjustmentValues[1], 3);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 雲形吹き出しのadj1とadj2が無い場合はNaNとして返す()
+        {
+            var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.CloudCallout);
+            var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                var shape = Assert.Single(sheet.DrawingObjects.OfType<ShapeModel>());
+
+                Assert.Equal(2, shape.AdjustmentValues.Count);
+                Assert.True(double.IsNaN(shape.AdjustmentValues[0]));
+                Assert.True(double.IsNaN(shape.AdjustmentValues[1]));
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void twoCellAnchorの図形を対角セルとして読み取る()
         {
             var anchor = ShapeWorkbookFixtures.TwoCellShapeAnchor(A.ShapeTypeValues.Ellipse);

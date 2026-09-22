@@ -333,5 +333,225 @@ namespace Utsushi.Layout.Tests
             Assert.Single(Groups(layout.Pages[0]));
             Assert.Empty(Groups(layout.Pages[1]));
         }
+
+        // -- 要件10.11: 接続点(コネクションサイト)の解決 -------------------------------------------------
+
+        [Fact]
+        public void 同一ページ内の図形を参照する接続点は4方向近似の座標に解決される()
+        {
+            const double columnWidthChars = 10.0;
+            const double rowHeightPt = 20.0;
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+
+            var sheet = UniformSheet(
+                rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
+
+            // 参照先の図形: B2セル起点、40x30ptの矩形(既定プリセットのため4方向近似がそのまま使われる)。
+            var target = new ShapeModel(
+                5u, ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null,
+                CellAddress.Parse("B2"), new PointPt(0, 0), new FixedAnchorExtent(40.0, 30.0));
+            var connector = new ConnectorModel(
+                ConnectorPresetType.Straight, 0, false, false, null,
+                new ConnectionRef(5u, 0), // 上(idx0)
+                new ConnectionRef(5u, 3), // 右(idx3)
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new DrawingObjectModel[] { target, connector } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Connectors(page));
+
+            // 手計算(ConnectionSiteResolverの4方向近似): 矩形left=columnWidthPt, top=rowHeightPt,
+            // width=40, height=30。上=中点(left+width/2, top)、右=中点(right, top+height/2)。
+            var expectedLeft = columnWidthPt;
+            var expectedTop = rowHeightPt;
+            Assert.NotNull(command.ResolvedStart);
+            Assert.Equal(expectedLeft + 20.0, command.ResolvedStart!.Value.X, 3);
+            Assert.Equal(expectedTop, command.ResolvedStart.Value.Y, 3);
+
+            Assert.NotNull(command.ResolvedEnd);
+            Assert.Equal(expectedLeft + 40.0, command.ResolvedEnd!.Value.X, 3);
+            Assert.Equal(expectedTop + 15.0, command.ResolvedEnd.Value.Y, 3);
+        }
+
+        [Fact]
+        public void 参照先の図形が異なるページにある場合は解決されずnullのままフォールバックする()
+        {
+            var sheet = UniformSheet(
+                rows: 4, columns: 2, columnWidth: 10.0, rowHeightPt: 20.0,
+                pageSetup: NoMarginA4(rowBreaks: new[] { 3 }));
+
+            // 参照先はA4(改ページにより接続線とは別のページに配置される)。
+            var target = new ShapeModel(
+                9u, ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null,
+                CellAddress.Parse("A4"), default, new FixedAnchorExtent(10.0, 10.0));
+            var connector = new ConnectorModel(
+                ConnectorPresetType.Straight, 0, false, false, null,
+                new ConnectionRef(9u, 0), null,
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new DrawingObjectModel[] { connector, target } };
+
+            var layout = Compute(sheet);
+            Assert.Equal(2, layout.PageCount);
+
+            var command = Assert.Single(Connectors(layout.Pages[0]));
+            Assert.Null(command.ResolvedStart);
+            Assert.Null(command.ResolvedEnd);
+            Assert.Empty(Connectors(layout.Pages[1]));
+        }
+
+        [Fact]
+        public void グループ内要素を参照する接続点も解決される()
+        {
+            const double columnWidthChars = 10.0;
+            const double rowHeightPt = 20.0;
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+
+            var sheet = UniformSheet(
+                rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
+
+            var childShape = new GroupChildShape(
+                7u, RectPt.FromBounds(5, 5, 15, 15), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
+            var group = new GroupShapeModel(
+                1u, new PointPt(0, 0),
+                new PointPt(40, 40), // グループ自身のサイズと同じ => scale=1
+                new GroupChildModel[] { childShape },
+                0,
+                CellAddress.Parse("B2"),
+                new PointPt(0, 0),
+                new FixedAnchorExtent(40.0, 40.0));
+
+            // グループの外(トップレベル)にある接続線が、グループ内の子要素(id=7)の下辺中点を参照する。
+            var connector = new ConnectorModel(
+                ConnectorPresetType.Straight, 0, false, false, null,
+                new ConnectionRef(7u, 2), null, // 下(idx2)
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new DrawingObjectModel[] { group, connector } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Connectors(page));
+
+            // 手計算: グループ矩形left=columnWidthPt, top=rowHeightPt(scale=1)。
+            // 子要素のページ矩形 = (columnWidthPt+5, rowHeightPt+5)-(columnWidthPt+15, rowHeightPt+15)。
+            // 下辺中点 = (columnWidthPt+10, rowHeightPt+15)。
+            Assert.NotNull(command.ResolvedStart);
+            Assert.Equal(columnWidthPt + 10.0, command.ResolvedStart!.Value.X, 3);
+            Assert.Equal(rowHeightPt + 15.0, command.ResolvedStart.Value.Y, 3);
+        }
+
+        [Fact]
+        public void flowChartInputOutputの左右の接続点は輪郭に合わせて内側に補正される()
+        {
+            var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
+
+            var target = new ShapeModel(
+                11u, ShapePresetType.FlowChartInputOutput, Array.Empty<double>(), 0, null, null, null,
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(40.0, 20.0));
+            var connector = new ConnectorModel(
+                ConnectorPresetType.Straight, 0, false, false, null,
+                new ConnectionRef(11u, 1), // 左(idx1)
+                new ConnectionRef(11u, 3), // 右(idx3)
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new DrawingObjectModel[] { target, connector } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Connectors(page));
+
+            // 手計算: 矩形left=0,top=0,width=40,height=20。
+            // halfSkew = width * 0.2 / 2.0 = 4.0。midY = 10.0。
+            // 左 = (left+halfSkew, midY) = (4, 10)、右 = (right-halfSkew, midY) = (36, 10)。
+            Assert.NotNull(command.ResolvedStart);
+            Assert.Equal(4.0, command.ResolvedStart!.Value.X, 3);
+            Assert.Equal(10.0, command.ResolvedStart.Value.Y, 3);
+
+            Assert.NotNull(command.ResolvedEnd);
+            Assert.Equal(36.0, command.ResolvedEnd!.Value.X, 3);
+            Assert.Equal(10.0, command.ResolvedEnd.Value.Y, 3);
+        }
+
+        [Fact]
+        public void flowChartDocumentの左の接続点は補正されず既定の中点のままである()
+        {
+            // flowChartDocument(波形)は谷の最深点が下辺中点と一致するため補正不要
+            // (design.md「未決事項」)。左の接続点も既定の中点のままになるはず。
+            var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
+
+            var target = new ShapeModel(
+                17u, ShapePresetType.FlowChartDocument, Array.Empty<double>(), 0, null, null, null,
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(40.0, 20.0));
+            var connector = new ConnectorModel(
+                ConnectorPresetType.Straight, 0, false, false, null,
+                new ConnectionRef(17u, 1), null, // 左(idx1)
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new DrawingObjectModel[] { target, connector } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Connectors(page));
+
+            Assert.NotNull(command.ResolvedStart);
+            Assert.Equal(0.0, command.ResolvedStart!.Value.X, 3); // flowChartInputOutputなら4.0になるはず
+            Assert.Equal(10.0, command.ResolvedStart.Value.Y, 3);
+        }
+
+        [Fact]
+        public void 画像を参照する接続点は既定の4方向近似で解決される()
+        {
+            var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
+
+            var target = new ImageModel(
+                13u, Array.Empty<byte>(), "image/png",
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(40.0, 20.0));
+            var connector = new ConnectorModel(
+                ConnectorPresetType.Straight, 0, false, false, null,
+                new ConnectionRef(13u, 0), null, // 上(idx0)
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new DrawingObjectModel[] { target, connector } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Connectors(page));
+
+            Assert.NotNull(command.ResolvedStart);
+            Assert.Equal(20.0, command.ResolvedStart!.Value.X, 3);
+            Assert.Equal(0.0, command.ResolvedStart.Value.Y, 3);
+        }
+
+        [Fact]
+        public void グループ自身を参照する接続点は既定の4方向近似で解決される()
+        {
+            var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
+
+            var target = new GroupShapeModel(
+                15u, new PointPt(0, 0), new PointPt(1, 1), Array.Empty<GroupChildModel>(), 0,
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(40.0, 20.0));
+            var connector = new ConnectorModel(
+                ConnectorPresetType.Straight, 0, false, false, null,
+                new ConnectionRef(15u, 3), null, // 右(idx3)
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new DrawingObjectModel[] { target, connector } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Connectors(page));
+
+            Assert.NotNull(command.ResolvedStart);
+            Assert.Equal(40.0, command.ResolvedStart!.Value.X, 3);
+            Assert.Equal(10.0, command.ResolvedStart.Value.Y, 3);
+        }
+
+        [Fact]
+        public void 参照先IDが存在しない場合は解決されずnullのままフォールバックする()
+        {
+            var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
+
+            var connector = new ConnectorModel(
+                ConnectorPresetType.Straight, 0, false, false, null,
+                new ConnectionRef(999u, 0), null,
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new DrawingObjectModel[] { connector } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Connectors(page));
+
+            Assert.Null(command.ResolvedStart);
+            Assert.Null(command.ResolvedEnd);
+        }
     }
 }

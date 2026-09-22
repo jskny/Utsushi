@@ -119,6 +119,75 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 接続線のstCxnとendCxnを接続先として読み取れる()
+        {
+            // 要件10.11: a:stCxn/a:endCxnをConnectionRef(ShapeId, SiteIndex)として読み取る。
+            var anchor = ConnectorAndGroupWorkbookFixtures.ConnectorAnchor(
+                A.ShapeTypeValues.StraightConnector1,
+                startConnection: (5U, 0U),
+                endConnection: (7U, 3U));
+            var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                var connector = Assert.Single(sheet.DrawingObjects.OfType<ConnectorModel>());
+
+                Assert.Equal(new ConnectionRef(5U, 0U), connector.StartConnection);
+                Assert.Equal(new ConnectionRef(7U, 3U), connector.EndConnection);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 接続線にstCxnとendCxnが無い場合はnullになる()
+        {
+            var anchor = ConnectorAndGroupWorkbookFixtures.ConnectorAnchor(A.ShapeTypeValues.StraightConnector1);
+            var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                var connector = Assert.Single(sheet.DrawingObjects.OfType<ConnectorModel>());
+
+                Assert.Null(connector.StartConnection);
+                Assert.Null(connector.EndConnection);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void グループ内接続線のstCxnとendCxnも接続先として読み取れる()
+        {
+            var connector = ConnectorAndGroupWorkbookFixtures.GroupChildConnectorElement(
+                A.ShapeTypeValues.StraightConnector1, 0L, 0L, 900000L, 900000L,
+                id: 12U,
+                startConnection: (10U, 1U),
+                endConnection: (11U, 2U));
+            var group = ConnectorAndGroupWorkbookFixtures.GroupShapeElement(
+                new OpenXmlElement[] { connector }, 0L, 0L, 900000L, 900000L, id: 2U);
+            var anchor = ConnectorAndGroupWorkbookFixtures.WrapInOneCellAnchor(group);
+            var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                var readGroup = Assert.Single(sheet.DrawingObjects.OfType<GroupShapeModel>());
+                var readConnector = Assert.IsType<GroupChildConnector>(Assert.Single(readGroup.Children));
+
+                Assert.Equal(new ConnectionRef(10U, 1U), readConnector.StartConnection);
+                Assert.Equal(new ConnectionRef(11U, 2U), readConnector.EndConnection);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void twoCellAnchorの接続線のみのシートはunsupportedElementsがerrorでも例外にならない()
         {
             var connector = ConnectorAndGroupWorkbookFixtures.GroupChildConnectorElement(
@@ -186,6 +255,10 @@ namespace Utsushi.Parsing.Tests
                 var group = Assert.Single(sheet.DrawingObjects.OfType<GroupShapeModel>());
 
                 Assert.Equal(CellAddress.Parse("B3"), group.AnchorCell);
+                // 要件10.11: グループ自身・グループ内の図形/画像のIdもNonVisualDrawingProperties/@idを反映する
+                // (接続線の接続先解決のキーとして使うため。GroupChildConnectorは接続先として参照される
+                // 対象ではないためIdを持たない)。
+                Assert.Equal(2U, group.Id);
                 Assert.Equal(Units.EmusToPoints(chOffX), group.ChildOffset.X, 3);
                 Assert.Equal(Units.EmusToPoints(chOffY), group.ChildOffset.Y, 3);
                 Assert.Equal(Units.EmusToPoints(chExtCx), group.ChildExtent.X, 3);
@@ -193,10 +266,12 @@ namespace Utsushi.Parsing.Tests
                 Assert.Equal(3, group.Children.Count);
 
                 var shapeChild = Assert.IsType<GroupChildShape>(group.Children[0]);
+                Assert.Equal(10U, shapeChild.Id);
                 Assert.Equal(ShapePresetType.Rect, shapeChild.Preset);
                 AssertRect(shapeOffX, shapeOffY, shapeExtCx, shapeExtCy, shapeChild.LocalRect);
 
                 var imageChild = Assert.IsType<GroupChildImage>(group.Children[1]);
+                Assert.Equal(11U, imageChild.Id);
                 AssertRect(imageOffX, imageOffY, imageExtCx, imageExtCy, imageChild.LocalRect);
                 Assert.Equal("image/png", imageChild.ContentType);
 
@@ -345,6 +420,8 @@ namespace Utsushi.Parsing.Tests
                 var group = Assert.Single(sheet.DrawingObjects.OfType<GroupShapeModel>());
                 var nestedChild = Assert.IsType<GroupChildGroup>(Assert.Single(group.Children));
 
+                // 要件10.11: 入れ子グループのIdも接続先解決のキーとして保持する。
+                Assert.Equal(21U, nestedChild.Id);
                 AssertRect(innerOffX, innerOffY, innerExtCx, innerExtCy, nestedChild.LocalRect);
                 Assert.Equal(Units.EmusToPoints(innerChOffX), nestedChild.ChildOffset.X, 3);
                 Assert.Equal(Units.EmusToPoints(innerChOffY), nestedChild.ChildOffset.Y, 3);

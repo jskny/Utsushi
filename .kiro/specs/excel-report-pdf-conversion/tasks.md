@@ -605,18 +605,18 @@
       CLIでPDFを生成し`pdftoppm`でラスタライズして目視確認したうえでゴールデンファイルを
       更新する
     - _Requirements: 10.11, 8.3_
-  - [ ] 16.10 Parsingレイヤーのユニットテストを追加する
+  - [x] 16.10 Parsingレイヤーのユニットテストを追加する
     - ID読み取り、`stCxn`/`endCxn`の読み取り(要素の有無両方)、雲形吹き出しの
       `adj1`/`adj2`読み取りを検証する(星形の既定内側半径比の選択はRenderingレイヤーの
       責務のため対象外。16.12で検証する)
     - _Requirements: 10.11, 10.13_
-  - [ ] 16.11 Layoutレイヤーのユニットテストを追加する
+  - [x] 16.11 Layoutレイヤーのユニットテストを追加する
     - 同一ページ内での接続点解決成功、参照先が異なるページにある場合のフォールバック、
       グループ内要素を参照先とする解決、`flowChartInputOutput`の左右の接続点の補正、
       `flowChartDocument`を含むそれ以外のプリセット・画像・グループでの4方向近似、
       参照先ID不在時のフォールバックを検証する
     - _Requirements: 10.11_
-  - [ ] 16.12 Renderingレイヤーのユニットテストを追加する
+  - [x] 16.12 Renderingレイヤーのユニットテストを追加する
     - `ConnectorGeometryBuilder.Build`が`ResolvedStart`/`ResolvedEnd`指定時にそれを
       使うこと(`Rect`/フラグを無視すること)、`DrawPage`側で解決済みの場合は
       `ConnectorCommand.RotationDegrees`が非ゼロでも回転を適用しないこと、

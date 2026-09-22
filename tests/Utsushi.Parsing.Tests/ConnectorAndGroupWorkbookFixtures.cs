@@ -62,7 +62,13 @@ namespace Utsushi.Parsing.Tests
             return path;
         }
 
-        /// <summary>指定した設定で <c>xdr:cxnSp</c> の oneCellAnchor を組み立てる(要件10.9)。</summary>
+        /// <summary>
+        /// 指定した設定で <c>xdr:cxnSp</c> の oneCellAnchor を組み立てる(要件10.9)。
+        /// <paramref name="startConnection"/>/<paramref name="endConnection"/>を指定すると
+        /// <c>a:stCxn</c>/<c>a:endCxn</c>(要件10.11。<c>ShapeId</c>=参照先の<c>@id</c>、
+        /// <c>SiteIndex</c>=参照先の接続点番号<c>@idx</c>)を書き加える。省略時はどちらの要素も
+        /// 出力しない(接続先の指定が無い接続線のテスト用)。
+        /// </summary>
         public static Xdr.OneCellAnchor ConnectorAnchor(
             A.ShapeTypeValues preset,
             int row = 3,
@@ -73,7 +79,9 @@ namespace Utsushi.Parsing.Tests
             bool flipH = false,
             bool flipV = false,
             A.Outline? outline = null,
-            uint id = 2U)
+            uint id = 2U,
+            (uint ShapeId, uint SiteIndex)? startConnection = null,
+            (uint ShapeId, uint SiteIndex)? endConnection = null)
         {
             var spPrChildren = new List<OpenXmlElement>
             {
@@ -93,10 +101,21 @@ namespace Utsushi.Parsing.Tests
                 spPrChildren.Add(outline);
             }
 
+            var connectorShapeDrawingProperties = new Xdr.NonVisualConnectorShapeDrawingProperties();
+            if (startConnection is { } start)
+            {
+                connectorShapeDrawingProperties.StartConnection = new A.StartConnection { Id = start.ShapeId, Index = start.SiteIndex };
+            }
+
+            if (endConnection is { } end)
+            {
+                connectorShapeDrawingProperties.EndConnection = new A.EndConnection { Id = end.ShapeId, Index = end.SiteIndex };
+            }
+
             var connector = new Xdr.ConnectionShape(
                 new Xdr.NonVisualConnectionShapeProperties(
                     new Xdr.NonVisualDrawingProperties { Id = id, Name = "Connector" + id.ToString(CultureInfo.InvariantCulture) },
-                    new Xdr.NonVisualConnectorShapeDrawingProperties()),
+                    connectorShapeDrawingProperties),
                 new Xdr.ShapeProperties(spPrChildren));
 
             return WrapInOneCellAnchor(connector, row, column, widthEmu, heightEmu);
@@ -247,7 +266,11 @@ namespace Utsushi.Parsing.Tests
             return new Xdr.Shape(shapeChildren.ToArray());
         }
 
-        /// <summary>グループ内の<c>xdr:cxnSp</c>子要素を組み立てる(要件10.9, 10.10)。</summary>
+        /// <summary>
+        /// グループ内の<c>xdr:cxnSp</c>子要素を組み立てる(要件10.9, 10.10)。
+        /// <paramref name="startConnection"/>/<paramref name="endConnection"/>の意味は
+        /// <see cref="ConnectorAnchor"/>と同じ(要件10.11)。
+        /// </summary>
         public static Xdr.ConnectionShape GroupChildConnectorElement(
             A.ShapeTypeValues preset,
             long offX,
@@ -258,7 +281,9 @@ namespace Utsushi.Parsing.Tests
             bool flipH = false,
             bool flipV = false,
             A.Outline? outline = null,
-            uint id = 12U)
+            uint id = 12U,
+            (uint ShapeId, uint SiteIndex)? startConnection = null,
+            (uint ShapeId, uint SiteIndex)? endConnection = null)
         {
             var spPrChildren = new List<OpenXmlElement>
             {
@@ -278,10 +303,21 @@ namespace Utsushi.Parsing.Tests
                 spPrChildren.Add(outline);
             }
 
+            var connectorShapeDrawingProperties = new Xdr.NonVisualConnectorShapeDrawingProperties();
+            if (startConnection is { } start)
+            {
+                connectorShapeDrawingProperties.StartConnection = new A.StartConnection { Id = start.ShapeId, Index = start.SiteIndex };
+            }
+
+            if (endConnection is { } end)
+            {
+                connectorShapeDrawingProperties.EndConnection = new A.EndConnection { Id = end.ShapeId, Index = end.SiteIndex };
+            }
+
             return new Xdr.ConnectionShape(
                 new Xdr.NonVisualConnectionShapeProperties(
                     new Xdr.NonVisualDrawingProperties { Id = id, Name = "GroupConnector" + id.ToString(CultureInfo.InvariantCulture) },
-                    new Xdr.NonVisualConnectorShapeDrawingProperties()),
+                    connectorShapeDrawingProperties),
                 new Xdr.ShapeProperties(spPrChildren));
         }
 

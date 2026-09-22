@@ -41,6 +41,26 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 画像のIdはNonVisualDrawingProperties_idを反映する()
+        {
+            // 要件10.11: 接続線の接続先解決のキーとなるIdを画像側でも保持する。
+            // ImageWorkbookFixtures.CreateWithPicture(oneCellAnchor)はNonVisualDrawingProperties.Idを
+            // 固定値2で組み立てる(BuildPictureの既定引数)。
+            var path = ImageWorkbookFixtures.CreateWithPicture("image/png", ImageWorkbookFixtures.TinyPng());
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                var image = Assert.Single(sheet.DrawingObjects.OfType<ImageModel>().ToList());
+
+                Assert.Equal(2u, image.Id);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void twoCellAnchorの画像を対角セルとして読み取る()
         {
             var path = ImageWorkbookFixtures.CreateWithPicture("image/png", ImageWorkbookFixtures.TinyPng(), useTwoCellAnchor: true);

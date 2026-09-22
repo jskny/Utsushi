@@ -135,5 +135,65 @@ namespace Utsushi.Rendering.Tests
             Assert.Equal(new SKPoint(Rect.Left, Rect.Top), path.Points[0]);
             Assert.Equal(new SKPoint(Rect.Right, Rect.Bottom), path.Points[^1]);
         }
+
+        // -- 要件10.11: 接続点解決の座標を優先する -------------------------------------------------
+
+        [Fact]
+        public void resolvedStartとresolvedEndを両方指定するとRectとFlipを無視してその2点を使う()
+        {
+            var resolvedStart = new SKPoint(200, 300);
+            var resolvedEnd = new SKPoint(400, 500);
+
+            using var path = ConnectorGeometryBuilder.Build(
+                ConnectorPresetType.Straight,
+                flipHorizontal: true, // 無視されるはず
+                flipVertical: true, // 無視されるはず
+                Rect,
+                resolvedStart,
+                resolvedEnd);
+
+            Assert.Equal(2, path.PointCount);
+            Assert.Equal(resolvedStart, path.Points[0]);
+            Assert.Equal(resolvedEnd, path.Points[^1]);
+        }
+
+        [Fact]
+        public void resolvedStartとresolvedEndを指定するとBentやCurvedの折れ点も解決済み座標を基準に計算される()
+        {
+            var resolvedStart = new SKPoint(0, 0);
+            var resolvedEnd = new SKPoint(100, 40);
+
+            using var path = ConnectorGeometryBuilder.Build(
+                ConnectorPresetType.Bent2Segment,
+                flipHorizontal: false,
+                flipVertical: false,
+                Rect, // 解決済み座標が優先されるため、この矩形の値は使われないはず
+                resolvedStart,
+                resolvedEnd);
+
+            Assert.Equal(3, path.PointCount);
+            Assert.Equal(resolvedStart, path.Points[0]);
+            // 折れ点は終点のXと始点のYを持つ(水平→垂直の順)。
+            Assert.Equal(new SKPoint(resolvedEnd.X, resolvedStart.Y), path.Points[1]);
+            Assert.Equal(resolvedEnd, path.Points[2]);
+        }
+
+        [Theory]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        [InlineData(false, false)]
+        public void resolvedStartとresolvedEndの片方以上がnullの場合は反転フラグ由来の既定経路にフォールバックする(
+            bool hasStart, bool hasEnd)
+        {
+            SKPoint? resolvedStart = hasStart ? new SKPoint(200, 300) : (SKPoint?)null;
+            SKPoint? resolvedEnd = hasEnd ? new SKPoint(400, 500) : (SKPoint?)null;
+
+            using var path = ConnectorGeometryBuilder.Build(
+                ConnectorPresetType.Straight, flipHorizontal: false, flipVertical: false, Rect, resolvedStart, resolvedEnd);
+
+            // 既定動作(要件10.9): 反転無しなら矩形の左上から右下への直線になる。
+            Assert.Equal(new SKPoint(Rect.Left, Rect.Top), path.Points[0]);
+            Assert.Equal(new SKPoint(Rect.Right, Rect.Bottom), path.Points[^1]);
+        }
     }
 }

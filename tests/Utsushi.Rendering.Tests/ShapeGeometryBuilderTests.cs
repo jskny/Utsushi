@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using SkiaSharp;
 using Utsushi.Parsing.Model;
 using Xunit;
@@ -194,6 +195,67 @@ namespace Utsushi.Rendering.Tests
             Assert.True(path.Bounds.Bottom > Rect.Bottom, $"Bottom: expected > {Rect.Bottom} actual={path.Bounds.Bottom}");
             Assert.True(path.Bounds.Bottom < Rect.Bottom + Rect.Height, "はみ出しは矩形の高さを超えないはず(意図しない破綻の検出)");
         }
+
+        [Theory]
+        [InlineData(ShapePresetType.Star4, 0.25)]
+        [InlineData(ShapePresetType.Star5, 0.382)]
+        [InlineData(ShapePresetType.Star6, 0.577)]
+        [InlineData(ShapePresetType.Star8, 0.75)]
+        public void 星形の既定内側半径比はプリセットごとの規定値になる(ShapePresetType preset, double expectedRatio)
+        {
+            // 要件10.12: 内側頂点の半径比の既定値はECMA-376のadj既定値(0〜50000)を
+            // 50000で割った比率であり、star4/5/6/8で共通ではない。
+            using var path = ShapeGeometryBuilder.Build(preset, Array.Empty<double>(), Rect);
+
+            var centerX = (Rect.Left + Rect.Right) / 2f;
+            var centerY = (Rect.Top + Rect.Bottom) / 2f;
+            var outerRadius = Math.Min(Rect.Width, Rect.Height) / 2f;
+
+            // StarPathはi=0(外側)から始まり、奇数インデックス(i=1)が最初の内側頂点になる。
+            var innerVertex = path.Points[1];
+            var actualInnerRadius = Distance(innerVertex, centerX, centerY);
+            var expectedInnerRadius = outerRadius * (float)expectedRatio;
+
+            Assert.Equal(expectedInnerRadius, actualInnerRadius, 2);
+        }
+
+        [Fact]
+        public void 星形の既定内側半径比はstar4_5_6_8ですべて異なる()
+        {
+            // 単一の共通既定値(旧実装の0.38)へ後退していないことの回帰確認(要件10.12)。
+            var presets = new[] { ShapePresetType.Star4, ShapePresetType.Star5, ShapePresetType.Star6, ShapePresetType.Star8 };
+            var centerX = (Rect.Left + Rect.Right) / 2f;
+            var centerY = (Rect.Top + Rect.Bottom) / 2f;
+
+            var innerRadii = presets
+                .Select(preset =>
+                {
+                    using var path = ShapeGeometryBuilder.Build(preset, Array.Empty<double>(), Rect);
+                    return Distance(path.Points[1], centerX, centerY);
+                })
+                .ToList();
+
+            Assert.Equal(presets.Length, innerRadii.Distinct().Count());
+        }
+
+        [Fact]
+        public void cloudCalloutの引き出し位置は調整値を明示指定すると変わる()
+        {
+            // 要件10.13: adj1(X方向)/adj2(Y方向)を明示指定すると引き出し三角形の先端位置が変わる。
+            // 既定(adj1=-0.25)は本体の左外側を指すが、adj1=1.25を指定すると右外側を指すようになる。
+            using var defaultPath = ShapeGeometryBuilder.Build(ShapePresetType.CloudCallout, Array.Empty<double>(), Rect);
+            using var rightPath = ShapeGeometryBuilder.Build(ShapePresetType.CloudCallout, new[] { 1.25, 0.5 }, Rect);
+
+            Assert.True(
+                rightPath.Bounds.Right > defaultPath.Bounds.Right,
+                $"Right: default={defaultPath.Bounds.Right} right={rightPath.Bounds.Right}");
+            Assert.True(
+                rightPath.Bounds.Left > defaultPath.Bounds.Left,
+                $"Left: default={defaultPath.Bounds.Left} right={rightPath.Bounds.Left}");
+        }
+
+        private static float Distance(SKPoint point, float centerX, float centerY) =>
+            (float)Math.Sqrt(Math.Pow(point.X - centerX, 2) + Math.Pow(point.Y - centerY, 2));
 
         [Fact]
         public void cloudCalloutは楕円本体に加え引き出し先端ぶん本体矩形の外側へ広がる()

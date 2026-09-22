@@ -539,6 +539,66 @@ namespace Utsushi.Rendering.Tests
         }
 
         [Fact]
+        public void 接続点が解決済みの接続線は回転が指定されていても例外なく描画される()
+        {
+            // 要件10.11: ResolvedStart/ResolvedEndが両方とも非nullの場合、DrawConnectorは
+            // 追加のcanvas回転を適用しない(絶対座標に対する回転はかえって位置をずらすため)。
+            // ピクセル単位の見た目比較はゴールデンテストで行うため、ここでは回転角の大小に
+            // かかわらず妥当なPDFが生成されることを確認する。
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ConnectorCommand(
+                    new RectPt(10, 10, 60, 20),
+                    ConnectorPresetType.Bent2Segment,
+                    RotationDegrees: 45,
+                    FlipHorizontal: false,
+                    FlipVertical: false,
+                    Outline: new ShapeOutline(ArgbColor.Black, 1.0),
+                    ResolvedStart: new PointPt(5, 5),
+                    ResolvedEnd: new PointPt(90, 60)),
+            });
+
+            renderer.Render(layout, output);
+
+            var bytes = output.ToArray();
+            Assert.True(bytes.Length > 0);
+            Assert.Equal("%PDF", Encoding.ASCII.GetString(bytes, 0, 4));
+        }
+
+        [Fact]
+        public void 接続点が解決済みの接続線は回転角によらず同じ内容で描画される()
+        {
+            // isResolvedがtrueの場合、DrawConnectorはRotationDegreesの値そのものを無視する
+            // (hasRotationが常にfalseになる)ため、回転角だけを変えても出力サイズは変わらないはず
+            // (要件10.11の回帰確認。ピクセル同一性の厳密な検証はゴールデンテストに委ねる)。
+            var renderer = new SkiaPdfRenderer(_metrics);
+
+            DrawCommand[] CommandsWithRotation(double rotationDegrees) => new DrawCommand[]
+            {
+                new ConnectorCommand(
+                    new RectPt(10, 10, 60, 20),
+                    ConnectorPresetType.Straight,
+                    RotationDegrees: rotationDegrees,
+                    FlipHorizontal: false,
+                    FlipVertical: false,
+                    Outline: new ShapeOutline(ArgbColor.Black, 1.0),
+                    ResolvedStart: new PointPt(5, 5),
+                    ResolvedEnd: new PointPt(90, 60)),
+            };
+
+            using var withoutRotation = new MemoryStream();
+            using var withRotation = new MemoryStream();
+
+            renderer.Render(Layout(commands: CommandsWithRotation(0)), withoutRotation);
+            renderer.Render(Layout(commands: CommandsWithRotation(60)), withRotation);
+
+            Assert.Equal(withoutRotation.ToArray(), withRotation.ToArray());
+        }
+
+        [Fact]
         public void グループ内の図形と接続線がまとめてPDFに描画される()
         {
             // DrawGroupが未配線/誤配線だった場合に検出できる回帰テスト
