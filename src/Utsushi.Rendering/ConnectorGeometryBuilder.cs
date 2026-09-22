@@ -9,14 +9,26 @@ namespace Utsushi.Rendering
     /// とは別に新設する(design.md「Rendering レイヤー」参照)。
     /// </summary>
     /// <remarks>
-    /// 接続点(コネクションサイト)の解決は行わず、アンカー矩形と反転フラグのみから経路を決める
-    /// (要件10.9補足)。
+    /// 接続点(コネクションサイト)の解決はLayoutレイヤーの責務(要件10.11)。
+    /// <paramref name="resolvedStart"/>/<paramref name="resolvedEnd"/>が両方とも非<c>null</c>
+    /// の場合はこの2点をそのまま始点・終点として使い(<paramref name="rect"/>と
+    /// <paramref name="flipHorizontal"/>/<paramref name="flipVertical"/>は無視する)、
+    /// 片方または両方が<c>null</c>の場合は従来どおりアンカー矩形と反転フラグのみから
+    /// 経路を決める(要件10.9の既定動作)。
     /// </remarks>
     internal static class ConnectorGeometryBuilder
     {
-        public static SKPath Build(ConnectorPresetType preset, bool flipHorizontal, bool flipVertical, SKRect rect)
+        public static SKPath Build(
+            ConnectorPresetType preset,
+            bool flipHorizontal,
+            bool flipVertical,
+            SKRect rect,
+            SKPoint? resolvedStart = null,
+            SKPoint? resolvedEnd = null)
         {
-            var (start, end) = ResolveEndpoints(rect, flipHorizontal, flipVertical);
+            var (start, end) = resolvedStart is { } s && resolvedEnd is { } e
+                ? (s, e)
+                : ResolveEndpoints(rect, flipHorizontal, flipVertical);
 
             return preset switch
             {

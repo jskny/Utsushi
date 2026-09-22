@@ -39,13 +39,20 @@ namespace Utsushi.Rendering
         private const double CalloutTipAdjLimit = 5.0;
 
         /// <summary>
-        /// star4/5/6/8共通の内側頂点の半径比(外接円半径に対する比率)の既定値。
-        /// ECMA-376の一次資料への当たり直しはできていない暫定値(design.md参照)。
+        /// star4/5/6/8の内側頂点の半径比(外接円半径に対する比率)の既定値。ECMA-376は
+        /// この既定値を単一の調整ガイド<c>adj</c>の既定値(0〜50000。ここでは
+        /// <c>既定値 ÷ 50000</c>で比率化したもの)としてプリセットごとに定義しており、
+        /// 4プリセット共通の値ではない。二次資料(ECMA-376の実装を参照する複数のOSS
+        /// プロジェクトの記述)を突き合わせて確認した値であり、ECMA-376一次資料そのものへの
+        /// 当たり直しはできていない暫定値(design.md「未決事項」参照)。
         /// </summary>
-        private const double DefaultStarInnerRadiusRatio = 0.38;
+        private const double Star4DefaultInnerRadiusRatio = 0.25;
 
-        /// <summary>flowChartInputOutput(平行四辺形)の上下辺のずらし幅(矩形の幅に対する比率)。</summary>
-        private const double InputOutputSkewRatio = 0.2;
+        private const double Star5DefaultInnerRadiusRatio = 0.382;
+
+        private const double Star6DefaultInnerRadiusRatio = 0.577;
+
+        private const double Star8DefaultInnerRadiusRatio = 0.75;
 
         /// <summary>flowChartDocumentの波形の深さ(矩形の高さに対する比率)。</summary>
         private const double DocumentWaveDepthRatio = 0.08;
@@ -83,18 +90,18 @@ namespace Utsushi.Rendering
                 ShapePresetType.WedgeRectCallout => WedgeCalloutPath(rect, BodyKind.Rect, adjustmentValues),
                 ShapePresetType.WedgeRoundRectCallout => WedgeCalloutPath(rect, BodyKind.RoundRect, adjustmentValues),
                 ShapePresetType.WedgeEllipseCallout => WedgeCalloutPath(rect, BodyKind.Ellipse, adjustmentValues),
-                ShapePresetType.CloudCallout => CloudCalloutPath(rect),
+                ShapePresetType.CloudCallout => CloudCalloutPath(rect, adjustmentValues),
                 ShapePresetType.Callout1 => RectPath(rect),
                 ShapePresetType.Callout2 => RectPath(rect),
                 ShapePresetType.Callout3 => RectPath(rect),
-                ShapePresetType.Star4 => StarPath(rect, 4, StarInnerRadiusRatio(adjustmentValues)),
-                ShapePresetType.Star5 => StarPath(rect, 5, StarInnerRadiusRatio(adjustmentValues)),
-                ShapePresetType.Star6 => StarPath(rect, 6, StarInnerRadiusRatio(adjustmentValues)),
-                ShapePresetType.Star8 => StarPath(rect, 8, StarInnerRadiusRatio(adjustmentValues)),
+                ShapePresetType.Star4 => StarPath(rect, 4, StarInnerRadiusRatio(adjustmentValues, Star4DefaultInnerRadiusRatio)),
+                ShapePresetType.Star5 => StarPath(rect, 5, StarInnerRadiusRatio(adjustmentValues, Star5DefaultInnerRadiusRatio)),
+                ShapePresetType.Star6 => StarPath(rect, 6, StarInnerRadiusRatio(adjustmentValues, Star6DefaultInnerRadiusRatio)),
+                ShapePresetType.Star8 => StarPath(rect, 8, StarInnerRadiusRatio(adjustmentValues, Star8DefaultInnerRadiusRatio)),
                 ShapePresetType.FlowChartProcess => RectPath(rect),
                 ShapePresetType.FlowChartDecision => DiamondPath(rect),
                 ShapePresetType.FlowChartTerminator => StadiumPath(rect),
-                ShapePresetType.FlowChartInputOutput => ParallelogramPath(rect, InputOutputSkewRatio),
+                ShapePresetType.FlowChartInputOutput => ParallelogramPath(rect, ShapeGeometryConstants.InputOutputSkewRatio),
                 ShapePresetType.FlowChartDocument => DocumentPath(rect),
                 ShapePresetType.FlowChartPredefinedProcess => PredefinedProcessPath(rect),
                 ShapePresetType.FlowChartConnector => EllipsePath(rect),
@@ -116,7 +123,7 @@ namespace Utsushi.Rendering
                 _ => Build(preset, adjustmentValues, rect),
             };
 
-        private static double StarInnerRadiusRatio(IReadOnlyList<double> values) => Adj(values, 0, DefaultStarInnerRadiusRatio);
+        private static double StarInnerRadiusRatio(IReadOnlyList<double> values, double defaultValue) => Adj(values, 0, defaultValue);
 
         private static double ShaftAdj(IReadOnlyList<double> values) => Adj(values, 0, DefaultArrowShaftAdj);
 
@@ -343,9 +350,11 @@ namespace Utsushi.Rendering
         /// <summary>
         /// 雲形吹き出し(cloudCallout)。楕円本体の輪郭に沿って並べた円(バンプ)の和集合で
         /// 近似したシルエットに、wedgeEllipseCalloutと同じ引き出し三角形を追加する
-        /// (design.md参照。個数・半径は固定値で調整ガイドには対応しない)。
+        /// (design.md参照。バンプの個数・半径は固定値で調整ガイドには対応しないが、
+        /// 引き出し三角形の位置(<paramref name="adjustmentValues"/>のadj1/adj2)は
+        /// wedgeEllipseCalloutと同じ意味の調整ガイドとして読み取る。要件10.13)。
         /// </summary>
-        private static SKPath CloudCalloutPath(SKRect rect)
+        private static SKPath CloudCalloutPath(SKRect rect, IReadOnlyList<double> adjustmentValues)
         {
             var centerX = (rect.Left + rect.Right) / 2f;
             var centerY = (rect.Top + rect.Bottom) / 2f;
@@ -373,8 +382,11 @@ namespace Utsushi.Rendering
                 cloud = previous.Op(bump, SKPathOp.Union) ?? previous;
             }
 
+            var tipXAdj = Math.Max(-CalloutTipAdjLimit, Math.Min(CalloutTipAdjLimit, Adj(adjustmentValues, 0, DefaultCalloutTipXAdj)));
+            var tipYAdj = Math.Max(-CalloutTipAdjLimit, Math.Min(CalloutTipAdjLimit, Adj(adjustmentValues, 1, DefaultCalloutTipYAdj)));
+
             var result = cloud ?? EllipsePath(rect);
-            AddWedgeTail(result, rect, DefaultCalloutTipXAdj, DefaultCalloutTipYAdj);
+            AddWedgeTail(result, rect, tipXAdj, tipYAdj);
             return result;
         }
 

@@ -44,6 +44,8 @@ namespace Utsushi.Layout.Tests
                 true,
                 false,
                 outline,
+                null,
+                null,
                 CellAddress.Parse("B2"),
                 new PointPt(2.0, 3.0),
                 new FixedAnchorExtent(15.0, 8.0));
@@ -72,7 +74,7 @@ namespace Utsushi.Layout.Tests
                 rows: 4, columns: 2, columnWidth: 10.0, rowHeightPt: 20.0,
                 pageSetup: NoMarginA4(rowBreaks: new[] { 3 }));
             var connector = new ConnectorModel(
-                ConnectorPresetType.Straight, 0, false, false, null,
+                ConnectorPresetType.Straight, 0, false, false, null, null, null,
                 CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
             sheet = sheet with { DrawingObjects = new[] { connector } };
 
@@ -97,9 +99,9 @@ namespace Utsushi.Layout.Tests
                 rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
 
             var childShape = new GroupChildShape(
-                RectPt.FromBounds(5, 5, 15, 15), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
+                 1u, RectPt.FromBounds(5, 5, 15, 15), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
             var group = new GroupShapeModel(
-                new PointPt(0, 0),
+                 1u, new PointPt(0, 0),
                 new PointPt(40, 40),
                 new GroupChildModel[] { childShape },
                 0,
@@ -134,9 +136,9 @@ namespace Utsushi.Layout.Tests
             var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
 
             var childShape = new GroupChildShape(
-                RectPt.FromBounds(110, 110, 120, 120), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
+                 1u, RectPt.FromBounds(110, 110, 120, 120), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
             var group = new GroupShapeModel(
-                new PointPt(100, 100),
+                 1u, new PointPt(100, 100),
                 new PointPt(40, 40), // グループ自身のサイズと同じ => scale=1
                 new GroupChildModel[] { childShape },
                 0,
@@ -167,9 +169,9 @@ namespace Utsushi.Layout.Tests
             var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
 
             var childShape = new GroupChildShape(
-                RectPt.FromBounds(0, 0, 40, 40), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
+                 1u, RectPt.FromBounds(0, 0, 40, 40), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
             var group = new GroupShapeModel(
-                new PointPt(0, 0),
+                 1u, new PointPt(0, 0),
                 new PointPt(200, 200),
                 new GroupChildModel[] { childShape },
                 0,
@@ -204,15 +206,15 @@ namespace Utsushi.Layout.Tests
             var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
 
             var innerShape = new GroupChildShape(
-                RectPt.FromBounds(50, 50, 150, 150), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
+                 1u, RectPt.FromBounds(50, 50, 150, 150), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
             var nestedGroup = new GroupChildGroup(
-                RectPt.FromBounds(20, 20, 40, 40),
+                 1u, RectPt.FromBounds(20, 20, 40, 40),
                 0,
                 new PointPt(0, 0),
                 new PointPt(200, 200),
                 new GroupChildModel[] { innerShape });
             var outerGroup = new GroupShapeModel(
-                new PointPt(0, 0),
+                 1u, new PointPt(0, 0),
                 new PointPt(100, 100),
                 new GroupChildModel[] { nestedGroup },
                 0,
@@ -240,9 +242,9 @@ namespace Utsushi.Layout.Tests
             var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
 
             var childShape = new GroupChildShape(
-                RectPt.FromBounds(0, 0, 10, 10), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
+                 1u, RectPt.FromBounds(0, 0, 10, 10), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
             var group = new GroupShapeModel(
-                new PointPt(0, 0),
+                 1u, new PointPt(0, 0),
                 new PointPt(0, 100), // X<=0
                 new GroupChildModel[] { childShape },
                 0,
@@ -265,9 +267,9 @@ namespace Utsushi.Layout.Tests
             var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
 
             var childShape = new GroupChildShape(
-                RectPt.FromBounds(0, 0, 10, 10), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
+                 1u, RectPt.FromBounds(0, 0, 10, 10), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
             var group = new GroupShapeModel(
-                new PointPt(0, 0),
+                 1u, new PointPt(0, 0),
                 new PointPt(100, -1), // Y<=0
                 new GroupChildModel[] { childShape },
                 0,
@@ -287,9 +289,9 @@ namespace Utsushi.Layout.Tests
             var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
             var outline = new ShapeOutline(ArgbColor.Black, 3.0);
             var childConnector = new GroupChildConnector(
-                RectPt.FromBounds(0, 0, 40, 40), ConnectorPresetType.Curved3Segment, 10, true, true, outline);
+                RectPt.FromBounds(0, 0, 40, 40), ConnectorPresetType.Curved3Segment, 10, true, true, outline, null, null);
             var group = new GroupShapeModel(
-                new PointPt(0, 0),
+                 1u, new PointPt(0, 0),
                 new PointPt(40, 40),
                 new GroupChildModel[] { childConnector },
                 0,
@@ -316,9 +318,9 @@ namespace Utsushi.Layout.Tests
                 rows: 4, columns: 2, columnWidth: 10.0, rowHeightPt: 20.0,
                 pageSetup: NoMarginA4(rowBreaks: new[] { 3 }));
             var childShape = new GroupChildShape(
-                RectPt.FromBounds(0, 0, 5, 5), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
+                 1u, RectPt.FromBounds(0, 0, 5, 5), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null);
             var group = new GroupShapeModel(
-                new PointPt(0, 0),
+                 1u, new PointPt(0, 0),
                 new PointPt(5, 5),
                 new GroupChildModel[] { childShape },
                 0,

@@ -7,6 +7,9 @@ namespace Utsushi.Parsing.Model
     /// シートに配置された図形(要件10)。対応済みプリセット一覧に含まれない
     /// プリセットジオメトリは読み取り対象にせず、サポート外要素として扱う。
     /// </summary>
+    /// <param name="Id">
+    /// <c>NonVisualDrawingProperties/@id</c>。接続線の接続先解決(要件10.11)のために保持する。
+    /// </param>
     /// <param name="Preset">プリセットジオメトリの種別。</param>
     /// <param name="AdjustmentValues">
     /// <c>a:avLst</c> のガイド値。<see cref="Preset"/> ごとに定めた順序で並ぶ(0〜1の比率)。
@@ -20,6 +23,7 @@ namespace Utsushi.Parsing.Model
     /// <param name="AnchorOffset">アンカーセル左上からのオフセット(ポイント)。</param>
     /// <param name="Extent">図形の終端(サイズ)の決め方。</param>
     public sealed record ShapeModel(
+        uint Id,
         ShapePresetType Preset,
         IReadOnlyList<double> AdjustmentValues,
         double RotationDegrees,
@@ -64,6 +68,22 @@ namespace Utsushi.Parsing.Model
         FlowChartDocument,
         FlowChartPredefinedProcess,
         FlowChartConnector,
+    }
+
+    /// <summary>
+    /// Layout(接続点解決、要件10.11の左右の接続点の補正)・Rendering(実際の描画)の両方が使う
+    /// 図形ジオメトリの比率定数。<c>Utsushi.Rendering</c>は<c>Utsushi.Layout</c>に依存する
+    /// 向きであり、Layoutから見てRendering内部の定数を直接参照することはできない
+    /// (逆方向の参照は循環参照になりビルドできない。<c>.kiro/steering/structure.md</c>の
+    /// レイヤー依存の一方向ルール)。そのため、双方が既に依存している
+    /// <c>Utsushi.Parsing.Model</c>にこの定数を置く。<c>flowChartDocument</c>の波形の深さ比率
+    /// (<c>DocumentWaveDepthRatio</c>)はLayoutから参照する必要が無いため、
+    /// <c>Utsushi.Rendering.ShapeGeometryBuilder</c>内部の<c>private</c>定数のまま残す。
+    /// </summary>
+    public static class ShapeGeometryConstants
+    {
+        /// <summary>flowChartInputOutput(平行四辺形)の上下辺のずらし幅(矩形の幅に対する比率)。</summary>
+        public const double InputOutputSkewRatio = 0.2;
     }
 
     /// <summary>図形の塗りつぶし。</summary>
@@ -119,12 +139,19 @@ namespace Utsushi.Parsing.Model
     /// <param name="FlipHorizontal"><c>a:xfrm/@flipH</c>。経路の左右の向きを決める。</param>
     /// <param name="FlipVertical"><c>a:xfrm/@flipV</c>。経路の上下の向きを決める。</param>
     /// <param name="Outline">枠線。<c>null</c> の場合、描画時にExcelの既定(黒の実線1pt)を補う。</param>
+    /// <param name="StartConnection">
+    /// <c>a:stCxn</c>(始点の接続先)。要素が無ければ<c>null</c>。解決(参照先の矩形取得・
+    /// 接続点座標の計算)はLayoutレイヤーの責務(要件10.11)。
+    /// </param>
+    /// <param name="EndConnection"><c>a:endCxn</c>(終点の接続先)。<see cref="StartConnection"/>と同様。</param>
     public sealed record ConnectorModel(
         ConnectorPresetType Preset,
         double RotationDegrees,
         bool FlipHorizontal,
         bool FlipVertical,
         ShapeOutline? Outline,
+        ConnectionRef? StartConnection,
+        ConnectionRef? EndConnection,
         CellAddress AnchorCell,
         PointPt AnchorOffset,
         AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
@@ -153,15 +180,26 @@ namespace Utsushi.Parsing.Model
     }
 
     /// <summary>
+    /// <c>a:stCxn</c>/<c>a:endCxn</c>(要件10.11)。<paramref name="ShapeId"/>は参照先の
+    /// <c>NonVisualDrawingProperties/@id</c>と同じ値、<paramref name="SiteIndex"/>は
+    /// 参照先の矩形上のどの接続点かを表す番号(<c>@idx</c>)。
+    /// </summary>
+    public sealed record ConnectionRef(uint ShapeId, uint SiteIndex);
+
+    /// <summary>
     /// グループ化された図形(<c>xdr:grpSp</c>。要件10.10)。トップレベルの描画オブジェクトとして
     /// セルアンカーを持つが、内部の<see cref="Children"/>は独自の子座標空間
     /// (<see cref="ChildOffset"/>/<see cref="ChildExtent"/>)上の位置で決まる。
     /// </summary>
+    /// <param name="Id">
+    /// <c>NonVisualDrawingProperties/@id</c>。接続線の接続先解決(要件10.11)のために保持する。
+    /// </param>
     /// <param name="ChildOffset"><c>a:chOff</c>(ポイント換算)。子要素の座標系の原点。</param>
     /// <param name="ChildExtent"><c>a:chExt</c>(ポイント換算)。X=幅、Y=高さ。</param>
     /// <param name="Children">直接の子要素(<c>drawing.xml</c>上の出現順)。</param>
     /// <param name="RotationDegrees"><c>a:xfrm/@rot</c> から変換したグループ自身の回転角(度)。</param>
     public sealed record GroupShapeModel(
+        uint Id,
         PointPt ChildOffset,
         PointPt ChildExtent,
         IReadOnlyList<GroupChildModel> Children,
@@ -177,8 +215,9 @@ namespace Utsushi.Parsing.Model
     /// </summary>
     public abstract record GroupChildModel(RectPt LocalRect);
 
-    /// <summary>グループ内の図形。</summary>
+    /// <summary>グループ内の図形。<see cref="Id"/>は接続線の接続先解決(要件10.11)のために保持する。</summary>
     public sealed record GroupChildShape(
+        uint Id,
         RectPt LocalRect,
         ShapePresetType Preset,
         IReadOnlyList<double> AdjustmentValues,
@@ -187,23 +226,31 @@ namespace Utsushi.Parsing.Model
         ShapeOutline? Outline,
         ShapeTextBody? Text) : GroupChildModel(LocalRect);
 
-    /// <summary>グループ内の画像。</summary>
-    public sealed record GroupChildImage(RectPt LocalRect, byte[] Data, string ContentType) : GroupChildModel(LocalRect);
+    /// <summary>グループ内の画像。<see cref="Id"/>は接続線の接続先解決(要件10.11)のために保持する。</summary>
+    public sealed record GroupChildImage(
+        uint Id, RectPt LocalRect, byte[] Data, string ContentType) : GroupChildModel(LocalRect);
 
-    /// <summary>グループ内の接続線。</summary>
+    /// <summary>
+    /// グループ内の接続線。<see cref="Id"/>は持たない(接続先として参照される対象ではないため。
+    /// 要件10.11補足)。
+    /// </summary>
     public sealed record GroupChildConnector(
         RectPt LocalRect,
         ConnectorPresetType Preset,
         double RotationDegrees,
         bool FlipHorizontal,
         bool FlipVertical,
-        ShapeOutline? Outline) : GroupChildModel(LocalRect);
+        ShapeOutline? Outline,
+        ConnectionRef? StartConnection,
+        ConnectionRef? EndConnection) : GroupChildModel(LocalRect);
 
     /// <summary>
     /// グループ内の入れ子グループ。<see cref="ChildOffset"/>/<see cref="ChildExtent"/>は
-    /// このグループ自身の孫要素の座標系(親グループとは別の子座標空間)。
+    /// このグループ自身の孫要素の座標系(親グループとは別の子座標空間)。<see cref="Id"/>は
+    /// 接続線の接続先解決(要件10.11)のために保持する。
     /// </summary>
     public sealed record GroupChildGroup(
+        uint Id,
         RectPt LocalRect,
         double RotationDegrees,
         PointPt ChildOffset,

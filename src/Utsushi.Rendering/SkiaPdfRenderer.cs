@@ -305,7 +305,12 @@ namespace Utsushi.Rendering
         private static void DrawConnector(SKCanvas canvas, ConnectorCommand connector)
         {
             var skRect = ToSkRect(connector.Rect);
-            var hasRotation = Math.Abs(connector.RotationDegrees) > double.Epsilon;
+            var isResolved = connector.ResolvedStart is not null && connector.ResolvedEnd is not null;
+
+            // 接続点解決(要件10.11)で両端点が絶対座標として確定している場合、その座標が
+            // 最終的な見た目そのものであり、Rect中心を軸にした追加の回転はかえって位置を
+            // ずらしてしまう(design.md「未決事項」参照)ため適用しない。
+            var hasRotation = !isResolved && Math.Abs(connector.RotationDegrees) > double.Epsilon;
 
             if (hasRotation)
             {
@@ -317,7 +322,10 @@ namespace Utsushi.Rendering
 
             try
             {
-                using var path = ConnectorGeometryBuilder.Build(connector.Preset, connector.FlipHorizontal, connector.FlipVertical, skRect);
+                var resolvedStart = connector.ResolvedStart is { } start ? ToSkPoint(start) : (SKPoint?)null;
+                var resolvedEnd = connector.ResolvedEnd is { } end ? ToSkPoint(end) : (SKPoint?)null;
+                using var path = ConnectorGeometryBuilder.Build(
+                    connector.Preset, connector.FlipHorizontal, connector.FlipVertical, skRect, resolvedStart, resolvedEnd);
 
                 // Outlineが無い接続線にも、Excel上の既定の黒い実線1ptを補う(design.md参照)。
                 var outline = connector.Outline ?? DefaultConnectorOutline;
@@ -646,6 +654,8 @@ namespace Utsushi.Rendering
 
         private static SKRect ToSkRect(RectPt rect) =>
             new((float)rect.Left, (float)rect.Top, (float)rect.Right, (float)rect.Bottom);
+
+        private static SKPoint ToSkPoint(PointPt point) => new((float)point.X, (float)point.Y);
     }
 
     /// <summary>

@@ -84,13 +84,21 @@ namespace Utsushi.Layout.Model
     /// <param name="FlipHorizontal">左右反転の有無(経路の折れ/曲がる向きを決める)。</param>
     /// <param name="FlipVertical">上下反転の有無(経路の折れ/曲がる向きを決める)。</param>
     /// <param name="Outline">枠線。<c>null</c>の場合、Renderingレイヤーが既定の黒い実線を補う。</param>
+    /// <param name="ResolvedStart">
+    /// 要件10.11の接続点解決に成功した場合の始点の絶対座標(ページ座標)。<c>null</c>の場合、
+    /// Renderingレイヤーは<see cref="Rect"/>と<see cref="FlipHorizontal"/>/<see cref="FlipVertical"/>
+    /// から始点を決める(要件10.9の既定動作)。
+    /// </param>
+    /// <param name="ResolvedEnd"><see cref="ResolvedStart"/>と同様の終点。</param>
     public sealed record ConnectorCommand(
         RectPt Rect,
         ConnectorPresetType Preset,
         double RotationDegrees,
         bool FlipHorizontal,
         bool FlipVertical,
-        ShapeOutline? Outline) : DrawCommand;
+        ShapeOutline? Outline,
+        PointPt? ResolvedStart,
+        PointPt? ResolvedEnd) : DrawCommand;
 
     /// <summary>
     /// グループ化された図形の展開結果(要件10.10)。<paramref name="Children"/>は

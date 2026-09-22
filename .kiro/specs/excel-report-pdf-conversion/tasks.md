@@ -537,31 +537,31 @@
     - _Requirements: 10.8, 10.9, 10.10, 6.4_
 
 - [ ] 16. 接続線の接続点(コネクションサイト)解決と星形・雲形吹き出しの近似精度向上
-  - [ ] 16.1 Parsingレイヤー: 図形・画像・グループのID読み取り
+  - [x] 16.1 Parsingレイヤー: 図形・画像・グループのID読み取り
     - `NonVisualDrawingProperties/@id`を`ShapeModel`/`ImageModel`/`GroupShapeModel`、
       グループ内の`GroupChildShape`/`GroupChildImage`/`GroupChildGroup`に`Id: uint`
       として追加する(`GroupChildConnector`は不要)。既存の`ReadShape`/`ReadImage`/
       `ReadGroupShape`/`ReadGroupChildShape`/`ReadGroupChildImage`/`ReadGroupChildGroup`
       を拡張する
     - _Requirements: 10.11_
-  - [ ] 16.2 Parsingレイヤー: 接続線の接続点参照(`stCxn`/`endCxn`)を読み取る
+  - [x] 16.2 Parsingレイヤー: 接続線の接続点参照(`stCxn`/`endCxn`)を読み取る
     - `ConnectionRef(uint ShapeId, uint SiteIndex)`を追加し、`ConnectorModel`/
       `GroupChildConnector`に`StartConnection`/`EndConnection: ConnectionRef?`を追加する。
       `ReadConnector`/`ReadGroupChildConnector`で`xdr:cNvCxnSpPr`配下の`a:stCxn`/`a:endCxn`
       (`@id`+`@idx`)を読み取る。要素が無ければ`null`
     - _Requirements: 10.11_
-  - [ ] 16.3 Renderingレイヤー: 星形(star4/5/6/8)の既定内側半径比をプリセットごとに修正する
+  - [x] 16.3 Renderingレイヤー: 星形(star4/5/6/8)の既定内側半径比をプリセットごとに修正する
     - `DefaultStarInnerRadiusRatio`(単一の0.38)を廃止し、`star4`=0.25、`star5`=0.382、
       `star6`=0.577、`star8`=0.75をプリセットごとの定数として`ShapeGeometryBuilder`に
       持たせる(design.md「未決事項」の推定値であることの注記を残す)
     - _Requirements: 10.12_
-  - [ ] 16.4 Parsing/Renderingレイヤー: 雲形吹き出し(cloudCallout)の引き出し位置調整ガイドを読み取る
+  - [x] 16.4 Parsing/Renderingレイヤー: 雲形吹き出し(cloudCallout)の引き出し位置調整ガイドを読み取る
     - Parsing: `ShapeAdjustmentGuideNames[ShapePresetType.CloudCallout]`を
       `["adj1", "adj2"]`に変更する。Rendering: `CloudCalloutPath`のシグネチャに
       `adjustmentValues`を追加して`wedgeRectCallout`等と同じ`Adj`ヘルパーで読み取る
       (既定値は変更しない)
     - _Requirements: 10.13_
-  - [ ] 16.5 共有定数の移動: `InputOutputSkewRatio`を`Utsushi.Parsing.Model`へ移す
+  - [x] 16.5 共有定数の移動: `InputOutputSkewRatio`を`Utsushi.Parsing.Model`へ移す
     - Layoutレイヤーの`ConnectionSiteResolver`(16.7)が`flowChartInputOutput`の
       左右の接続点を実際の輪郭に合わせて補正するために、これまで
       `Utsushi.Rendering.ShapeGeometryBuilder`の`private`定数だった
@@ -574,7 +574,7 @@
       Layoutレイヤーから参照する必要が無いため、`ShapeGeometryBuilder`の
       `private`定数のまま変更しない
     - _Requirements: 10.11_
-  - [ ] 16.6 Layoutレイヤー: 描画オブジェクトのID→ページ矩形解決テーブルを構築する
+  - [x] 16.6 Layoutレイヤー: 描画オブジェクトのID→ページ矩形解決テーブルを構築する
     - `PageCommandBuilder`に`BuildConnectionTargetTable`を追加し、`_sheet.DrawingObjects`を
       走査して(接続線を除く)各要素の`Id`→`(RectPt Rect, ShapePresetType? Preset)`を
       `Dictionary`(ページごとに独立)に記録する。既存の`TryComputeDrawingObjectRect`/
@@ -583,7 +583,7 @@
       出現順=z-orderは変更しない)。グループ内要素は`ToGroupChildRect`変換後の
       最終ページ矩形を記録する
     - _Requirements: 10.11_
-  - [ ] 16.7 Layoutレイヤー: 接続点(コネクションサイト)を解決する
+  - [x] 16.7 Layoutレイヤー: 接続点(コネクションサイト)を解決する
     - `ConnectionSiteResolver.Resolve(rect, preset, siteIndex)`(既定は矩形の上下左右の
       中点(`siteIndex % 4`で丸める)。`flowChartInputOutput`のみ左右の接続点を
       16.5で移した共有定数を使って実際の輪郭に合わせて補正。`flowChartDocument`は
@@ -593,7 +593,7 @@
       `ResolvedEnd`を設定する。解決できない場合は`null`のままにする
       (要件10.9の既定動作へのフォールバックはRenderingレイヤーの責務)
     - _Requirements: 10.11_
-  - [ ] 16.8 Renderingレイヤー: 接続線の描画で解決済み接続点を優先する
+  - [x] 16.8 Renderingレイヤー: 接続線の描画で解決済み接続点を優先する
     - `ConnectorCommand.ResolvedStart`/`ResolvedEnd`が両方とも非nullの場合、
       `ConnectorGeometryBuilder.Build`がこの2点を始点・終点として使うよう拡張する
       (`Rect`/`FlipHorizontal`/`FlipVertical`は無視する)

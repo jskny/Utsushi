@@ -451,8 +451,10 @@ namespace Utsushi.Parsing.OpenXml
             [ShapePresetType.WedgeRectCallout] = new[] { "adj1", "adj2" },
             [ShapePresetType.WedgeRoundRectCallout] = new[] { "adj1", "adj2" },
             [ShapePresetType.WedgeEllipseCallout] = new[] { "adj1", "adj2" },
-            // cloudCallout/callout1-3は固定形状として近似描画し、ファイルの調整ガイド値は読み取らない(design.md参照)。
-            [ShapePresetType.CloudCallout] = Array.Empty<string>(),
+            // cloudCallout本体の輪郭(バンプの個数・半径)は固定形状として近似描画するが、
+            // 引き出し三角形の位置(adj1=X方向, adj2=Y方向)はwedgeRectCallout等と同じ意味の
+            // 調整ガイドのため読み取る(要件10.13)。callout1-3は固定形状のまま。
+            [ShapePresetType.CloudCallout] = new[] { "adj1", "adj2" },
             [ShapePresetType.Callout1] = Array.Empty<string>(),
             [ShapePresetType.Callout2] = Array.Empty<string>(),
             [ShapePresetType.Callout3] = Array.Empty<string>(),
@@ -672,8 +674,10 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
+            var id = ReadShapeId(picture.NonVisualPictureProperties?.NonVisualDrawingProperties);
+
             imageCount++;
-            return new ImageModel(data, contentType, anchorCell, anchorOffset, extent);
+            return new ImageModel(id, data, contentType, anchorCell, anchorOffset, extent);
         }
 
         /// <summary>
@@ -827,8 +831,10 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
+            var id = ReadShapeId(shape.NonVisualShapeProperties?.NonVisualDrawingProperties);
+
             shapeCount++;
-            return new ShapeModel(preset, adjustmentValues, rotationDegrees, fill, outline, text, anchorCell, anchorOffset, extent);
+            return new ShapeModel(id, preset, adjustmentValues, rotationDegrees, fill, outline, text, anchorCell, anchorOffset, extent);
         }
 
         /// <summary>1つの<c>xdr:cxnSp</c>アンカーを<see cref="ConnectorModel"/>として読み取る(要件10.9)。</summary>
@@ -888,8 +894,15 @@ namespace Utsushi.Parsing.OpenXml
             var flipVertical = transform?.VerticalFlip?.Value ?? false;
             var outline = ReadShapeOutline(shapeProperties);
 
+            var connectorShapeDrawingProperties =
+                connector.NonVisualConnectionShapeProperties?.NonVisualConnectorShapeDrawingProperties;
+            var startConnection = ReadConnectionRef(connectorShapeDrawingProperties?.StartConnection);
+            var endConnection = ReadConnectionRef(connectorShapeDrawingProperties?.EndConnection);
+
             shapeCount++;
-            return new ConnectorModel(preset, rotationDegrees, flipHorizontal, flipVertical, outline, anchorCell, anchorOffset, extent);
+            return new ConnectorModel(
+                preset, rotationDegrees, flipHorizontal, flipVertical, outline,
+                startConnection, endConnection, anchorCell, anchorOffset, extent);
         }
 
         /// <summary>1つの<c>xdr:grpSp</c>アンカーを<see cref="GroupShapeModel"/>として読み取る(要件10.10)。</summary>
@@ -961,8 +974,11 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
+            var id = ReadShapeId(group.NonVisualGroupShapeProperties?.NonVisualDrawingProperties);
+
             shapeCount++;
-            return new GroupShapeModel(childOffset.Value, childExtent.Value, children, rotationDegrees, anchorCell, anchorOffset, extent);
+            return new GroupShapeModel(
+                id, childOffset.Value, childExtent.Value, children, rotationDegrees, anchorCell, anchorOffset, extent);
         }
 
         /// <summary>
@@ -1092,8 +1108,10 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
+            var id = ReadShapeId(shape.NonVisualShapeProperties?.NonVisualDrawingProperties);
+
             shapeCount++;
-            return new GroupChildShape(localRect.Value, preset, adjustmentValues, rotationDegrees, fill, outline, text);
+            return new GroupChildShape(id, localRect.Value, preset, adjustmentValues, rotationDegrees, fill, outline, text);
         }
 
         /// <summary>グループ内の<c>xdr:pic</c>子要素を<see cref="GroupChildImage"/>として読み取る(要件10.10)。</summary>
@@ -1126,8 +1144,10 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
+            var id = ReadShapeId(picture.NonVisualPictureProperties?.NonVisualDrawingProperties);
+
             imageCount++;
-            return new GroupChildImage(localRect.Value, data, contentType);
+            return new GroupChildImage(id, localRect.Value, data, contentType);
         }
 
         /// <summary>グループ内の<c>xdr:cxnSp</c>子要素を<see cref="GroupChildConnector"/>として読み取る(要件10.10)。</summary>
@@ -1181,8 +1201,15 @@ namespace Utsushi.Parsing.OpenXml
             var flipVertical = transform?.VerticalFlip?.Value ?? false;
             var outline = ReadShapeOutline(shapeProperties);
 
+            var connectorShapeDrawingProperties =
+                connector.NonVisualConnectionShapeProperties?.NonVisualConnectorShapeDrawingProperties;
+            var startConnection = ReadConnectionRef(connectorShapeDrawingProperties?.StartConnection);
+            var endConnection = ReadConnectionRef(connectorShapeDrawingProperties?.EndConnection);
+
             shapeCount++;
-            return new GroupChildConnector(localRect.Value, preset, rotationDegrees, flipHorizontal, flipVertical, outline);
+            return new GroupChildConnector(
+                localRect.Value, preset, rotationDegrees, flipHorizontal, flipVertical, outline,
+                startConnection, endConnection);
         }
 
         /// <summary>
@@ -1263,9 +1290,25 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
+            var id = ReadShapeId(group.NonVisualGroupShapeProperties?.NonVisualDrawingProperties);
+
             shapeCount++;
-            return new GroupChildGroup(localRect.Value, rotationDegrees, childOffset.Value, childExtent.Value, children);
+            return new GroupChildGroup(id, localRect.Value, rotationDegrees, childOffset.Value, childExtent.Value, children);
         }
+
+        /// <summary>
+        /// <c>NonVisualDrawingProperties/@id</c>(要件10.11)を読み取る。接続線の接続先解決の
+        /// キーとしてのみ使うため、要素が無い(理論上は起こらない)場合は既定値0とする。
+        /// </summary>
+        private static uint ReadShapeId(Xdr.NonVisualDrawingProperties? nonVisualDrawingProperties) =>
+            nonVisualDrawingProperties?.Id?.Value ?? 0;
+
+        /// <summary>
+        /// <c>a:stCxn</c>/<c>a:endCxn</c>(要件10.11)を<see cref="ConnectionRef"/>として読み取る。
+        /// 要素が無ければ<c>null</c>(接続線の始点/終点がどの図形にも紐づいていない)。
+        /// </summary>
+        private static ConnectionRef? ReadConnectionRef(Dr.ConnectionType? connection) =>
+            connection is { Id: { } id, Index: { } index } ? new ConnectionRef(id.Value, index.Value) : null;
 
         /// <summary>グループの子座標空間の原点(<c>a:chOff</c>)をポイント単位で読み取る。</summary>
         private static PointPt? ReadChildOffset(Dr.ChildOffset? childOffset) =>

@@ -472,7 +472,9 @@ namespace Utsushi.Rendering.Tests
                     RotationDegrees: 0,
                     FlipHorizontal: false,
                     FlipVertical: false,
-                    Outline: new ShapeOutline(ArgbColor.Black, 1.0)),
+                    Outline: new ShapeOutline(ArgbColor.Black, 1.0),
+                    ResolvedStart: null,
+                    ResolvedEnd: null),
             });
 
             renderer.Render(layout, output);
@@ -496,7 +498,9 @@ namespace Utsushi.Rendering.Tests
                     RotationDegrees: 0,
                     FlipHorizontal: false,
                     FlipVertical: false,
-                    Outline: null),
+                    Outline: null,
+                    ResolvedStart: null,
+                    ResolvedEnd: null),
             });
 
             renderer.Render(layout, output);
@@ -524,7 +528,9 @@ namespace Utsushi.Rendering.Tests
                     RotationDegrees: 15,
                     FlipHorizontal: true,
                     FlipVertical: false,
-                    Outline: new ShapeOutline(ArgbColor.Black, 1.0)),
+                    Outline: new ShapeOutline(ArgbColor.Black, 1.0),
+                    ResolvedStart: null,
+                    ResolvedEnd: null),
             });
 
             renderer.Render(layout, output);
@@ -554,7 +560,9 @@ namespace Utsushi.Rendering.Tests
                 RotationDegrees: 0,
                 FlipHorizontal: false,
                 FlipVertical: true,
-                Outline: new ShapeOutline(ArgbColor.Black, 1.0));
+                Outline: new ShapeOutline(ArgbColor.Black, 1.0),
+                    ResolvedStart: null,
+                    ResolvedEnd: null);
 
             var group = new GroupCommand(
                 new PointPt(40, 30),
