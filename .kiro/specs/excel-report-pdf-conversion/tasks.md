@@ -686,3 +686,42 @@
   - [x] 18.6 レビュー対応
     - `code-reviewer`/`layout-fidelity-reviewer`の指摘に対応する
     - _Requirements: 9.7_
+
+- [x] 19. 全体棚卸し監査の推奨指摘への対応
+  - [x] 19.1 tasks.mdのトレーサビリティ参照を補完する
+    - 要件1.6(数式セルはキャッシュ値のみ読む)をタスク2.1に、要件2.6(必須置換フィールドが
+      印刷範囲/印刷タイトル外ならエラー)をタスク5.2に、それぞれ`_Requirements`として追記する
+      (実装は既に満たしていたが、タスク側の参照記載が漏れていた)
+    - _Requirements: 1.6, 2.6_
+  - [x] 19.2 CLAUDE.md/docs/開発環境メモ.mdの軽微な更新漏れを直す
+    - CLAUDE.mdの「現在の状態」一覧に`docs/ライブラリの使い方.md`を追加し、
+      docs/開発環境メモ.mdのフォント未インストール前提がセッションを跨いだ際に曖昧に
+      ならないよう注記する
+  - [x] 19.3 PageCommandBuilder: 結合セル外周罫線走査にMaxSpanCellsの上限を追加する
+    - `ResolveColumnEdge`/`ResolveRowEdge`/`FindVisibleSpan`に、`SpanWidthPt`/`SpanHeightPt`と
+      同じ`MaxSpanCells`(既定4096)の上限を設ける(`mergeCell`の範囲サイズはParsingレイヤーで
+      上限を設けていないため)
+    - _Requirements: 10.8_
+  - [x] 19.4 PageCommandBuilder: 描画オブジェクトの寸法上限の適用点を統一する
+    - `TryComputeDrawingObjectRect`の`MaxDrawingObjectDimensionPt`適用を、印刷拡大率(`_scale`)
+      適用後の最終表示サイズに変更し、グループ内子要素(`ToGroupChildRect`)と適用点を揃える
+    - _Requirements: 9.6, 10.8_
+  - [x] 19.5 PageCommandBuilder: グループ内図形のテキスト余白・フォントサイズをグループの
+        リサイズ比率に追従させる
+    - `BuildGroupChildren`でグループのscaleX/scaleYの幾何平均を`groupScale`として算出し、
+      `BuildShapeTextLines`/`WrapShapeText`の内側余白・フォントサイズに反映する
+    - _Requirements: 10.10_
+  - [x] 19.6 Parsingレイヤー: 結合セル範囲の個数に上限を追加する
+    - `ReadMergedRanges`に、画像・図形と同じ考え方の`MaxMergedRangesPerSheet`(既定1000)を追加する
+      (`ElementKind = "TooManyMergedRanges"`。`SheetModel.FindMergedRange`の線形走査がページ内
+      セル数×結合範囲数で増大するDoSベクトルへの対策。security-reviewer指摘)
+    - _Requirements: 2.9_
+  - [x] 19.7 ユニットテストを追加する
+    - Layout: 巨大な結合範囲の外周罫線走査が上限を超えた位置の罫線を検出しないこと、
+      寸法上限が印刷拡大率適用後の表示サイズに適用されること、グループ内図形のテキスト余白/
+      フォントサイズがグループのリサイズ比率に追従することを検証する
+    - Parsing: 結合セル範囲の個数が上限を超える場合、ignore/errorそれぞれの挙動を検証する
+    - _Requirements: 2.9, 9.6, 9.7, 10.8, 10.10_
+  - [x] 19.8 レビュー対応
+    - `layout-fidelity-reviewer`/`security-reviewer`の指摘に対応する
+    - _Requirements: 2.9, 10.8, 10.10_

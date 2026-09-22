@@ -93,6 +93,13 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   汎用の数値書式エンジンではなく、自社帳票が使う範囲(金額・数量・日付・パーセント)のサブセット実装とする。
   解釈できない書式(指数表記・分数表記など)は例外にせず General 相当へフォールバックし、
   表示の崩れはゴールデンテストで検出する。
+- **結合セル範囲(要件2.9)**: `mergeCell` 要素を `MergedRange` として読み取る。1シートあたりの
+  結合範囲の個数に上限(`MaxMergedRangesPerSheet`、既定1000)を設ける(`ElementKind =
+  "TooManyMergedRanges"`。`unsupportedElements` ポリシーに従う)。Layoutレイヤーの結合セル矩形統合・
+  罫線合成(`SheetModel.FindMergedRange`)は結合範囲の個数に比例する線形走査をセルごとに行うため、
+  個数を無制限に許すと処理量がページ内セル数×結合範囲数で増大する(画像・図形の個数上限
+  (`MaxImagesPerSheet`/`MaxShapesPerSheet`)と同じ理由によるDoS対策。security-reviewer指摘)。
+  個々の結合範囲の大きさ(行数・列数)自体の上限は、Layoutレイヤー節の`MaxSpanCells`を参照。
 - **画像(要件9)**: `WorksheetPart.DrawingsPart.WorksheetDrawing` 配下の `xdr:twoCellAnchor` /
   `xdr:oneCellAnchor` のうち `xdr:pic`(画像)のみを対象とする。`a:blip` の `r:embed` から
   `ImagePart` を解決し、バイナリ(`GetStream()`)と `ContentType` を読み取る。
@@ -353,6 +360,17 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     `DrawingObjects`の出現順をそのまま`DrawCommand`の出現順として`Commands`リストに
     追加する(セル内容の描画コマンドより後ろにまとめて追加する点は画像単独の場合と同じ。
     「エラーハンドリング方針」節の直前の描画順序の説明を参照)。
+    画像・図形1つの表示サイズ(`MaxDrawingObjectDimensionPt`、既定5000pt)の上限は、印刷拡大率
+    (`_scale`)適用後の最終的なページ座標上の矩形サイズに対して適用する(トップレベル
+    (`TryComputeDrawingObjectRect`)・グループ内子要素(`ToGroupChildRect`)のいずれも同じ適用点
+    に揃えている。以前はトップレベルのみ`_scale`適用前の論理サイズに適用しており、印刷拡大率が
+    100%を超える帳票で上限の実効値がグループ内子要素と食い違っていた〈layout-fidelity-reviewer指摘〉)。
+    2セルアンカーの合算列/行数の上限(`MaxSpanCells`)と同じ値・同じ考え方を、結合セルの外周罫線
+    合成(`ResolveColumnEdge`/`ResolveRowEdge`。範囲内の各セルを走査して可視な罫線を探す)、および
+    結合範囲のうちページ上に見えている部分の判定(`FindVisibleSpan`)にも適用する。`mergeCell`要素の
+    範囲サイズはParsingレイヤー(`OpenXmlWorkbookReader.ReadMergedRanges`)で上限を設けていないため、
+    極端に大きい結合範囲(対角セルにセル番地の上限近くを指定するなど)を持つ入力に対する走査量の
+    増大を、2セルアンカー画像と同じ理由で防ぐ〈security-reviewer/code-reviewer指摘〉。
   - **図形内テキストの折り返し・配置(要件10.4)**: `ShapeModel.Text`(段落・ランの木構造)を、
     セル内テキストの折り返しと同じ`IFontMetricsProvider`を使い、図形の矩形幅を基準に
     単純な幅基準の折り返し(禁則処理なし。セル内テキストの折り返しと同水準)で複数行に

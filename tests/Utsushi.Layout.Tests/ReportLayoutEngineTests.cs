@@ -452,6 +452,51 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
+        public void 巨大な結合範囲の外周罫線走査は上限を超えた位置の罫線を検出しない()
+        {
+            // 回帰テスト(security-reviewer/layout-fidelity-reviewer指摘): mergeCellの範囲サイズは
+            // Parsingレイヤーで上限を設けていないため、ResolveColumnEdge/ResolveRowEdgeにも
+            // SpanWidthPt/SpanHeightPtと同じMaxSpanCells(既定4096。PageCommandBuilder内のprivate定数
+            // のためここでは直値で表す)の上限を設けた。上限を超えた位置(4110行目)のLeft罫線は
+            // 範囲の先頭から4096行ぶんしか走査しないため見つからず、出力されないことを確認する。
+            const int rows = 4110;
+            const int maxSpanCells = 4096;
+            var thin = new BorderEdge(BorderLineStyle.Thin, ArgbColor.Black);
+
+            var cells = new Dictionary<CellAddress, CellModel>();
+            for (var r = 1; r <= rows; r++)
+            {
+                var style = r == rows
+                    ? CellStyle.Default with
+                    {
+                        Borders = new BorderSet(thin, BorderEdge.None, BorderEdge.None, BorderEdge.None, BorderEdge.None, BorderEdge.None),
+                    }
+                    : CellStyle.Default;
+                cells[new CellAddress(r, 1)] = new CellModel(r.ToString(), CellValueKind.Text, style, r.ToString());
+            }
+
+            var sheet = new SheetModel(
+                "テストシート",
+                cells,
+                new List<MergedRange> { new(CellRange.Parse($"A1:A{rows}")) },
+                new List<double> { 10.0 },
+                Enumerable.Repeat(0.05, rows).ToList(),
+                10.0,
+                0.05,
+                new HashSet<int>(),
+                new HashSet<int>(),
+                NoMarginA4(),
+                Array.Empty<DrawingObjectModel>());
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var lines = Lines(page).ToList();
+
+            // 上限(先頭行+4096)を超えた最終行(4110行目)のLeft罫線は走査範囲外のため出力されない。
+            Assert.True(rows > maxSpanCells + 1, "この検証は境界を超える行数が前提");
+            Assert.DoesNotContain(lines, l => l.From.X == 0.0 && l.To.X == 0.0);
+        }
+
+        [Fact]
         public void 改ページをまたぐ結合セルは各ページの切れ目に本来無い罫線を描かない()
         {
             // A1:A2を結合し、A1にTop・A2にBottomの罫線を設定したうえで、A1とA2の間で改ページする。
