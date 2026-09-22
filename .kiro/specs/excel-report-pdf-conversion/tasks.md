@@ -550,56 +550,80 @@
       `ReadConnector`/`ReadGroupChildConnector`で`xdr:cNvCxnSpPr`配下の`a:stCxn`/`a:endCxn`
       (`@id`+`@idx`)を読み取る。要素が無ければ`null`
     - _Requirements: 10.11_
-  - [ ] 16.3 Parsingレイヤー: 星形(star4/5/6/8)の既定内側半径比をプリセットごとに修正する
+  - [ ] 16.3 Renderingレイヤー: 星形(star4/5/6/8)の既定内側半径比をプリセットごとに修正する
     - `DefaultStarInnerRadiusRatio`(単一の0.38)を廃止し、`star4`=0.25、`star5`=0.382、
       `star6`=0.577、`star8`=0.75をプリセットごとの定数として`ShapeGeometryBuilder`に
       持たせる(design.md「未決事項」の推定値であることの注記を残す)
     - _Requirements: 10.12_
-  - [ ] 16.4 Parsingレイヤー: 雲形吹き出し(cloudCallout)の引き出し位置調整ガイドを読み取る
-    - `ShapeAdjustmentGuideNames[ShapePresetType.CloudCallout]`を`["adj1", "adj2"]`に変更し、
-      `CloudCalloutPath`のシグネチャに`adjustmentValues`を追加して`wedgeRectCallout`等と
-      同じ`Adj`ヘルパーで読み取る(既定値は変更しない)
+  - [ ] 16.4 Parsing/Renderingレイヤー: 雲形吹き出し(cloudCallout)の引き出し位置調整ガイドを読み取る
+    - Parsing: `ShapeAdjustmentGuideNames[ShapePresetType.CloudCallout]`を
+      `["adj1", "adj2"]`に変更する。Rendering: `CloudCalloutPath`のシグネチャに
+      `adjustmentValues`を追加して`wedgeRectCallout`等と同じ`Adj`ヘルパーで読み取る
+      (既定値は変更しない)
     - _Requirements: 10.13_
-  - [ ] 16.5 Layoutレイヤー: 描画オブジェクトのID→ページ矩形解決テーブルを構築する
-    - `PageCommandBuilder.Build`が画像・図形・グループ(接続線を除く)を処理する際、
-      `Dictionary<uint, (RectPt Rect, ShapePresetType? Preset)>`(ページごとに独立)を
-      同時に組み立てる。グループ内要素は`ToGroupChildRect`変換後の最終ページ矩形を記録する
+  - [ ] 16.5 共有定数の移動: `InputOutputSkewRatio`を`Utsushi.Parsing.Model`へ移す
+    - Layoutレイヤーの`ConnectionSiteResolver`(16.7)が`flowChartInputOutput`の
+      左右の接続点を実際の輪郭に合わせて補正するために、これまで
+      `Utsushi.Rendering.ShapeGeometryBuilder`の`private`定数だった
+      `InputOutputSkewRatio`を必要とする。しかし`Utsushi.Rendering`は
+      `Utsushi.Layout`に依存する向き(逆参照は循環参照になりビルド不可)のため、
+      両レイヤーがすでに依存している`Utsushi.Parsing.Model`に
+      `ShapeGeometryConstants`(`public static class`)としてこの定数を移し、
+      `ShapeGeometryBuilder`側の参照を書き換える(値・意味は変えない)。
+      `DocumentWaveDepthRatio`(`flowChartDocument`の波形の深さ比率)は
+      Layoutレイヤーから参照する必要が無いため、`ShapeGeometryBuilder`の
+      `private`定数のまま変更しない
     - _Requirements: 10.11_
-  - [ ] 16.6 Layoutレイヤー: 接続点(コネクションサイト)を解決する
+  - [ ] 16.6 Layoutレイヤー: 描画オブジェクトのID→ページ矩形解決テーブルを構築する
+    - `PageCommandBuilder`に`BuildConnectionTargetTable`を追加し、`_sheet.DrawingObjects`を
+      走査して(接続線を除く)各要素の`Id`→`(RectPt Rect, ShapePresetType? Preset)`を
+      `Dictionary`(ページごとに独立)に記録する。既存の`TryComputeDrawingObjectRect`/
+      `BuildGroupChildren`と同じ計算を流用するが、`DrawCommand`は生成しない
+      (コマンド生成は`EmitDrawingObjects`の既存の単一`foreach`が引き続き担当し、
+      出現順=z-orderは変更しない)。グループ内要素は`ToGroupChildRect`変換後の
+      最終ページ矩形を記録する
+    - _Requirements: 10.11_
+  - [ ] 16.7 Layoutレイヤー: 接続点(コネクションサイト)を解決する
     - `ConnectionSiteResolver.Resolve(rect, preset, siteIndex)`(既定は矩形の上下左右の
-      中点。`flowChartInputOutput`/`flowChartDocument`は実際の輪郭に合わせて補正)を実装し、
-      接続線(トップレベル・グループ内)を16.5のテーブル構築後にまとめて処理して
-      `ConnectorCommand.ResolvedStart`/`ResolvedEnd`を設定する。解決できない場合は
-      `null`のままにする(要件10.9の既定動作へのフォールバックはRenderingレイヤーの責務)
+      中点(`siteIndex % 4`で丸める)。`flowChartInputOutput`のみ左右の接続点を
+      16.5で移した共有定数を使って実際の輪郭に合わせて補正。`flowChartDocument`は
+      波形の谷の最深点が下辺中点と一致するため補正不要で既定のまま)を実装する。
+      `EmitDrawingObjects`の既存`foreach`が接続線(トップレベル・グループ内)に到達した
+      時点で16.6のテーブルを参照して解決し、`ConnectorCommand.ResolvedStart`/
+      `ResolvedEnd`を設定する。解決できない場合は`null`のままにする
+      (要件10.9の既定動作へのフォールバックはRenderingレイヤーの責務)
     - _Requirements: 10.11_
-  - [ ] 16.7 Renderingレイヤー: 接続線の描画で解決済み接続点を優先する
+  - [ ] 16.8 Renderingレイヤー: 接続線の描画で解決済み接続点を優先する
     - `ConnectorCommand.ResolvedStart`/`ResolvedEnd`が両方とも非nullの場合、
       `ConnectorGeometryBuilder.Build`がこの2点を始点・終点として使うよう拡張する
       (`Rect`/`FlipHorizontal`/`FlipVertical`は無視する)
     - _Requirements: 10.11_
-  - [ ] 16.8 サンプル帳票への配置とゴールデンテスト更新
+  - [ ] 16.9 サンプル帳票への配置とゴールデンテスト更新
     - `SpreadsheetBuilder`に、IDを指定して図形と接続線を関連付けるAPI(`SetShape`等が
       返す/受け取るID、または`stCxn`/`endCxn`を組み立てる`SetConnector`の拡張)を追加し、
       invoiceサンプルに接続点解決が効くケース(フローチャート記号同士を接続)を1つ配置する。
       CLIでPDFを生成し`pdftoppm`でラスタライズして目視確認したうえでゴールデンファイルを
       更新する
     - _Requirements: 10.11, 8.3_
-  - [ ] 16.9 Parsingレイヤーのユニットテストを追加する
-    - ID読み取り、`stCxn`/`endCxn`の読み取り(要素の有無両方)、星形プリセットごとの
-      既定内側半径比、雲形吹き出しの`adj1`/`adj2`読み取りを検証する
-    - _Requirements: 10.11, 10.12, 10.13_
-  - [ ] 16.10 Layoutレイヤーのユニットテストを追加する
+  - [ ] 16.10 Parsingレイヤーのユニットテストを追加する
+    - ID読み取り、`stCxn`/`endCxn`の読み取り(要素の有無両方)、雲形吹き出しの
+      `adj1`/`adj2`読み取りを検証する(星形の既定内側半径比の選択はRenderingレイヤーの
+      責務のため対象外。16.12で検証する)
+    - _Requirements: 10.11, 10.13_
+  - [ ] 16.11 Layoutレイヤーのユニットテストを追加する
     - 同一ページ内での接続点解決成功、参照先が異なるページにある場合のフォールバック、
-      グループ内要素を参照先とする解決、`flowChartInputOutput`/`flowChartDocument`の
-      補正、それ以外のプリセット・画像・グループでの4方向近似、参照先ID不在時の
-      フォールバックを検証する
+      グループ内要素を参照先とする解決、`flowChartInputOutput`の左右の接続点の補正、
+      `flowChartDocument`を含むそれ以外のプリセット・画像・グループでの4方向近似、
+      参照先ID不在時のフォールバックを検証する
     - _Requirements: 10.11_
-  - [ ] 16.11 Renderingレイヤーのユニットテストを追加する
+  - [ ] 16.12 Renderingレイヤーのユニットテストを追加する
     - `ConnectorGeometryBuilder.Build`が`ResolvedStart`/`ResolvedEnd`指定時にそれを
-      使うこと(`Rect`/フラグを無視すること)、星形の内側半径比がプリセットごとに
-      異なること、雲形吹き出しの引き出し位置が`adjustmentValues`に応じて変わることを検証する
+      使うこと(`Rect`/フラグを無視すること)、`DrawPage`側で解決済みの場合は
+      `ConnectorCommand.RotationDegrees`が非ゼロでも回転を適用しないこと、
+      星形の内側半径比がプリセットごとに異なること、雲形吹き出しの引き出し位置が
+      `adjustmentValues`に応じて変わることを検証する
     - _Requirements: 10.11, 10.12, 10.13_
-  - [ ] 16.12 レビュー対応
+  - [ ] 16.13 レビュー対応
     - `code-reviewer`/`layout-fidelity-reviewer`/`security-reviewer`の指摘に対応する
       (ID解決テーブルの構築コスト、接続点解決が改ページ・グループネストと絡む場合の
       エッジケースを重点的に確認する)

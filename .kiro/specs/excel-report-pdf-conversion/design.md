@@ -376,31 +376,53 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     (`ShapeModel.RotationDegrees`等)とは独立に合成される(Renderingレイヤーで
     `canvas`の回転変換を入れ子にすることで自然に合成できる)ためである。
     詳細はRenderingレイヤーの節を参照。
-  - **接続点(コネクションサイト)の解決(要件10.11)**: `Build(rows, columns)`は
-    画像・図形・グループ(接続線を除く)を処理する際、それぞれの`Id`
+  - **接続点(コネクションサイト)の解決(要件10.11)**: `EmitDrawingObjects`の出現順を保った
+    単一の`foreach`(既存構造)は変更せず、その**前**に軽量な予備パスを1回追加する。
+    この予備パス(`BuildConnectionTargetTable`)は`_sheet.DrawingObjects`を走査し、
+    接続線(`ConnectorModel`)を除く各要素について既存の`TryComputeDrawingObjectRect`/
+    `BuildGroupChildren`と同じ計算を行い、`Id`
     (トップレベルは`ImageModel`/`ShapeModel`/`GroupShapeModel`自身、グループ内は
     `GroupChildShape`/`GroupChildImage`/`GroupChildGroup`)をキーとする
     `Dictionary<uint, (RectPt Rect, ShapePresetType? Preset)>`(このページに限定した
-    解決テーブル。画像・グループ自身は`Preset = null`)を同時に組み立てる。グループ内
-    要素は`ToGroupChildRect`変換後の最終ページ矩形を記録する。
-    接続線(トップレベルの`ConnectorModel`、グループ内の`GroupChildConnector`)は、
-    このテーブルが完成した後に処理する(`StartConnection`/`EndConnection`が指す`Id`が
-    出現順で自分より後に描画される図形を参照している場合があるため、1回のループでは
-    解決できない)。`StartConnection`/`EndConnection`の`ShapeId`がテーブルに存在すれば、
-    `ConnectionSiteResolver.Resolve(rect, preset, siteIndex)`で実際の座標(`PointPt`)を
-    求め、`ConnectorCommand.ResolvedStart`/`ResolvedEnd`(`PointPt?`)に格納する。
-    存在しない場合(参照先がこのページに無い、IDが実在しない、`StartConnection`/
-    `EndConnection`が`null`)は`null`のままとし、Renderingレイヤーが要件10.9の
-    既定動作(アンカー矩形+反転)にフォールバックする。
+    解決テーブル。画像・グループ自身は`Preset = null`)を組み立てるだけで、
+    `DrawCommand`は生成しない(コマンド生成は本来の`foreach`が担当する)。
+    グループ内要素は`ToGroupChildRect`変換後の最終ページ矩形を記録する。
+    矩形計算をこの予備パスと本来の`foreach`の2回行うことになるが、単純な算術のみで
+    コストは無視できる。この設計により、出現順を保ったコマンド生成ロジック自体には
+    一切手を入れず(z-orderの保持は既存のとおり自明)、接続線が自分より後に出現する
+    図形を参照していても解決できる(予備パスの時点で全IDが判明済みのため)。
+    本来の`foreach`が接続線(トップレベルの`ConnectorModel`、グループ内の
+    `GroupChildConnector`)に到達した際、`StartConnection`/`EndConnection`の`ShapeId`が
+    このテーブルに存在すれば、`ConnectionSiteResolver.Resolve(rect, preset, siteIndex)`で
+    実際の座標(`PointPt`)を求め、`ConnectorCommand.ResolvedStart`/`ResolvedEnd`
+    (`PointPt?`)に格納する。存在しない場合(参照先がこのページに無い、IDが実在しない、
+    `StartConnection`/`EndConnection`が`null`)は`null`のままとし、Renderingレイヤーが
+    要件10.9の既定動作(アンカー矩形+反転)にフォールバックする。
     `ConnectionSiteResolver.Resolve`は既定では矩形の上下左右の中点
-    (`siteIndex % 4`。0=上,1=左,2=下,3=右。ECMA-376で`cxnLst`を持たない図形の既定の
-    接続点と同じ考え方)を返す。`preset`が`FlowChartInputOutput`の場合は上下の接続点を
-    平行四辺形の傾いた辺の中点(`ShapeGeometryBuilder`の`InputOutputSkewRatio`と同じ
-    比率で`x`座標を補正)、`FlowChartDocument`の場合は下の接続点を波形の谷の中心点
-    (同じく`DocumentWaveDepthRatio`と同じ比率で`y`座標を補正)にそれぞれ調整する。
-    それ以外のプリセット・画像・グループ(`preset = null`)は既定の4方向をそのまま使う。
+    (`siteIndex % 4`で0〜3の範囲に丸める。0=上,1=左,2=下,3=右。ECMA-376で`cxnLst`を
+    持たない図形の既定の接続点と同じ考え方)を返す。`preset`が`FlowChartInputOutput`
+    (平行四辺形)の場合のみ、左右の接続点(idx 1, 3)を実際の傾いた辺の中点
+    (`InputOutputSkewRatio`と同じ比率で`x`座標を、辺の傾きに応じて内側に補正)に
+    調整する(上下の接続点は上下の辺がもともと水平なため補正不要)。`FlowChartDocument`
+    (波形)は、波形の谷の最も深い点が設計上ちょうど配置矩形の下辺中点と一致するため、
+    補正は不要で既定の4方向をそのまま使う。それ以外のプリセット・画像・グループ
+    (`preset = null`)も既定の4方向をそのまま使う。
     この解決テーブルはページごとに作り直す(接続線と参照先が異なるページに分かれる場合は
     解決できない。改ページをまたぐ画像・図形の既存の割り切りと同じ理由)。
+    - **レイヤー依存の一方向ルールに関する注意(重要)**: `InputOutputSkewRatio`は、
+      これまで`Utsushi.Rendering`の`ShapeGeometryBuilder`にのみ存在する`private`定数
+      だった(`flowChartInputOutput`の実際の描画パス生成に使う)。`ConnectionSiteResolver`
+      はLayoutレイヤーに置くため、Rendering内部の定数をそのまま参照することはできない
+      (`Utsushi.Rendering`は`Utsushi.Layout`に依存する向きであり、逆方向の参照は
+      循環参照になりビルドできない。`.kiro/steering/structure.md`のレイヤー依存の
+      一方向ルールにも反する。code-reviewer相当の指摘により設計時に発見)。そのため、
+      この定数を`Utsushi.Parsing.Model`(`ShapePresetType`と同じ場所。LayoutもRendering
+      も既にこのレイヤーに依存しているため、双方から参照できる)の
+      `ShapeGeometryConstants`という新しい`public static class`へ移動し、
+      `ShapeGeometryBuilder`側は移動後の定数をそのまま使うよう参照を書き換える
+      (値・意味は変えない。定数の置き場所を変えるだけ)。`DocumentWaveDepthRatio`
+      (`flowChartDocument`の波形の深さ比率)はLayoutレイヤーから参照する必要が無い
+      ため、`ShapeGeometryBuilder`の`private`定数のまま変更しない。
 - **主なインターフェース**:
   ```csharp
   public interface IReportLayoutEngine
@@ -478,14 +500,19 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       当たり直しはできていない。頂点の回転オフセットは`star4`/`star5`/`star6`/`star8`
       いずれも最初の外側の頂点を真上(-90度)に置く同一の規則を使う(単一の調整ガイドで
       頂点を交互に結ぶ一般的な星形の描画方式は全プリセット共通であるため、既存の実装
-      (`StarPath`)のとおりで変更不要。旧設計メモにあった「star5/star6は異なる既定角度」
-      という記載は誤りだったため削除する)。
+      (`StarPath`)のとおりで変更不要。プリセットごとに異なる既定角度を使う根拠は
+      ECMA-376上に見当たらない)。
     - `flowChartProcess`(処理): `rect`と同じ矩形。
     - `flowChartDecision`(判断): 矩形の上下左右の中点を結んだ菱形。
     - `flowChartTerminator`(端子): 左右端を半円にした「スタジアム」形状
       (`roundRect`の角丸半径を`高さ/2`に固定した特殊形として実装できる)。
-    - `flowChartInputOutput`(入出力): 上下の辺を左右にずらした平行四辺形。
-    - `flowChartDocument`(書類): 矩形の下辺を波形(1つの緩やかな凹み)にした形状。
+    - `flowChartInputOutput`(入出力): 上下の辺を左右にずらした平行四辺形。ずらし幅の比率
+      (`InputOutputSkewRatio`)は要件10.11の接続点解決(Layoutレイヤー、左右の接続点の
+      補正)とも共有するため、`Utsushi.Parsing.Model.ShapeGeometryConstants`に定義する
+      (下記「レイヤー依存の一方向ルールに関する注意」参照)。
+    - `flowChartDocument`(書類): 矩形の下辺を波形(1つの緩やかな凹み)にした形状。波形の
+      深さの比率(`DocumentWaveDepthRatio`)はLayoutレイヤーと共有する必要が無いため、
+      `Utsushi.Rendering`内部の`private`定数のまま変更しない。
     - `flowChartPredefinedProcess`(定義済み処理): `rect`に加え、左右の辺の内側に
       それぞれ縦線を1本ずつ追加する。
     - `flowChartConnector`(結合子): `ellipse`と同じ楕円(正円になるようExcel側で
@@ -537,7 +564,11 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   - `curvedConnector3`: `bentConnector3`の折れ点を通る2本のベジェ曲線によるS字カーブ。
   - `Outline`があれば`SKPaintStyle.Stroke`で描画する(`null`の場合、Excel上は既定の
     黒い実線1ptで表示されるため、`Outline`が無い接続線にも既定の線色・太さを補う)。
-    回転(`RotationDegrees`)がある場合は図形と同じ`Save`/`RotateDegrees`/`Restore`を使う。
+    `ResolvedStart`/`ResolvedEnd`が両方とも`null`(未解決、`Rect`基準の経路)の場合のみ、
+    回転(`RotationDegrees`)があれば図形と同じ`Save`/`RotateDegrees`/`Restore`を使う。
+    解決済みの場合は絶対座標の両端点をそのまま結んだ経路が最終的な見た目であり、
+    `Rect`中心を軸にした追加の回転はかえって位置をずらすため適用しない
+    (下記「未決事項」参照)。
 - **グループの描画(要件10.10)**: `GroupCommand`ごとに、`canvas.Save()` →
   `canvas.RotateDegrees(RotationDegrees, Center.X, Center.Y)` → `Children`の各
   `DrawCommand`を(`FillRectCommand`等を除く、`ShapeCommand`/`ImageCommand`/
@@ -635,6 +666,16 @@ public enum ShapePresetType
     FlowChartProcess, FlowChartDecision, FlowChartTerminator, // 追加(拡張フェーズ)
     FlowChartInputOutput, FlowChartDocument,                  // 追加(拡張フェーズ)
     FlowChartPredefinedProcess, FlowChartConnector,           // 追加(拡張フェーズ)
+}
+
+// Layout(接続点解決、左右の接続点の補正)・Rendering(実際の描画)の両方が使う比率定数。
+// Utsushi.RenderingはUtsushi.Layoutに依存する向きのため、逆方向の参照を避けるべく
+// 双方が依存するUtsushi.Parsing.Modelに置く(要件10.11、レイヤー依存の一方向ルール)。
+// DocumentWaveDepthRatio(flowChartDocumentの波形の深さ比率)はLayoutから参照する
+// 必要が無いため、ここへは移動せずUtsushi.Rendering内部のprivate定数のまま残す。
+public static class ShapeGeometryConstants
+{
+    public const double InputOutputSkewRatio = 0.2; // flowChartInputOutputの上下辺のずらし幅比率
 }
 
 public abstract record ShapeFill;
@@ -890,16 +931,26 @@ public sealed record GroupCommand(
 - **接続線の接続点(コネクションサイト)解決の残存する限界**(要件10.11): 要件10.11で
   `stCxn`/`endCxn`の解決に対応したが、以下の点は引き続き限界として残る。
   - 接続点の位置は、既定では配置矩形の上下左右の中点(4方向)で近似する。
-    `flowChartInputOutput`/`flowChartDocument`のみ実際の輪郭に合わせて補正するが、
+    `flowChartInputOutput`の左右の接続点のみ実際の輪郭に合わせて補正するが、
     それ以外のプリセット(星形・矢印・吹き出し・三角形等)・画像・グループは4方向の
     近似のままであり、実際にExcel上で図形の辺・頂点以外の位置に接続点を作っている場合
     (例: 矢印の先端、星形の頂点)は見た目がずれる。
   - 接続先が接続線と異なるページに配置される場合(改ページで分割された場合)は解決せず、
     要件10.9の既定動作にフォールバックする。
-  - 接続点の位置(4方向の近似、`flowChartInputOutput`/`flowChartDocument`の補正)は
+  - 接続点の位置(4方向の近似、`flowChartInputOutput`の左右の接続点の補正)は
     ECMA-376の一次資料(`presetShapeDefinitions.xml`)への当たり直しができておらず、
     実装時にPDFをラスタライズして目視確認した推定値である。対象帳票で実際に見た目が
     ずれる場合に改めて検証する。
+  - 接続点解決テーブル(`BuildConnectionTargetTable`)は参照先図形の回転前の
+    `RectPt`のみを保持する。参照先図形自身、またはそれを含むグループが回転している
+    場合、実際に見えている(回転後の)辺の位置と計算上の接続点はずれる。回転した図形を
+    接続先にする帳票が実際に出てきた場合に改めて対応を検討する。
+  - 接続線自身が`RotationDegrees`を持ち、かつ両端点が解決済み(`ResolvedStart`/
+    `ResolvedEnd`が共に非`null`)の場合、`ConnectorGeometryBuilder`は解決済みの
+    絶対座標をそのまま線分の両端として使い、接続線自身の回転は適用しない
+    (回転前提だった`Rect`基準の中心点が、絶対座標で指定された両端点に対しては
+    意味を持たなくなるため)。この場合に`RotationDegrees`が非ゼロの`.xlsx`が
+    実際に存在するかは未確認であり、対象帳票で問題になった場合に改めて検証する。
 - **グループの回転と子要素の回転の合成の精度**(要件10.10): `GroupCommand`による
   `canvas`変換の入れ子でグループの回転・子要素個別の回転を合成する設計は、単体の
   目視確認では正しく動作することを確認したが、「グループ自身が回転しており、かつ
