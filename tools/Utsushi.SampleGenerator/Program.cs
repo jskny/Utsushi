@@ -91,6 +91,59 @@ internal static class Program
             preset: A.ShapeTypeValues.WedgeRoundRectangleCallout,
             fillHex: "FFFFFF", outlineHex: "000000", text: "ご確認ください");
 
+        // 拡張図形対応(接続線・グループ・追加プリセット・多段階グラデーション)の見本行。
+        // row 6はセル内容を持たない専用の余白行(件名行と合計金額行の間)であり、
+        // row 9の図形群とは重ならない。すべて列Aを起点にoffsetXPtで横に並べる
+        // (描画オブジェクトは列幅から独立して浮動配置されるため、絶対座標的に配置できる)。
+        builder.SetRowHeight(6, 34.0);
+
+        builder.SetGradientShape(
+            row: 6, column: 1, offsetXPt: 0.0, offsetYPt: 2.0, widthPt: 42.0, heightPt: 28.0,
+            preset: A.ShapeTypeValues.Star6,
+            gradientStops: new (double, string)[] { (0.0, "FFF3B0"), (0.5, "FFC300"), (1.0, "C77800") },
+            angleDegrees: 45.0);
+
+        builder.SetGradientShape(
+            row: 6, column: 1, offsetXPt: 55.0, offsetYPt: 2.0, widthPt: 60.0, heightPt: 28.0,
+            preset: A.ShapeTypeValues.FlowChartTerminator,
+            gradientStops: new (double, string)[] { (0.0, "E0F7FA"), (1.0, "0288D1") },
+            radial: true, outlineHex: "01579B");
+
+        builder.SetConnector(
+            row: 6, column: 1, offsetXPt: 130.0, offsetYPt: 4.0, widthPt: 46.0, heightPt: 24.0,
+            preset: A.ShapeTypeValues.BentConnector3, outlineHex: "444444");
+
+        // グループ: 承認印風に、楕円で角丸矩形+テキストの図形を丸で囲うだけの単純な2要素グループ。
+        // 子座標空間はグループ自身の表示サイズと同じ(倍率1.0)。
+        builder.SetGroup(
+            row: 6, column: 1, offsetXPt: 190.0, offsetYPt: 0.0, widthPt: 65.0, heightPt: 34.0,
+            rotationDegrees: -8.0,
+            children: new[]
+            {
+                new SpreadsheetBuilder.GroupChildShapeSpec(
+                    offsetXPt: 0.0, offsetYPt: 0.0, widthPt: 65.0, heightPt: 34.0,
+                    preset: A.ShapeTypeValues.Ellipse, fillHex: null, outlineHex: "C00000"),
+                new SpreadsheetBuilder.GroupChildShapeSpec(
+                    offsetXPt: 12.0, offsetYPt: 9.0, widthPt: 41.0, heightPt: 16.0,
+                    preset: A.ShapeTypeValues.Rectangle, fillHex: null, outlineHex: "C00000"),
+            });
+
+        // 接続点(コネクションサイト)解決の見本(要件10.11)。flowChartInputOutput(平行四辺形)は
+        // 左右の接続点が既定の4方向近似(矩形の左端/右端)からずれるプリセットのため、
+        // その補正が効くケースをゴールデンテストで確認する。承認印グループのさらに右に配置する。
+        var inputOutputA = builder.SetShape(
+            row: 6, column: 1, offsetXPt: 270.0, offsetYPt: 0.0, widthPt: 60.0, heightPt: 30.0,
+            preset: A.ShapeTypeValues.FlowChartInputOutput,
+            fillHex: "FFFFFF", outlineHex: "444444");
+        var inputOutputB = builder.SetShape(
+            row: 6, column: 1, offsetXPt: 360.0, offsetYPt: 0.0, widthPt: 60.0, heightPt: 30.0,
+            preset: A.ShapeTypeValues.FlowChartInputOutput,
+            fillHex: "FFFFFF", outlineHex: "444444");
+        builder.SetConnector(
+            row: 6, column: 1, offsetXPt: 330.0, offsetYPt: 0.0, widthPt: 30.0, heightPt: 30.0,
+            preset: A.ShapeTypeValues.StraightConnector1, outlineHex: "444444",
+            startShapeHandle: inputOutputA, startSiteIndex: 3, endShapeHandle: inputOutputB, endSiteIndex: 1);
+
         // 宛先・発行情報
         builder.Merge("A3:C3");
         builder.SetText(3, 1, "株式会社サンプル商事 御中", Style.CustomerName);

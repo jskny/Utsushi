@@ -402,6 +402,33 @@ namespace Utsushi.Parsing.OpenXml
             [Dr.ShapeTypeValues.WedgeRectangleCallout] = ShapePresetType.WedgeRectCallout,
             [Dr.ShapeTypeValues.WedgeRoundRectangleCallout] = ShapePresetType.WedgeRoundRectCallout,
             [Dr.ShapeTypeValues.WedgeEllipseCallout] = ShapePresetType.WedgeEllipseCallout,
+            [Dr.ShapeTypeValues.CloudCallout] = ShapePresetType.CloudCallout,
+            [Dr.ShapeTypeValues.Callout1] = ShapePresetType.Callout1,
+            [Dr.ShapeTypeValues.Callout2] = ShapePresetType.Callout2,
+            [Dr.ShapeTypeValues.Callout3] = ShapePresetType.Callout3,
+            [Dr.ShapeTypeValues.Star4] = ShapePresetType.Star4,
+            [Dr.ShapeTypeValues.Star5] = ShapePresetType.Star5,
+            [Dr.ShapeTypeValues.Star6] = ShapePresetType.Star6,
+            [Dr.ShapeTypeValues.Star8] = ShapePresetType.Star8,
+            [Dr.ShapeTypeValues.FlowChartProcess] = ShapePresetType.FlowChartProcess,
+            [Dr.ShapeTypeValues.FlowChartDecision] = ShapePresetType.FlowChartDecision,
+            [Dr.ShapeTypeValues.FlowChartTerminator] = ShapePresetType.FlowChartTerminator,
+            [Dr.ShapeTypeValues.FlowChartInputOutput] = ShapePresetType.FlowChartInputOutput,
+            [Dr.ShapeTypeValues.FlowChartDocument] = ShapePresetType.FlowChartDocument,
+            [Dr.ShapeTypeValues.FlowChartPredefinedProcess] = ShapePresetType.FlowChartPredefinedProcess,
+            [Dr.ShapeTypeValues.FlowChartConnector] = ShapePresetType.FlowChartConnector,
+        };
+
+        /// <summary>
+        /// 対応済み接続線(<c>xdr:cxnSp</c>)プリセット一覧(要件10.9)。同じくキュレーション方式。
+        /// </summary>
+        private static readonly Dictionary<Dr.ShapeTypeValues, ConnectorPresetType> SupportedConnectorPresets = new()
+        {
+            [Dr.ShapeTypeValues.StraightConnector1] = ConnectorPresetType.Straight,
+            [Dr.ShapeTypeValues.BentConnector2] = ConnectorPresetType.Bent2Segment,
+            [Dr.ShapeTypeValues.BentConnector3] = ConnectorPresetType.Bent3Segment,
+            [Dr.ShapeTypeValues.CurvedConnector2] = ConnectorPresetType.Curved2Segment,
+            [Dr.ShapeTypeValues.CurvedConnector3] = ConnectorPresetType.Curved3Segment,
         };
 
         /// <summary>
@@ -424,11 +451,32 @@ namespace Utsushi.Parsing.OpenXml
             [ShapePresetType.WedgeRectCallout] = new[] { "adj1", "adj2" },
             [ShapePresetType.WedgeRoundRectCallout] = new[] { "adj1", "adj2" },
             [ShapePresetType.WedgeEllipseCallout] = new[] { "adj1", "adj2" },
+            // cloudCallout本体の輪郭(バンプの個数・半径)は固定形状として近似描画するが、
+            // 引き出し三角形の位置(adj1=X方向, adj2=Y方向)はwedgeRectCallout等と同じ意味の
+            // 調整ガイドのため読み取る(要件10.13)。callout1-3は固定形状のまま。
+            [ShapePresetType.CloudCallout] = new[] { "adj1", "adj2" },
+            [ShapePresetType.Callout1] = Array.Empty<string>(),
+            [ShapePresetType.Callout2] = Array.Empty<string>(),
+            [ShapePresetType.Callout3] = Array.Empty<string>(),
+            // star4/5/6/8はECMA-376既定で単一の調整ガイド"adj"(内側頂点の半径比)を持つ。
+            [ShapePresetType.Star4] = new[] { "adj" },
+            [ShapePresetType.Star5] = new[] { "adj" },
+            [ShapePresetType.Star6] = new[] { "adj" },
+            [ShapePresetType.Star8] = new[] { "adj" },
+            // フローチャート記号は本プロダクトでは固定比率の形状として描画し、調整ガイド値は読み取らない(design.md参照)。
+            [ShapePresetType.FlowChartProcess] = Array.Empty<string>(),
+            [ShapePresetType.FlowChartDecision] = Array.Empty<string>(),
+            [ShapePresetType.FlowChartTerminator] = Array.Empty<string>(),
+            [ShapePresetType.FlowChartInputOutput] = Array.Empty<string>(),
+            [ShapePresetType.FlowChartDocument] = Array.Empty<string>(),
+            [ShapePresetType.FlowChartPredefinedProcess] = Array.Empty<string>(),
+            [ShapePresetType.FlowChartConnector] = Array.Empty<string>(),
         };
 
         /// <summary>
-        /// 1シートに含める図形アンカーの数の上限。画像の上限(<see cref="MaxImagesPerSheet"/>)とは
-        /// 独立にカウントする(security-reviewer指摘と同じ考え方。要件10.8)。
+        /// 1シートに含める図形・接続線・グループの合計数(グループ内の子孫を含む)の上限。
+        /// 画像の上限(<see cref="MaxImagesPerSheet"/>)とは独立にカウントする
+        /// (security-reviewer指摘と同じ考え方。要件10.8)。
         /// </summary>
         internal const int MaxShapesPerSheet = 50;
 
@@ -439,15 +487,31 @@ namespace Utsushi.Parsing.OpenXml
         private const int MaxShapeTextLength = 2000;
 
         /// <summary>
-        /// シートに埋め込まれた画像(<c>xdr:pic</c>)・図形(<c>xdr:sp</c>)を読み取る(要件9, 10)。
+        /// グループ(<c>xdr:grpSp</c>)のネスト段数の上限。極端に深いネストによる再帰処理の
+        /// 計算量を避けるための安全弁(要件10.8)。トップレベルのグループ自身を1段目とする。
+        /// </summary>
+        internal const int MaxShapeNestingDepth = 5;
+
+        /// <summary>
+        /// 1つの塗りつぶし(<c>a:gsLst</c>)に含める、グラデーションストップ(<c>a:gs</c>)の
+        /// 個数の上限。Excel UI自体が通常扱う範囲(数個〜十数個)を大きく超える値とし、
+        /// 実用上の妨げにはならない範囲で、大量の<c>a:gs</c>要素を仕込んだ入力による
+        /// メモリ・CPU消費を抑える(要件10.8。security-reviewer指摘)。
+        /// </summary>
+        private const int MaxGradientStopsPerFill = 64;
+
+        /// <summary>
+        /// シートに埋め込まれた画像(<c>xdr:pic</c>)・図形(<c>xdr:sp</c>)・接続線(<c>xdr:cxnSp</c>)・
+        /// グループ(<c>xdr:grpSp</c>)を読み取る(要件9, 10)。
         /// </summary>
         /// <remarks>
-        /// <c>drawing.xml</c> のアンカーを出現順に1回だけ列挙し、画像・図形が混在する場合の
-        /// 重なり順(z-order。要件10.3)を保った1つのリストを返す。画像・図形以外の描画
-        /// オブジェクト(グループ・接続線・グラフ等)は対象外とし、<see cref="DetectUnsupportedElements"/>
-        /// 側で引き続き「サポート外要素」として扱う(要件9.5, 10.7)。画像・対応済みプリセットの
-        /// 図形は帳票定義の <c>unsupportedElements</c> 設定によらず常に読み取り対象とするが、
-        /// デコード不能な画像形式・非対応プリセット・上限を超える枚数/サイズ/文字数だけは
+        /// <c>drawing.xml</c> のアンカーを出現順に1回だけ列挙し、これらが混在する場合の
+        /// 重なり順(z-order。要件10.3)を保った1つのリストを返す。これら4種以外の描画
+        /// オブジェクト(図表枠`xdr:graphicFrame`・グラフ等)は対象外とし、
+        /// <see cref="DetectUnsupportedElements"/>側で引き続き「サポート外要素」として扱う
+        /// (要件9.5, 10.7)。画像・対応済みプリセットの図形/接続線、グループは帳票定義の
+        /// <c>unsupportedElements</c> 設定によらず常に読み取り対象とするが、デコード不能な
+        /// 画像形式・非対応プリセット・上限を超える枚数/サイズ/文字数/ネスト段数だけは
         /// 同じ設定に従う(要件9.4, 9.6, 10.7, 10.8)。
         /// </remarks>
         private static List<DrawingObjectModel> ReadDrawingObjects(
@@ -511,6 +575,43 @@ namespace Utsushi.Parsing.OpenXml
                     {
                         result.Add(shapeModel);
                     }
+
+                    continue;
+                }
+
+                var connector = anchor switch
+                {
+                    Xdr.TwoCellAnchor two => two.GetFirstChild<Xdr.ConnectionShape>(),
+                    Xdr.OneCellAnchor one => one.GetFirstChild<Xdr.ConnectionShape>(),
+                    _ => null,
+                };
+
+                if (connector is not null)
+                {
+                    var connectorModel = ReadConnector(sheetName, anchor, connector, anchorCell, anchorOffset, options, ref shapeCount);
+                    if (connectorModel is not null)
+                    {
+                        result.Add(connectorModel);
+                    }
+
+                    continue;
+                }
+
+                var group = anchor switch
+                {
+                    Xdr.TwoCellAnchor two => two.GetFirstChild<Xdr.GroupShape>(),
+                    Xdr.OneCellAnchor one => one.GetFirstChild<Xdr.GroupShape>(),
+                    _ => null,
+                };
+
+                if (group is not null)
+                {
+                    var groupModel = ReadGroupShape(
+                        sheetName, drawingsPart, anchor, group, anchorCell, anchorOffset, options, ref shapeCount, ref imageCount);
+                    if (groupModel is not null)
+                    {
+                        result.Add(groupModel);
+                    }
                 }
             }
 
@@ -558,10 +659,47 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
+            // ReadAnchorExtentより先に検証する。壊れたアンカー(ReadAnchorExtentの失敗)は
+            // モードによらず常に無言でスキップするため、先に判定すると不正な画像形式/
+            // サイズ超過/シグネチャ不一致がErrorモードでも例外化されずに握りつぶされてしまう
+            // (code-reviewer指摘。リファクタ前の検証順序を維持する)。
+            if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType))
+            {
+                return null;
+            }
+
+            var extent = ReadAnchorExtent(anchor);
+            if (extent is null)
+            {
+                return null;
+            }
+
+            var id = ReadShapeId(picture.NonVisualPictureProperties?.NonVisualDrawingProperties);
+
+            imageCount++;
+            return new ImageModel(id, data, contentType, anchorCell, anchorOffset, extent);
+        }
+
+        /// <summary>
+        /// <c>xdr:pic</c>(トップレベル・グループ内共通)から画像バイナリを読み取り、
+        /// content-type許可リスト・サイズ上限・シグネチャの検証を行う(要件9.4, 9.6)。
+        /// 検証に失敗した場合、Errorモードなら例外を送出し、Ignoreモードなら<c>false</c>を返す。
+        /// </summary>
+        private static bool TryReadValidatedImage(
+            string sheetName,
+            DrawingsPart drawingsPart,
+            Xdr.Picture picture,
+            WorkbookReadOptions options,
+            out byte[] data,
+            out string contentType)
+        {
+            data = Array.Empty<byte>();
+            contentType = string.Empty;
+
             var embedId = picture.BlipFill?.Blip?.Embed?.Value;
             if (string.IsNullOrEmpty(embedId) || drawingsPart.GetPartById(embedId!) is not ImagePart imagePart)
             {
-                return null;
+                return false;
             }
 
             if (!SupportedImageContentTypes.Contains(imagePart.ContentType))
@@ -576,16 +714,9 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
-                return null;
+                return false;
             }
 
-            var extent = ReadAnchorExtent(anchor);
-            if (extent is null)
-            {
-                return null;
-            }
-
-            byte[] data;
             using (var stream = imagePart.GetStream())
             {
                 if (!TryReadBounded(stream, MaxImageDataBytes, out data))
@@ -600,7 +731,7 @@ namespace Utsushi.Parsing.OpenXml
                             sheetName);
                     }
 
-                    return null;
+                    return false;
                 }
             }
 
@@ -620,11 +751,11 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
-                return null;
+                return false;
             }
 
-            imageCount++;
-            return new ImageModel(data, imagePart.ContentType, anchorCell, anchorOffset, extent);
+            contentType = imagePart.ContentType;
+            return true;
         }
 
         /// <summary>1つの<c>xdr:sp</c>アンカーを<see cref="ShapeModel"/>として読み取る(要件10)。</summary>
@@ -642,7 +773,7 @@ namespace Utsushi.Parsing.OpenXml
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
                 {
                     throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形の数が上限({MaxShapesPerSheet}個)を超えています。"
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
                         + "帳票定義の unsupportedElements が 'error' のため中止します。",
                         "TooManyShapes",
                         options.ReportCode,
@@ -700,9 +831,506 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
+            var id = ReadShapeId(shape.NonVisualShapeProperties?.NonVisualDrawingProperties);
+
             shapeCount++;
-            return new ShapeModel(preset, adjustmentValues, rotationDegrees, fill, outline, text, anchorCell, anchorOffset, extent);
+            return new ShapeModel(id, preset, adjustmentValues, rotationDegrees, fill, outline, text, anchorCell, anchorOffset, extent);
         }
+
+        /// <summary>1つの<c>xdr:cxnSp</c>アンカーを<see cref="ConnectorModel"/>として読み取る(要件10.9)。</summary>
+        private static ConnectorModel? ReadConnector(
+            string sheetName,
+            OpenXmlElement anchor,
+            Xdr.ConnectionShape connector,
+            CellAddress anchorCell,
+            PointPt anchorOffset,
+            WorkbookReadOptions options,
+            ref int shapeCount)
+        {
+            if (shapeCount >= MaxShapesPerSheet)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "TooManyShapes",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var shapeProperties = connector.ShapeProperties;
+            var presetGeometry = shapeProperties?.GetFirstChild<Dr.PresetGeometry>();
+            var presetValue = presetGeometry?.Preset?.Value;
+
+            if (presetValue is null || !SupportedConnectorPresets.TryGetValue(presetValue.Value, out var preset))
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    var presetDescription = presetValue is null ? "(prstGeomなし/custGeom)" : presetValue.Value.ToString();
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の接続線のプリセットジオメトリ '{presetDescription}' には対応していません。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "UnsupportedShapePreset",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var extent = ReadAnchorExtent(anchor);
+            if (extent is null)
+            {
+                return null;
+            }
+
+            var transform = shapeProperties?.Transform2D;
+            var rotationDegrees = (transform?.Rotation?.Value ?? 0) / 60000.0;
+            var flipHorizontal = transform?.HorizontalFlip?.Value ?? false;
+            var flipVertical = transform?.VerticalFlip?.Value ?? false;
+            var outline = ReadShapeOutline(shapeProperties);
+
+            var connectorShapeDrawingProperties =
+                connector.NonVisualConnectionShapeProperties?.NonVisualConnectorShapeDrawingProperties;
+            var startConnection = ReadConnectionRef(connectorShapeDrawingProperties?.StartConnection);
+            var endConnection = ReadConnectionRef(connectorShapeDrawingProperties?.EndConnection);
+
+            shapeCount++;
+            return new ConnectorModel(
+                preset, rotationDegrees, flipHorizontal, flipVertical, outline,
+                startConnection, endConnection, anchorCell, anchorOffset, extent);
+        }
+
+        /// <summary>1つの<c>xdr:grpSp</c>アンカーを<see cref="GroupShapeModel"/>として読み取る(要件10.10)。</summary>
+        private static GroupShapeModel? ReadGroupShape(
+            string sheetName,
+            DrawingsPart drawingsPart,
+            OpenXmlElement anchor,
+            Xdr.GroupShape group,
+            CellAddress anchorCell,
+            PointPt anchorOffset,
+            WorkbookReadOptions options,
+            ref int shapeCount,
+            ref int imageCount)
+        {
+            if (shapeCount >= MaxShapesPerSheet)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "TooManyShapes",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var extent = ReadAnchorExtent(anchor);
+            if (extent is null)
+            {
+                return null;
+            }
+
+            var transformGroup = group.GroupShapeProperties?.TransformGroup;
+            var childOffset = ReadChildOffset(transformGroup?.ChildOffset);
+            var childExtent = ReadChildExtent(transformGroup?.ChildExtents);
+            if (childOffset is null || childExtent is null)
+            {
+                return null;
+            }
+
+            var rotationDegrees = (transformGroup?.Rotation?.Value ?? 0) / 60000.0;
+
+            var children = ReadGroupChildren(sheetName, drawingsPart, group, options, ref shapeCount, ref imageCount, currentGroupDepth: 1);
+            if (children is null)
+            {
+                // Ignoreモードで内部に非対応要素があった場合。グループの一部だけを描画すると
+                // 意図しない見た目になるため、グループ全体を破棄する(要件10.10)。
+                return null;
+            }
+
+            // 子孫の読み取りでshapeCountが増加しているため、グループ自身を1件として
+            // 数える前に改めて上限を確認する(code-reviewer指摘。子孫読み取り前のチェックだけでは
+            // グループ自身の分の加算で上限をわずかに超過しうる)。
+            if (shapeCount >= MaxShapesPerSheet)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "TooManyShapes",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var id = ReadShapeId(group.NonVisualGroupShapeProperties?.NonVisualDrawingProperties);
+
+            shapeCount++;
+            return new GroupShapeModel(
+                id, childOffset.Value, childExtent.Value, children, rotationDegrees, anchorCell, anchorOffset, extent);
+        }
+
+        /// <summary>
+        /// グループ(<see cref="Xdr.GroupShape"/>)直下の子要素(<c>xdr:sp</c>/<c>xdr:pic</c>/
+        /// <c>xdr:cxnSp</c>/入れ子の<c>xdr:grpSp</c>)を出現順に<see cref="GroupChildModel"/>へ
+        /// 変換する(要件10.10)。子孫のいずれか1つでも非対応(非対応プリセット・非対応の
+        /// 描画オブジェクト種別・上限超過・ネスト過多)であれば、Errorモードは即座に例外を送出し、
+        /// Ignoreモードは<c>null</c>を返してグループ全体を呼び出し元に破棄させる。
+        /// </summary>
+        private static IReadOnlyList<GroupChildModel>? ReadGroupChildren(
+            string sheetName,
+            DrawingsPart drawingsPart,
+            Xdr.GroupShape group,
+            WorkbookReadOptions options,
+            ref int shapeCount,
+            ref int imageCount,
+            int currentGroupDepth)
+        {
+            var children = new List<GroupChildModel>();
+
+            foreach (var element in group.ChildElements)
+            {
+                if (element is Xdr.NonVisualGroupShapeProperties or Xdr.GroupShapeProperties)
+                {
+                    // グループ自身のメタデータ(グループ全体の変形情報等)であり、描画対象の
+                    // 子要素ではないため走査対象外とする。
+                    continue;
+                }
+
+                var isSupportedChildType = element is Xdr.Shape or Xdr.Picture or Xdr.ConnectionShape or Xdr.GroupShape;
+                GroupChildModel? child = element switch
+                {
+                    Xdr.Shape shape => ReadGroupChildShape(sheetName, shape, options, ref shapeCount),
+                    Xdr.Picture picture => ReadGroupChildImage(sheetName, drawingsPart, picture, options, ref imageCount),
+                    Xdr.ConnectionShape connector => ReadGroupChildConnector(sheetName, connector, options, ref shapeCount),
+                    Xdr.GroupShape nestedGroup => ReadGroupChildGroup(
+                        sheetName, drawingsPart, nestedGroup, options, ref shapeCount, ref imageCount, currentGroupDepth + 1),
+                    _ => null,
+                };
+
+                if (child is null)
+                {
+                    if (!isSupportedChildType && options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                    {
+                        throw new UnsupportedWorkbookElementException(
+                            $"シート '{sheetName}' のグループ内に非対応の描画オブジェクト(図表枠等)が含まれています。"
+                            + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                            "UnsupportedShapePreset",
+                            options.ReportCode,
+                            sheetName);
+                    }
+
+                    // 個別の子要素側でErrorモードならすでに例外を送出済み。ここに到達するのは
+                    // Ignoreモードでの非対応(非対応の型/プリセット/上限超過等)であり、グループ全体を破棄する。
+                    return null;
+                }
+
+                children.Add(child);
+            }
+
+            return children;
+        }
+
+        /// <summary>グループ内の<c>xdr:sp</c>子要素を<see cref="GroupChildShape"/>として読み取る(要件10.10)。</summary>
+        private static GroupChildShape? ReadGroupChildShape(
+            string sheetName, Xdr.Shape shape, WorkbookReadOptions options, ref int shapeCount)
+        {
+            if (shapeCount >= MaxShapesPerSheet)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "TooManyShapes",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var shapeProperties = shape.ShapeProperties;
+            var presetGeometry = shapeProperties?.GetFirstChild<Dr.PresetGeometry>();
+            var presetValue = presetGeometry?.Preset?.Value;
+
+            if (presetValue is null || !SupportedShapePresets.TryGetValue(presetValue.Value, out var preset))
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    var presetDescription = presetValue is null ? "(prstGeomなし/custGeom)" : presetValue.Value.ToString();
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' のグループ内図形のプリセットジオメトリ '{presetDescription}' には対応していません。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "UnsupportedShapePreset",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var localRect = ReadLocalRect(shapeProperties?.Transform2D);
+            if (localRect is null)
+            {
+                return null;
+            }
+
+            var adjustmentValues = ReadShapeAdjustmentValues(preset, presetGeometry);
+            var rotationDegrees = (shapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
+            var fill = ReadShapeFill(shapeProperties);
+            var outline = ReadShapeOutline(shapeProperties);
+            var text = ReadShapeText(shape.TextBody, out var textTooLong);
+
+            if (textTooLong)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' のグループ内図形のテキストが上限({MaxShapeTextLength}文字)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "ShapeTextTooLong",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var id = ReadShapeId(shape.NonVisualShapeProperties?.NonVisualDrawingProperties);
+
+            shapeCount++;
+            return new GroupChildShape(id, localRect.Value, preset, adjustmentValues, rotationDegrees, fill, outline, text);
+        }
+
+        /// <summary>グループ内の<c>xdr:pic</c>子要素を<see cref="GroupChildImage"/>として読み取る(要件10.10)。</summary>
+        private static GroupChildImage? ReadGroupChildImage(
+            string sheetName, DrawingsPart drawingsPart, Xdr.Picture picture, WorkbookReadOptions options, ref int imageCount)
+        {
+            if (imageCount >= MaxImagesPerSheet)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の画像の数が上限({MaxImagesPerSheet}枚)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "TooManyImages",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType))
+            {
+                return null;
+            }
+
+            var localRect = ReadLocalRect(picture.ShapeProperties?.Transform2D);
+            if (localRect is null)
+            {
+                return null;
+            }
+
+            var id = ReadShapeId(picture.NonVisualPictureProperties?.NonVisualDrawingProperties);
+
+            imageCount++;
+            return new GroupChildImage(id, localRect.Value, data, contentType);
+        }
+
+        /// <summary>グループ内の<c>xdr:cxnSp</c>子要素を<see cref="GroupChildConnector"/>として読み取る(要件10.10)。</summary>
+        private static GroupChildConnector? ReadGroupChildConnector(
+            string sheetName, Xdr.ConnectionShape connector, WorkbookReadOptions options, ref int shapeCount)
+        {
+            if (shapeCount >= MaxShapesPerSheet)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "TooManyShapes",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var shapeProperties = connector.ShapeProperties;
+            var presetGeometry = shapeProperties?.GetFirstChild<Dr.PresetGeometry>();
+            var presetValue = presetGeometry?.Preset?.Value;
+
+            if (presetValue is null || !SupportedConnectorPresets.TryGetValue(presetValue.Value, out var preset))
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    var presetDescription = presetValue is null ? "(prstGeomなし/custGeom)" : presetValue.Value.ToString();
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' のグループ内接続線のプリセットジオメトリ '{presetDescription}' には対応していません。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "UnsupportedShapePreset",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var localRect = ReadLocalRect(shapeProperties?.Transform2D);
+            if (localRect is null)
+            {
+                return null;
+            }
+
+            var transform = shapeProperties?.Transform2D;
+            var rotationDegrees = (transform?.Rotation?.Value ?? 0) / 60000.0;
+            var flipHorizontal = transform?.HorizontalFlip?.Value ?? false;
+            var flipVertical = transform?.VerticalFlip?.Value ?? false;
+            var outline = ReadShapeOutline(shapeProperties);
+
+            var connectorShapeDrawingProperties =
+                connector.NonVisualConnectionShapeProperties?.NonVisualConnectorShapeDrawingProperties;
+            var startConnection = ReadConnectionRef(connectorShapeDrawingProperties?.StartConnection);
+            var endConnection = ReadConnectionRef(connectorShapeDrawingProperties?.EndConnection);
+
+            shapeCount++;
+            return new GroupChildConnector(
+                localRect.Value, preset, rotationDegrees, flipHorizontal, flipVertical, outline,
+                startConnection, endConnection);
+        }
+
+        /// <summary>
+        /// グループ内の入れ子の<c>xdr:grpSp</c>子要素を<see cref="GroupChildGroup"/>として
+        /// 読み取る(要件10.10)。<paramref name="depth"/>が<see cref="MaxShapeNestingDepth"/>を
+        /// 超える場合は拒否する(要件10.8)。
+        /// </summary>
+        private static GroupChildGroup? ReadGroupChildGroup(
+            string sheetName,
+            DrawingsPart drawingsPart,
+            Xdr.GroupShape group,
+            WorkbookReadOptions options,
+            ref int shapeCount,
+            ref int imageCount,
+            int depth)
+        {
+            if (depth > MaxShapeNestingDepth)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' のグループのネストが上限({MaxShapeNestingDepth}段)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "GroupNestingTooDeep",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            if (shapeCount >= MaxShapesPerSheet)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "TooManyShapes",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var transformGroup = group.GroupShapeProperties?.TransformGroup;
+            var localRect = ReadLocalRect(transformGroup);
+            var childOffset = ReadChildOffset(transformGroup?.ChildOffset);
+            var childExtent = ReadChildExtent(transformGroup?.ChildExtents);
+            if (localRect is null || childOffset is null || childExtent is null)
+            {
+                return null;
+            }
+
+            var rotationDegrees = (transformGroup?.Rotation?.Value ?? 0) / 60000.0;
+
+            var children = ReadGroupChildren(sheetName, drawingsPart, group, options, ref shapeCount, ref imageCount, depth);
+            if (children is null)
+            {
+                return null;
+            }
+
+            // 子孫の読み取りでshapeCountが増加しているため、グループ自身を1件として
+            // 数える前に改めて上限を確認する(code-reviewer指摘)。
+            if (shapeCount >= MaxShapesPerSheet)
+            {
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を"
+                        + "超えています。帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "TooManyShapes",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return null;
+            }
+
+            var id = ReadShapeId(group.NonVisualGroupShapeProperties?.NonVisualDrawingProperties);
+
+            shapeCount++;
+            return new GroupChildGroup(id, localRect.Value, rotationDegrees, childOffset.Value, childExtent.Value, children);
+        }
+
+        /// <summary>
+        /// <c>NonVisualDrawingProperties/@id</c>(要件10.11)を読み取る。接続線の接続先解決の
+        /// キーとしてのみ使うため、要素が無い(理論上は起こらない)場合は既定値0とする。
+        /// </summary>
+        private static uint ReadShapeId(Xdr.NonVisualDrawingProperties? nonVisualDrawingProperties) =>
+            nonVisualDrawingProperties?.Id?.Value ?? 0;
+
+        /// <summary>
+        /// <c>a:stCxn</c>/<c>a:endCxn</c>(要件10.11)を<see cref="ConnectionRef"/>として読み取る。
+        /// 要素が無ければ<c>null</c>(接続線の始点/終点がどの図形にも紐づいていない)。
+        /// </summary>
+        private static ConnectionRef? ReadConnectionRef(Dr.ConnectionType? connection) =>
+            connection is { Id: { } id, Index: { } index } ? new ConnectionRef(id.Value, index.Value) : null;
+
+        /// <summary>グループの子座標空間の原点(<c>a:chOff</c>)をポイント単位で読み取る。</summary>
+        private static PointPt? ReadChildOffset(Dr.ChildOffset? childOffset) =>
+            childOffset is { X: { } x, Y: { } y } ? new PointPt(Units.EmusToPoints(x.Value), Units.EmusToPoints(y.Value)) : (PointPt?)null;
+
+        /// <summary>グループの子座標空間の大きさ(<c>a:chExt</c>)をポイント単位で読み取る。</summary>
+        private static PointPt? ReadChildExtent(Dr.ChildExtents? childExtents) =>
+            childExtents is { Cx: { } cx, Cy: { } cy }
+                ? new PointPt(Units.EmusToPoints(cx.Value), Units.EmusToPoints(cy.Value))
+                : (PointPt?)null;
+
+        /// <summary>グループ内要素の位置・サイズ(<c>a:off</c>/<c>a:ext</c>)を親の子座標空間上の矩形として読み取る。</summary>
+        private static RectPt? ReadLocalRect(Dr.Transform2D? transform) =>
+            transform is { Offset: { X: { } x, Y: { } y }, Extents: { Cx: { } cx, Cy: { } cy } } && cx.Value >= 0 && cy.Value >= 0
+                ? new RectPt(Units.EmusToPoints(x.Value), Units.EmusToPoints(y.Value), Units.EmusToPoints(cx.Value), Units.EmusToPoints(cy.Value))
+                : (RectPt?)null;
+
+        /// <summary>入れ子グループ自身の位置・サイズ(<c>a:off</c>/<c>a:ext</c>)を親の子座標空間上の矩形として読み取る。</summary>
+        private static RectPt? ReadLocalRect(Dr.TransformGroup? transform) =>
+            transform is { Offset: { X: { } x, Y: { } y }, Extents: { Cx: { } cx, Cy: { } cy } } && cx.Value >= 0 && cy.Value >= 0
+                ? new RectPt(Units.EmusToPoints(x.Value), Units.EmusToPoints(y.Value), Units.EmusToPoints(cx.Value), Units.EmusToPoints(cy.Value))
+                : (RectPt?)null;
 
         /// <summary>
         /// プリセットごとの調整ガイド(<see cref="ShapeAdjustmentGuideNames"/>)の並び順に対応する
@@ -768,16 +1396,25 @@ namespace Utsushi.Parsing.OpenXml
 
             if (shapeProperties.GetFirstChild<Dr.GradientFill>() is { } gradientFill)
             {
-                var stops = gradientFill.GradientStopList?.Elements<Dr.GradientStop>().ToList();
-                if (stops is { Count: > 0 }
-                    && TryReadColor(stops[0], out var startColor)
-                    && TryReadColor(stops[stops.Count - 1], out var endColor))
+                var stops = ReadGradientStops(gradientFill.GradientStopList);
+                if (stops is null)
                 {
-                    var angle = gradientFill.GetFirstChild<Dr.LinearGradientFill>()?.Angle?.Value ?? 0;
-                    return new LinearGradientShapeFill(startColor, endColor, angle / 60000.0);
+                    return null;
                 }
 
-                return null;
+                if (gradientFill.GetFirstChild<Dr.PathGradientFill>() is { } pathFill)
+                {
+                    // a:path[@path='circle'/'rect'/'shape']のいずれも放射状として近似する
+                    // (要件10.6補足)。中心はa:fillToRectの中心、無ければ矩形中心(0.5, 0.5)。
+                    var toRect = pathFill.FillToRectangle;
+                    var center = new PointPt(
+                        (FillToRectFraction(toRect?.Left) + FillToRectFraction(toRect?.Right)) / 2.0,
+                        (FillToRectFraction(toRect?.Top) + FillToRectFraction(toRect?.Bottom)) / 2.0);
+                    return new RadialGradientShapeFill(stops, center);
+                }
+
+                var angle = gradientFill.GetFirstChild<Dr.LinearGradientFill>()?.Angle?.Value ?? 0;
+                return new LinearGradientShapeFill(stops, angle / 60000.0);
             }
 
             if (shapeProperties.GetFirstChild<Dr.SolidFill>() is { } solidFill && TryReadColor(solidFill, out var color))
@@ -787,6 +1424,45 @@ namespace Utsushi.Parsing.OpenXml
 
             return null;
         }
+
+        /// <summary>
+        /// <c>a:gsLst</c> の全ストップ(位置・色)を読み取る(要件10.6。3点以上に対応)。
+        /// 位置・色のいずれかを読み取れないストップが1つでもあれば全体を<c>null</c>とし、
+        /// 呼び出し側で塗りなしにフォールバックする(画像対応時の「不正な入力は無視する」方針と同様)。
+        /// </summary>
+        private static IReadOnlyList<GradientStop>? ReadGradientStops(Dr.GradientStopList? gradientStopList)
+        {
+            if (gradientStopList is null)
+            {
+                return null;
+            }
+
+            var stops = new List<GradientStop>();
+            foreach (var stop in gradientStopList.Elements<Dr.GradientStop>())
+            {
+                // 件数を数える前に上限で打ち切る(shapeCount/imageCount/MaxShapeTextLengthと
+                // 同じ「無制限の入力から先に上限チェックする」方針。security-reviewer指摘)。
+                if (stops.Count >= MaxGradientStopsPerFill)
+                {
+                    return null;
+                }
+
+                if (stop.Position?.Value is not { } position || !TryReadColor(stop, out var color))
+                {
+                    return null;
+                }
+
+                stops.Add(new GradientStop(PermilleToFraction(position), color));
+            }
+
+            return stops.Count >= 2 ? stops : null;
+        }
+
+        /// <summary>OOXMLの千分率(0〜100000)を0.0〜1.0の比率に変換する。</summary>
+        private static double PermilleToFraction(int value) => value / 100000.0;
+
+        /// <summary><c>a:fillToRect</c>の1辺(<see cref="Int32Value"/>)を比率に変換する。無指定なら50%とする。</summary>
+        private static double FillToRectFraction(Int32Value? value) => value?.Value is { } v ? PermilleToFraction(v) : 0.5;
 
         /// <summary>図形の枠線(<c>a:ln</c>)を読み取る。</summary>
         private static ShapeOutline? ReadShapeOutline(Xdr.ShapeProperties? shapeProperties)
@@ -1162,11 +1838,13 @@ namespace Utsushi.Parsing.OpenXml
                     sheetName);
             }
 
-            // 画像(xdr:pic)は要件9として、シェイプ(xdr:sp)は要件10として常に読み取り対象と
-            // するため、ここでは対象外とする(ReadDrawingObjectsが担う)。xdr:spの判定は構造的
-            // なもので、プリセットが対応済みかどうかは問わない(非対応プリセットは
-            // ReadShapeが個別にUnsupportedShapePresetとして検出する)。
-            // 画像・シェイプ以外の描画オブジェクト(グループ・接続線等)が1つでもあれば
+            // 画像(xdr:pic)は要件9として、シェイプ(xdr:sp)・接続線(xdr:cxnSp)・グループ(xdr:grpSp)は
+            // 要件10として常に読み取り対象とするため、ここでは対象外とする(ReadDrawingObjectsが担う)。
+            // これら4種の判定は構造的なもの(要素の種類がこの4種かどうか)で、プリセットが
+            // 対応済みかどうかは問わない(非対応プリセットはReadShape/ReadConnectorが個別に
+            // UnsupportedShapePresetとして検出する。グループ内部の非対応要素はReadGroupShapeが
+            // 再帰的に検出しグループ全体を拒否する。要件10.10)。
+            // 上記4種のいずれでもない描画オブジェクト(図表枠xdr:graphicFrame等)が1つでもあれば
             // 引き続きサポート外要素とする。drawingsPartが解決できないのに<drawing>参照だけが
             // ある場合は中身を判定できないため、従来どおり保守的にサポート外として扱う。
             var hasUnsupportedDrawingObject = drawingsPart is not null
@@ -1194,10 +1872,11 @@ namespace Utsushi.Parsing.OpenXml
 
         /// <summary>
         /// <paramref name="drawingsPart"/> 内のアンカーに、画像(<c>xdr:pic</c>)・シェイプ
-        /// (<c>xdr:sp</c>)以外の描画オブジェクト(グループ・接続線・絶対座標アンカー等)が
-        /// 1つでも含まれるかどうかを判定する(要件9.5, 10.7)。<c>xdr:sp</c>の判定は構造的な
-        /// もので、プリセットジオメトリが対応済みかどうかは問わない(非対応プリセットは
-        /// <see cref="ReadShape"/>が個別に検出する)。
+        /// (<c>xdr:sp</c>)・接続線(<c>xdr:cxnSp</c>)・グループ(<c>xdr:grpSp</c>)以外の
+        /// 描画オブジェクト(図表枠・絶対座標アンカー等)が1つでも含まれるかどうかを判定する
+        /// (要件9.5, 10.7)。この4種の判定は構造的なもので、プリセットジオメトリが対応済みか
+        /// どうかは問わない(非対応プリセットは<see cref="ReadShape"/>/<see cref="ReadConnector"/>
+        /// が個別に検出し、グループ内部の非対応要素は<see cref="ReadGroupShape"/>が再帰的に検出する)。
         /// </summary>
         private static bool HasUnsupportedDrawingObject(DrawingsPart drawingsPart)
         {
@@ -1209,15 +1888,21 @@ namespace Utsushi.Parsing.OpenXml
 
             foreach (var anchor in drawing.ChildElements)
             {
-                var isPictureOrShape = anchor switch
+                var isSupportedDrawingObjectType = anchor switch
                 {
-                    Xdr.TwoCellAnchor two => two.GetFirstChild<Xdr.Picture>() is not null || two.GetFirstChild<Xdr.Shape>() is not null,
-                    Xdr.OneCellAnchor one => one.GetFirstChild<Xdr.Picture>() is not null || one.GetFirstChild<Xdr.Shape>() is not null,
-                    // AbsoluteAnchor(絶対座標配置)は要件9.1/9.2/10.1の対象外のため、画像・シェイプでもサポート外として扱う。
+                    Xdr.TwoCellAnchor two => two.GetFirstChild<Xdr.Picture>() is not null
+                        || two.GetFirstChild<Xdr.Shape>() is not null
+                        || two.GetFirstChild<Xdr.ConnectionShape>() is not null
+                        || two.GetFirstChild<Xdr.GroupShape>() is not null,
+                    Xdr.OneCellAnchor one => one.GetFirstChild<Xdr.Picture>() is not null
+                        || one.GetFirstChild<Xdr.Shape>() is not null
+                        || one.GetFirstChild<Xdr.ConnectionShape>() is not null
+                        || one.GetFirstChild<Xdr.GroupShape>() is not null,
+                    // AbsoluteAnchor(絶対座標配置)は要件9.1/9.2/10.1の対象外のため、対応済み種別でもサポート外として扱う。
                     _ => false,
                 };
 
-                if (!isPictureOrShape)
+                if (!isSupportedDrawingObjectType)
                 {
                     return true;
                 }

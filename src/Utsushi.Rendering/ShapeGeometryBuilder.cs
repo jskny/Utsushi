@@ -38,6 +38,42 @@ namespace Utsushi.Rendering
         /// </summary>
         private const double CalloutTipAdjLimit = 5.0;
 
+        /// <summary>
+        /// star4/5/6/8の内側頂点の半径比(外接円半径に対する比率)の既定値。ECMA-376は
+        /// この既定値を単一の調整ガイド<c>adj</c>の既定値(0〜50000。ここでは
+        /// <c>既定値 ÷ 50000</c>で比率化したもの)としてプリセットごとに定義しており、
+        /// 4プリセット共通の値ではない。二次資料(ECMA-376の実装を参照する複数のOSS
+        /// プロジェクトの記述)を突き合わせて確認した値であり、ECMA-376一次資料そのものへの
+        /// 当たり直しはできていない暫定値(design.md「未決事項」参照)。
+        /// </summary>
+        private const double Star4DefaultInnerRadiusRatio = 0.25;
+
+        private const double Star5DefaultInnerRadiusRatio = 0.382;
+
+        private const double Star6DefaultInnerRadiusRatio = 0.577;
+
+        private const double Star8DefaultInnerRadiusRatio = 0.75;
+
+        /// <summary>flowChartDocumentの波形の深さ(矩形の高さに対する比率)。</summary>
+        private const double DocumentWaveDepthRatio = 0.08;
+
+        /// <summary>flowChartPredefinedProcessの左右の縦線の位置(矩形の幅に対する内側からの比率)。</summary>
+        private const double PredefinedProcessInsetRatio = 0.1;
+
+        /// <summary>cloudCalloutを近似する円(バンプ)の個数。調整ガイドには対応しない固定値。</summary>
+        private const int CloudBumpCount = 12;
+
+        /// <summary>cloudCalloutのバンプ1つの半径(矩形の短辺に対する比率)。</summary>
+        private const double CloudBumpRadiusRatio = 0.16;
+
+        /// <summary>callout1/2/3の引き出し線の始点(本体の幅に対する左端からの比率)。</summary>
+        private const double LeaderStartXRatio = 0.25;
+
+        /// <summary>callout1/2/3の引き出し線の先端(本体の幅・高さに対する比率。0〜1の外側)。</summary>
+        private const double LeaderTipXRatio = -0.25;
+
+        private const double LeaderTipYRatio = 1.75;
+
         public static SKPath Build(ShapePresetType preset, IReadOnlyList<double> adjustmentValues, SKRect rect) =>
             preset switch
             {
@@ -54,8 +90,40 @@ namespace Utsushi.Rendering
                 ShapePresetType.WedgeRectCallout => WedgeCalloutPath(rect, BodyKind.Rect, adjustmentValues),
                 ShapePresetType.WedgeRoundRectCallout => WedgeCalloutPath(rect, BodyKind.RoundRect, adjustmentValues),
                 ShapePresetType.WedgeEllipseCallout => WedgeCalloutPath(rect, BodyKind.Ellipse, adjustmentValues),
+                ShapePresetType.CloudCallout => CloudCalloutPath(rect, adjustmentValues),
+                ShapePresetType.Callout1 => RectPath(rect),
+                ShapePresetType.Callout2 => RectPath(rect),
+                ShapePresetType.Callout3 => RectPath(rect),
+                ShapePresetType.Star4 => StarPath(rect, 4, StarInnerRadiusRatio(adjustmentValues, Star4DefaultInnerRadiusRatio)),
+                ShapePresetType.Star5 => StarPath(rect, 5, StarInnerRadiusRatio(adjustmentValues, Star5DefaultInnerRadiusRatio)),
+                ShapePresetType.Star6 => StarPath(rect, 6, StarInnerRadiusRatio(adjustmentValues, Star6DefaultInnerRadiusRatio)),
+                ShapePresetType.Star8 => StarPath(rect, 8, StarInnerRadiusRatio(adjustmentValues, Star8DefaultInnerRadiusRatio)),
+                ShapePresetType.FlowChartProcess => RectPath(rect),
+                ShapePresetType.FlowChartDecision => DiamondPath(rect),
+                ShapePresetType.FlowChartTerminator => StadiumPath(rect),
+                ShapePresetType.FlowChartInputOutput => ParallelogramPath(rect, ShapeGeometryConstants.InputOutputSkewRatio),
+                ShapePresetType.FlowChartDocument => DocumentPath(rect),
+                ShapePresetType.FlowChartPredefinedProcess => PredefinedProcessPath(rect),
+                ShapePresetType.FlowChartConnector => EllipsePath(rect),
                 _ => RectPath(rect),
             };
+
+        /// <summary>
+        /// 塗りつぶし用のジオメトリとは別に、枠線用のジオメトリを返す。callout1/2/3は本体(矩形)に
+        /// 加えて塗りつぶしを持たない引き出し線(開いた折れ線)を枠線側にのみ追加するため、
+        /// <see cref="Build"/>(本体のみ)とは異なるパスが必要になる。それ以外のプリセットは
+        /// <see cref="Build"/>と同じジオメトリを枠線にも使う。
+        /// </summary>
+        public static SKPath BuildOutline(ShapePresetType preset, IReadOnlyList<double> adjustmentValues, SKRect rect) =>
+            preset switch
+            {
+                ShapePresetType.Callout1 => CalloutOutlinePath(rect, 1),
+                ShapePresetType.Callout2 => CalloutOutlinePath(rect, 2),
+                ShapePresetType.Callout3 => CalloutOutlinePath(rect, 3),
+                _ => Build(preset, adjustmentValues, rect),
+            };
+
+        private static double StarInnerRadiusRatio(IReadOnlyList<double> values, double defaultValue) => Adj(values, 0, defaultValue);
 
         private static double ShaftAdj(IReadOnlyList<double> values) => Adj(values, 0, DefaultArrowShaftAdj);
 
@@ -232,6 +300,17 @@ namespace Utsushi.Rendering
                 _ => RectPath(rect),
             };
 
+            AddWedgeTail(path, rect, tipXAdj, tipYAdj);
+            return path;
+        }
+
+        /// <summary>
+        /// <paramref name="path"/>に、本体の輪郭外(または内)の1点(<paramref name="tipXAdj"/>/
+        /// <paramref name="tipYAdj"/>で指定)へ向けた引き出し三角形を追加する
+        /// (wedge系の吹き出し・cloudCalloutで共通)。
+        /// </summary>
+        private static void AddWedgeTail(SKPath path, SKRect rect, double tipXAdj, double tipYAdj)
+        {
             var tipX = rect.Left + (rect.Width * (float)tipXAdj);
             var tipY = rect.Top + (rect.Height * (float)tipYAdj);
             var baseSize = Math.Min(rect.Width, rect.Height) * 0.15f;
@@ -258,7 +337,7 @@ namespace Utsushi.Rendering
                 baseB = new SKPoint(Clamp(tipX + baseSize, rect.Left, rect.Right), rect.Bottom);
             }
 
-            var tail = new SKPath();
+            using var tail = new SKPath();
             tail.MoveTo(baseA);
             tail.LineTo(tipX, tipY);
             tail.LineTo(baseB);
@@ -266,7 +345,196 @@ namespace Utsushi.Rendering
 
             path.AddPath(tail);
             path.FillType = SKPathFillType.Winding;
+        }
+
+        /// <summary>
+        /// 雲形吹き出し(cloudCallout)。楕円本体の輪郭に沿って並べた円(バンプ)の和集合で
+        /// 近似したシルエットに、wedgeEllipseCalloutと同じ引き出し三角形を追加する
+        /// (design.md参照。バンプの個数・半径は固定値で調整ガイドには対応しないが、
+        /// 引き出し三角形の位置(<paramref name="adjustmentValues"/>のadj1/adj2)は
+        /// wedgeEllipseCalloutと同じ意味の調整ガイドとして読み取る。要件10.13)。
+        /// </summary>
+        private static SKPath CloudCalloutPath(SKRect rect, IReadOnlyList<double> adjustmentValues)
+        {
+            var centerX = (rect.Left + rect.Right) / 2f;
+            var centerY = (rect.Top + rect.Bottom) / 2f;
+            var radiusX = rect.Width / 2f;
+            var radiusY = rect.Height / 2f;
+            var bumpRadius = (float)(Math.Min(rect.Width, rect.Height) * CloudBumpRadiusRatio);
+
+            SKPath? cloud = null;
+            for (var i = 0; i < CloudBumpCount; i++)
+            {
+                var angle = 2.0 * Math.PI * i / CloudBumpCount;
+                var bumpX = centerX + (radiusX * (float)Math.Cos(angle));
+                var bumpY = centerY + (radiusY * (float)Math.Sin(angle));
+
+                using var bump = new SKPath();
+                bump.AddOval(new SKRect(bumpX - bumpRadius, bumpY - bumpRadius, bumpX + bumpRadius, bumpY + bumpRadius));
+
+                if (cloud is null)
+                {
+                    cloud = new SKPath(bump);
+                    continue;
+                }
+
+                using var previous = cloud;
+                cloud = previous.Op(bump, SKPathOp.Union) ?? previous;
+            }
+
+            var tipXAdj = Math.Max(-CalloutTipAdjLimit, Math.Min(CalloutTipAdjLimit, Adj(adjustmentValues, 0, DefaultCalloutTipXAdj)));
+            var tipYAdj = Math.Max(-CalloutTipAdjLimit, Math.Min(CalloutTipAdjLimit, Adj(adjustmentValues, 1, DefaultCalloutTipYAdj)));
+
+            var result = cloud ?? EllipsePath(rect);
+            AddWedgeTail(result, rect, tipXAdj, tipYAdj);
+            return result;
+        }
+
+        /// <summary>星形(star4/5/6/8)。外接円の半径と内側頂点の半径比から交互に結んだ2N角形。</summary>
+        private static SKPath StarPath(SKRect rect, int points, double innerRadiusRatio)
+        {
+            var centerX = (rect.Left + rect.Right) / 2f;
+            var centerY = (rect.Top + rect.Bottom) / 2f;
+            var outerRadius = Math.Min(rect.Width, rect.Height) / 2f;
+            var innerRadius = outerRadius * (float)Math.Max(0.0, Math.Min(1.0, innerRadiusRatio));
+
+            var path = new SKPath();
+            var vertexCount = points * 2;
+            for (var i = 0; i < vertexCount; i++)
+            {
+                // 最初の外側頂点を真上(-90度)に置き、外側・内側の頂点を交互に配置する。
+                var angle = (-Math.PI / 2.0) + (i * Math.PI / points);
+                var radius = i % 2 == 0 ? outerRadius : innerRadius;
+                var x = centerX + (float)(radius * Math.Cos(angle));
+                var y = centerY + (float)(radius * Math.Sin(angle));
+
+                if (i == 0)
+                {
+                    path.MoveTo(x, y);
+                }
+                else
+                {
+                    path.LineTo(x, y);
+                }
+            }
+
+            path.Close();
             return path;
+        }
+
+        /// <summary>flowChartDecision(判断)。矩形の上下左右の中点を結んだ菱形。</summary>
+        private static SKPath DiamondPath(SKRect rect)
+        {
+            var midX = (rect.Left + rect.Right) / 2f;
+            var midY = (rect.Top + rect.Bottom) / 2f;
+
+            var path = new SKPath();
+            path.MoveTo(midX, rect.Top);
+            path.LineTo(rect.Right, midY);
+            path.LineTo(midX, rect.Bottom);
+            path.LineTo(rect.Left, midY);
+            path.Close();
+            return path;
+        }
+
+        /// <summary>flowChartTerminator(端子)。左右端を半円にした「スタジアム」形状。</summary>
+        private static SKPath StadiumPath(SKRect rect)
+        {
+            var radius = Math.Min(rect.Width, rect.Height) / 2f;
+            var path = new SKPath();
+            path.AddRoundRect(rect, radius, radius);
+            return path;
+        }
+
+        /// <summary>flowChartInputOutput(入出力)。上下の辺を左右にずらした平行四辺形。</summary>
+        private static SKPath ParallelogramPath(SKRect rect, double skewRatio)
+        {
+            var skew = (float)(rect.Width * Math.Max(0.0, Math.Min(0.5, skewRatio)));
+
+            var path = new SKPath();
+            path.MoveTo(rect.Left + skew, rect.Top);
+            path.LineTo(rect.Right, rect.Top);
+            path.LineTo(rect.Right - skew, rect.Bottom);
+            path.LineTo(rect.Left, rect.Bottom);
+            path.Close();
+            return path;
+        }
+
+        /// <summary>flowChartDocument(書類)。矩形の下辺を1つの緩やかな凹みにした形状。</summary>
+        private static SKPath DocumentPath(SKRect rect)
+        {
+            var waveDepth = (float)(rect.Height * DocumentWaveDepthRatio);
+            var midX = (rect.Left + rect.Right) / 2f;
+            var baseY = rect.Bottom - waveDepth;
+
+            var path = new SKPath();
+            path.MoveTo(rect.Left, rect.Top);
+            path.LineTo(rect.Right, rect.Top);
+            path.LineTo(rect.Right, baseY);
+            path.QuadTo(new SKPoint(midX, baseY + (waveDepth * 2f)), new SKPoint(rect.Left, baseY));
+            path.Close();
+            return path;
+        }
+
+        /// <summary>
+        /// flowChartPredefinedProcess(定義済み処理)。矩形に加え、左右の辺の内側に縦線を1本ずつ追加する。
+        /// 追加する2本の縦線は2頂点のみの退化した(面積0の)サブパスのため、塗りつぶし時には
+        /// 何も描画されず、枠線として描画したときのみ見える。
+        /// </summary>
+        private static SKPath PredefinedProcessPath(SKRect rect)
+        {
+            var inset = (float)(rect.Width * PredefinedProcessInsetRatio);
+
+            var path = RectPath(rect);
+            path.MoveTo(rect.Left + inset, rect.Top);
+            path.LineTo(rect.Left + inset, rect.Bottom);
+            path.MoveTo(rect.Right - inset, rect.Top);
+            path.LineTo(rect.Right - inset, rect.Bottom);
+            return path;
+        }
+
+        /// <summary>callout1/2/3の枠線用ジオメトリ。本体(矩形)に、塗りつぶしを持たないN本の引き出し折れ線を加える。</summary>
+        private static SKPath CalloutOutlinePath(SKRect rect, int segments)
+        {
+            var path = RectPath(rect);
+            var points = BuildLeaderPoints(rect, segments);
+
+            path.MoveTo(points[0]);
+            for (var i = 1; i < points.Length; i++)
+            {
+                path.LineTo(points[i]);
+            }
+
+            return path;
+        }
+
+        /// <summary>
+        /// callout1/2/3の引き出し線の頂点列(本体上の始点 → <paramref name="segments"/> - 1個の
+        /// 折れ点 → 本体外側の先端)。既定で左下方向へ引き出す(wedge系の既定方向と同じ慣習)。
+        /// </summary>
+        private static SKPoint[] BuildLeaderPoints(SKRect rect, int segments)
+        {
+            var startX = rect.Left + (rect.Width * (float)LeaderStartXRatio);
+            var startY = rect.Bottom;
+            var tipX = rect.Left + (rect.Width * (float)LeaderTipXRatio);
+            var tipY = rect.Top + (rect.Height * (float)LeaderTipYRatio);
+
+            var points = new SKPoint[segments + 1];
+            points[0] = new SKPoint(startX, startY);
+            points[segments] = new SKPoint(tipX, tipY);
+
+            for (var i = 1; i < segments; i++)
+            {
+                var t = (float)i / segments;
+                var bendX = startX + ((tipX - startX) * t);
+                var bendY = startY + ((tipY - startY) * t);
+
+                // 直線的な等分点のままだと折れ線に見えないため、偶奇でわずかにずらす。
+                bendY += (i % 2 == 0 ? -1f : 1f) * (float)(rect.Height * 0.05);
+                points[i] = new SKPoint(bendX, bendY);
+            }
+
+            return points;
         }
 
         private static float Clamp(float value, float min, float max) => Math.Max(min, Math.Min(max, value));

@@ -737,7 +737,7 @@ namespace Utsushi.Layout.Tests
             var sheet = UniformSheet(
                 rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
             var image = new ImageModel(
-                new byte[] { 1, 2, 3 },
+                 1u, new byte[] { 1, 2, 3 },
                 "image/png",
                 CellAddress.Parse("B2"),
                 new PointPt(2.0, 3.0),
@@ -766,7 +766,7 @@ namespace Utsushi.Layout.Tests
             var sheet = UniformSheet(
                 rows: 5, columns: 5, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
             var image = new ImageModel(
-                Array.Empty<byte>(),
+                 1u, Array.Empty<byte>(),
                 "image/png",
                 CellAddress.Parse("A1"),
                 new PointPt(0.0, 0.0),
@@ -797,7 +797,7 @@ namespace Utsushi.Layout.Tests
                 rows: 5, columns: 5, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt,
                 pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("A1:C3") }));
             var image = new ImageModel(
-                Array.Empty<byte>(),
+                 1u, Array.Empty<byte>(),
                 "image/png",
                 CellAddress.Parse("C1"),
                 new PointPt(0.0, 0.0),
@@ -821,7 +821,7 @@ namespace Utsushi.Layout.Tests
                 rows: 4, columns: 2, columnWidth: 10.0, rowHeightPt: 20.0,
                 pageSetup: NoMarginA4(rowBreaks: new[] { 3 }));
             var image = new ImageModel(
-                Array.Empty<byte>(), "image/png", CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+                 1u, Array.Empty<byte>(), "image/png", CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
             sheet = sheet with { DrawingObjects = new[] { image } };
 
             var layout = Compute(sheet);
@@ -843,7 +843,7 @@ namespace Utsushi.Layout.Tests
             var sheet = UniformSheet(
                 rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
             var shape = new ShapeModel(
-                ShapePresetType.Rect,
+                 1u, ShapePresetType.Rect,
                 Array.Empty<double>(),
                 0,
                 null,
@@ -874,7 +874,7 @@ namespace Utsushi.Layout.Tests
             var sheet = UniformSheet(
                 rows: 5, columns: 5, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
             var shape = new ShapeModel(
-                ShapePresetType.Ellipse,
+                 1u, ShapePresetType.Ellipse,
                 Array.Empty<double>(),
                 0,
                 null,
@@ -899,7 +899,7 @@ namespace Utsushi.Layout.Tests
                 rows: 4, columns: 2, columnWidth: 10.0, rowHeightPt: 20.0,
                 pageSetup: NoMarginA4(rowBreaks: new[] { 3 }));
             var shape = new ShapeModel(
-                ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null,
+                 1u, ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null,
                 CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
             sheet = sheet with { DrawingObjects = new[] { shape } };
 
@@ -921,7 +921,7 @@ namespace Utsushi.Layout.Tests
 
             // 半角文字幅は0.5em(=5pt)。矩形幅33pt・内側余白4pt×2ぶんを引くと文字領域は25pt=5文字ぶん。
             var shape = new ShapeModel(
-                ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, text,
+                 1u, ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, text,
                 CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(33.0, 60.0));
             sheet = sheet with { DrawingObjects = new[] { shape } };
 
@@ -945,7 +945,7 @@ namespace Utsushi.Layout.Tests
             var textCenter = textTop with { VAlign = VerticalAlignment.Center };
 
             var topShape = new ShapeModel(
-                ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, textTop,
+                 1u, ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, textTop,
                 CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(60.0, 60.0));
             var centerShape = topShape with { Text = textCenter };
             sheet = sheet with { DrawingObjects = new[] { topShape, centerShape } };
@@ -962,9 +962,9 @@ namespace Utsushi.Layout.Tests
         {
             var sheet = UniformSheet(rows: 2, columns: 2, columnWidth: 40.0, rowHeightPt: 60.0, pageSetup: NoMarginA4());
             var image = new ImageModel(
-                Array.Empty<byte>(), "image/png", CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+                 1u, Array.Empty<byte>(), "image/png", CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
             var shape = new ShapeModel(
-                ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null,
+                 1u, ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null,
                 CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
             sheet = sheet with { DrawingObjects = new DrawingObjectModel[] { shape, image, shape } };
 
@@ -995,7 +995,7 @@ namespace Utsushi.Layout.Tests
                 var sheet = UniformSheet(
                     rows: 2, columns: 2, columnWidth: 40.0, rowHeightPt: 60.0, pageSetup: NoMarginA4(scaling: scaling));
                 var shape = new ShapeModel(
-                    ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, text,
+                     1u, ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, text,
                     CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(33.0, 60.0));
                 sheet = sheet with { DrawingObjects = new[] { shape } };
 

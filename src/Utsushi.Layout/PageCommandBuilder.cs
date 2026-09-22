@@ -127,12 +127,21 @@ namespace Utsushi.Layout
         /// そのまま維持するため、画像・図形をまとめて1回だけ列挙する。改ページ位置をまたぐ
         /// 画像・図形は、アンカー左上セルが属するページにのみ全体を配置する(design.md「未決事項」の割り切り)。
         /// </summary>
+        /// <remarks>
+        /// 接続線の接続点解決(要件10.11)のため、この出現順の列挙より先に読み取り専用の予備パス
+        /// (<see cref="BuildConnectionTargetTable"/>)でID→ページ矩形のテーブルを構築する。
+        /// 予備パスは矩形計算のみでコマンドを一切生成しないため、下の出現順の列挙(z-orderを
+        /// 保つ唯一のコマンド生成経路)には手を入れずに、接続線が自分より後に出現する図形を
+        /// 参照していても解決できる(design.md参照)。
+        /// </remarks>
         private void EmitDrawingObjects(
             IReadOnlyDictionary<int, int> rowIndex,
             IReadOnlyDictionary<int, int> columnIndex,
             double[] rowOffsets,
             double[] columnOffsets)
         {
+            var connectionTargets = BuildConnectionTargetTable(rowIndex, columnIndex, rowOffsets, columnOffsets);
+
             foreach (var drawingObject in _sheet.DrawingObjects)
             {
                 if (!TryComputeDrawingObjectRect(drawingObject, rowIndex, columnIndex, rowOffsets, columnOffsets, out var rect))
@@ -148,9 +157,224 @@ namespace Utsushi.Layout
                     case ShapeModel shape:
                         _drawingObjects.Add(BuildShapeCommand(shape, rect));
                         break;
+                    case ConnectorModel connector:
+                        var (resolvedStart, resolvedEnd) = ResolveConnectorEndpoints(
+                            connector.StartConnection, connector.EndConnection, connectionTargets);
+                        _drawingObjects.Add(new ConnectorCommand(
+                            rect, connector.Preset, connector.RotationDegrees, connector.FlipHorizontal, connector.FlipVertical,
+                            connector.Outline, resolvedStart, resolvedEnd));
+                        break;
+                    case GroupShapeModel group:
+                        var children = BuildGroupChildren(group.Children, rect, group.ChildOffset, group.ChildExtent, connectionTargets);
+                        _drawingObjects.Add(new GroupCommand(RectCenter(rect), group.RotationDegrees, children));
+                        break;
                 }
             }
         }
+
+        /// <summary>
+        /// 接続点解決(要件10.11)のためのID→ページ矩形の読み取り専用テーブルを構築する。
+        /// コマンドは一切生成せず、<see cref="TryComputeDrawingObjectRect"/>/
+        /// <see cref="ToGroupChildRect"/>と同じ計算をこの予備パス用に再度行うだけである
+        /// (単純な算術のみでコストは無視できる。design.md参照)。接続線自身は接続先として
+        /// 参照される対象ではないため、このテーブルには含めない。
+        /// </summary>
+        /// <remarks>
+        /// <c>@id</c>はOOXMLスキーマ上必須かつExcelが重複させないため通常は起こらないが、
+        /// 万一同一シート内で重複していた場合、このテーブルは出現順で後から見つかった方の
+        /// 図形の座標で上書きする(先勝ちでも後勝ちでもどちらかの図形を選ぶしかなく、
+        /// 「解決しない」よりは実害が小さいための割り切り。code-reviewer指摘)。
+        /// </remarks>
+        private Dictionary<uint, (RectPt Rect, ShapePresetType? Preset)> BuildConnectionTargetTable(
+            IReadOnlyDictionary<int, int> rowIndex,
+            IReadOnlyDictionary<int, int> columnIndex,
+            double[] rowOffsets,
+            double[] columnOffsets)
+        {
+            var table = new Dictionary<uint, (RectPt Rect, ShapePresetType? Preset)>();
+
+            foreach (var drawingObject in _sheet.DrawingObjects)
+            {
+                if (!TryComputeDrawingObjectRect(drawingObject, rowIndex, columnIndex, rowOffsets, columnOffsets, out var rect))
+                {
+                    continue;
+                }
+
+                switch (drawingObject)
+                {
+                    case ImageModel image:
+                        table[image.Id] = (rect, null);
+                        break;
+                    case ShapeModel shape:
+                        table[shape.Id] = (rect, shape.Preset);
+                        break;
+                    case GroupShapeModel group:
+                        table[group.Id] = (rect, null);
+                        CollectGroupChildRects(group.Children, rect, group.ChildOffset, group.ChildExtent, table);
+                        break;
+                }
+            }
+
+            return table;
+        }
+
+        /// <summary>
+        /// <see cref="BuildConnectionTargetTable"/>のグループ内再帰部分。<see cref="BuildGroupChildren"/>と
+        /// 同じ比例変換(<see cref="ToGroupChildRect"/>)を使うが、コマンドは生成しない。
+        /// </summary>
+        private static void CollectGroupChildRects(
+            IReadOnlyList<GroupChildModel> children,
+            RectPt groupRect,
+            PointPt childOffset,
+            PointPt childExtent,
+            Dictionary<uint, (RectPt Rect, ShapePresetType? Preset)> table)
+        {
+            if (childExtent.X <= 0 || childExtent.Y <= 0)
+            {
+                return;
+            }
+
+            var scaleX = groupRect.Width / childExtent.X;
+            var scaleY = groupRect.Height / childExtent.Y;
+
+            foreach (var child in children)
+            {
+                var childRect = ToGroupChildRect(child.LocalRect, groupRect, childOffset, scaleX, scaleY);
+                if (childRect.IsEmpty)
+                {
+                    continue;
+                }
+
+                switch (child)
+                {
+                    case GroupChildShape shape:
+                        table[shape.Id] = (childRect, shape.Preset);
+                        break;
+                    case GroupChildImage image:
+                        table[image.Id] = (childRect, null);
+                        break;
+                    case GroupChildGroup nestedGroup:
+                        table[nestedGroup.Id] = (childRect, null);
+                        CollectGroupChildRects(nestedGroup.Children, childRect, nestedGroup.ChildOffset, nestedGroup.ChildExtent, table);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 接続線の始点/終点の接続先(<see cref="ConnectionRef"/>)を、
+        /// <paramref name="connectionTargets"/>を使って実際の座標へ解決する。参照先が
+        /// このページに無い、IDが実在しない、または接続先の指定自体が無い場合は<c>null</c>のままとし、
+        /// Renderingレイヤーが要件10.9の既定動作(アンカー矩形+反転)にフォールバックする。
+        /// </summary>
+        private static (PointPt? Start, PointPt? End) ResolveConnectorEndpoints(
+            ConnectionRef? startConnection,
+            ConnectionRef? endConnection,
+            IReadOnlyDictionary<uint, (RectPt Rect, ShapePresetType? Preset)> connectionTargets) =>
+            (ResolveConnectionPoint(startConnection, connectionTargets), ResolveConnectionPoint(endConnection, connectionTargets));
+
+        private static PointPt? ResolveConnectionPoint(
+            ConnectionRef? connection, IReadOnlyDictionary<uint, (RectPt Rect, ShapePresetType? Preset)> connectionTargets)
+        {
+            if (connection is not { } reference || !connectionTargets.TryGetValue(reference.ShapeId, out var target))
+            {
+                return null;
+            }
+
+            return ConnectionSiteResolver.Resolve(target.Rect, target.Preset, reference.SiteIndex);
+        }
+
+        /// <summary>
+        /// グループの子座標空間(<paramref name="childOffset"/>/<paramref name="childExtent"/>)から
+        /// <paramref name="groupRect"/>(グループ自身のページ矩形)への比例変換(平行移動+拡大縮小、
+        /// 非一様倍率を許容する)で各子要素をページ座標へ変換する(要件10.10)。
+        /// 入れ子の<see cref="GroupChildGroup"/>は自身のページ矩形を新たな基準として再帰的に適用する。
+        /// </summary>
+        private List<DrawCommand> BuildGroupChildren(
+            IReadOnlyList<GroupChildModel> children,
+            RectPt groupRect,
+            PointPt childOffset,
+            PointPt childExtent,
+            IReadOnlyDictionary<uint, (RectPt Rect, ShapePresetType? Preset)> connectionTargets)
+        {
+            var result = new List<DrawCommand>(children.Count);
+
+            // 子座標空間の大きさが0以下では比例変換できないため、このグループの子要素は
+            // 何も描画しない(壊れたジオメトリに対する安全弁)。
+            if (childExtent.X <= 0 || childExtent.Y <= 0)
+            {
+                return result;
+            }
+
+            var scaleX = groupRect.Width / childExtent.X;
+            var scaleY = groupRect.Height / childExtent.Y;
+
+            foreach (var child in children)
+            {
+                var childRect = ToGroupChildRect(child.LocalRect, groupRect, childOffset, scaleX, scaleY);
+                if (childRect.IsEmpty)
+                {
+                    continue;
+                }
+
+                switch (child)
+                {
+                    case GroupChildShape shape:
+                        result.Add(BuildGroupChildShapeCommand(shape, childRect));
+                        break;
+                    case GroupChildImage image:
+                        result.Add(new ImageCommand(childRect, image.Data, image.ContentType));
+                        break;
+                    case GroupChildConnector connector:
+                        var (resolvedStart, resolvedEnd) = ResolveConnectorEndpoints(
+                            connector.StartConnection, connector.EndConnection, connectionTargets);
+                        result.Add(new ConnectorCommand(
+                            childRect, connector.Preset, connector.RotationDegrees, connector.FlipHorizontal, connector.FlipVertical,
+                            connector.Outline, resolvedStart, resolvedEnd));
+                        break;
+                    case GroupChildGroup nestedGroup:
+                        var nestedChildren = BuildGroupChildren(
+                            nestedGroup.Children, childRect, nestedGroup.ChildOffset, nestedGroup.ChildExtent, connectionTargets);
+                        result.Add(new GroupCommand(RectCenter(childRect), nestedGroup.RotationDegrees, nestedChildren));
+                        break;
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// グループの子座標空間上の矩形(<paramref name="localRect"/>)を、
+        /// <paramref name="groupRect"/>を基準とした比例変換でページ座標の矩形へ変換する。
+        /// </summary>
+        private static RectPt ToGroupChildRect(
+            RectPt localRect, RectPt groupRect, PointPt childOffset, double scaleX, double scaleY)
+        {
+            var left = groupRect.Left + ((localRect.Left - childOffset.X) * scaleX);
+            var top = groupRect.Top + ((localRect.Top - childOffset.Y) * scaleY);
+            var width = localRect.Width * scaleX;
+            var height = localRect.Height * scaleY;
+
+            // 異常に大きいEMU値による過大な矩形を防ぐ(画像・図形と同じ安全弁)。
+            width = Math.Min(width, MaxDrawingObjectDimensionPt);
+            height = Math.Min(height, MaxDrawingObjectDimensionPt);
+
+            return width <= 0 || height <= 0
+                ? default
+                : RectPt.FromBounds(left, top, left + width, top + height);
+        }
+
+        /// <summary>グループ内図形の描画命令を組み立てる(要件10.10)。テキスト折り返しはトップレベルの図形と同じロジックを再利用する。</summary>
+        private ShapeCommand BuildGroupChildShapeCommand(GroupChildShape shape, RectPt rect)
+        {
+            var textLines = shape.Text is { } text
+                ? BuildShapeTextLines(text, rect)
+                : Array.Empty<ShapeTextLine>();
+
+            return new ShapeCommand(rect, shape.Preset, shape.AdjustmentValues, shape.RotationDegrees, shape.Fill, shape.Outline, textLines);
+        }
+
+        private static PointPt RectCenter(RectPt rect) => new(rect.Left + (rect.Width / 2.0), rect.Top + (rect.Height / 2.0));
 
         /// <summary>
         /// 画像・図形共通のアンカー解決(要件9.1, 9.2, 10.1, 10.2)。アンカー左上セルがこのページに

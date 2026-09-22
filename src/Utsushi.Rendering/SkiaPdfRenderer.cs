@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using SkiaSharp;
 using Utsushi.Core;
 using Utsushi.Core.Exceptions;
@@ -40,6 +42,12 @@ namespace Utsushi.Rendering
         /// (security-reviewer指摘)。自社ロゴ用途でこの上限に達することは想定していない。
         /// </summary>
         private const int MaxDecodedImageDimensionPx = 4096;
+
+        /// <summary>
+        /// <see cref="ConnectorModel.Outline"/>が<c>null</c>の接続線に補う既定の枠線
+        /// (Excel上は黒い実線1ptで表示されるため。design.md参照)。
+        /// </summary>
+        private static readonly ShapeOutline DefaultConnectorOutline = new(ArgbColor.Black, 1.0);
 
         private readonly SkiaFontMetricsProvider _fontMetrics;
         private readonly PdfRenderOptions _options;
@@ -146,32 +154,51 @@ namespace Utsushi.Rendering
         {
             foreach (var command in page.Commands)
             {
-                switch (command)
-                {
-                    case FillRectCommand fill:
-                        DrawFill(canvas, fill);
-                        break;
+                DrawSingleCommand(canvas, command, reportCode, sheetName);
+            }
+        }
 
-                    case LineCommand line:
-                        DrawLine(canvas, line);
-                        break;
+        /// <summary>
+        /// 1つの描画命令を振り分けて描画する。<see cref="DrawPage"/>の<c>foreach</c>と、
+        /// <see cref="DrawGroup"/>によるグループ内子コマンドの再帰的な展開の両方から呼ばれる
+        /// (design.md「Rendering レイヤー」参照)。抽象レコード型<see cref="DrawCommand"/>と
+        /// 紛らわしくなるため、メソッド名は型名とは別の<c>DrawSingleCommand</c>とする。
+        /// </summary>
+        private void DrawSingleCommand(SKCanvas canvas, DrawCommand command, string reportCode, string sheetName)
+        {
+            switch (command)
+            {
+                case FillRectCommand fill:
+                    DrawFill(canvas, fill);
+                    break;
 
-                    case TextCommand text:
-                        DrawText(canvas, text);
-                        break;
+                case LineCommand line:
+                    DrawLine(canvas, line);
+                    break;
 
-                    case ImageCommand image:
-                        DrawImage(canvas, image, reportCode, sheetName);
-                        break;
+                case TextCommand text:
+                    DrawText(canvas, text);
+                    break;
 
-                    case ShapeCommand shape:
-                        DrawShape(canvas, shape);
-                        break;
+                case ImageCommand image:
+                    DrawImage(canvas, image, reportCode, sheetName);
+                    break;
 
-                    default:
-                        throw new PdfRenderingException(
-                            $"未知の描画命令です: {command.GetType().Name}", reportCode, sheetName);
-                }
+                case ShapeCommand shape:
+                    DrawShape(canvas, shape);
+                    break;
+
+                case ConnectorCommand connector:
+                    DrawConnector(canvas, connector);
+                    break;
+
+                case GroupCommand group:
+                    DrawGroup(canvas, group, reportCode, sheetName);
+                    break;
+
+                default:
+                    throw new PdfRenderingException(
+                        $"未知の描画命令です: {command.GetType().Name}", reportCode, sheetName);
             }
         }
 
@@ -234,16 +261,19 @@ namespace Utsushi.Rendering
 
             try
             {
-                using var path = ShapeGeometryBuilder.Build(shape.Preset, shape.AdjustmentValues, skRect);
-
                 if (shape.Fill is { } fill)
                 {
+                    using var fillPath = ShapeGeometryBuilder.Build(shape.Preset, shape.AdjustmentValues, skRect);
                     using var fillPaint = CreateShapeFillPaint(fill, skRect);
-                    canvas.DrawPath(path, fillPaint);
+                    canvas.DrawPath(fillPath, fillPaint);
                 }
 
                 if (shape.Outline is { } outline)
                 {
+                    // callout1/2/3は本体と塗りつぶしを持たない引き出し線が別ジオメトリになるため、
+                    // 塗りつぶし用(Build)とは別に枠線用のジオメトリを組み立てる(それ以外の
+                    // プリセットはBuildと同じ形状を返す)。
+                    using var outlinePath = ShapeGeometryBuilder.BuildOutline(shape.Preset, shape.AdjustmentValues, skRect);
                     using var outlinePaint = new SKPaint
                     {
                         Color = ToSkColor(outline.Color),
@@ -251,7 +281,7 @@ namespace Utsushi.Rendering
                         StrokeWidth = (float)outline.WidthPt,
                         IsAntialias = true,
                     };
-                    canvas.DrawPath(path, outlinePaint);
+                    canvas.DrawPath(outlinePath, outlinePaint);
                 }
 
                 // テキストは図形本体と同じ回転変換の内側で描画することで、回転が正しく反映される
@@ -260,6 +290,86 @@ namespace Utsushi.Rendering
                 foreach (var line in shape.TextLines)
                 {
                     DrawText(canvas, new TextCommand(line.Origin, line.Text, line.Font, line.Anchor, ClipRect: null));
+                }
+            }
+            finally
+            {
+                if (hasRotation)
+                {
+                    canvas.Restore();
+                }
+            }
+        }
+
+        /// <summary>接続線を描画する(要件10.9)。塗りつぶし・テキストを持たない。</summary>
+        private static void DrawConnector(SKCanvas canvas, ConnectorCommand connector)
+        {
+            var skRect = ToSkRect(connector.Rect);
+            var isResolved = connector.ResolvedStart is not null && connector.ResolvedEnd is not null;
+
+            // 接続点解決(要件10.11)で両端点が絶対座標として確定している場合、その座標が
+            // 最終的な見た目そのものであり、Rect中心を軸にした追加の回転はかえって位置を
+            // ずらしてしまう(design.md「未決事項」参照)ため適用しない。
+            var hasRotation = !isResolved && Math.Abs(connector.RotationDegrees) > double.Epsilon;
+
+            if (hasRotation)
+            {
+                canvas.Save();
+                var centerX = (skRect.Left + skRect.Right) / 2f;
+                var centerY = (skRect.Top + skRect.Bottom) / 2f;
+                canvas.RotateDegrees((float)connector.RotationDegrees, centerX, centerY);
+            }
+
+            try
+            {
+                var resolvedStart = connector.ResolvedStart is { } start ? ToSkPoint(start) : (SKPoint?)null;
+                var resolvedEnd = connector.ResolvedEnd is { } end ? ToSkPoint(end) : (SKPoint?)null;
+                using var path = ConnectorGeometryBuilder.Build(
+                    connector.Preset, connector.FlipHorizontal, connector.FlipVertical, skRect, resolvedStart, resolvedEnd);
+
+                // Outlineが無い接続線にも、Excel上の既定の黒い実線1ptを補う(design.md参照)。
+                var outline = connector.Outline ?? DefaultConnectorOutline;
+                using var paint = new SKPaint
+                {
+                    Color = ToSkColor(outline.Color),
+                    Style = SKPaintStyle.Stroke,
+                    StrokeWidth = (float)outline.WidthPt,
+                    IsAntialias = true,
+                };
+                canvas.DrawPath(path, paint);
+            }
+            finally
+            {
+                if (hasRotation)
+                {
+                    canvas.Restore();
+                }
+            }
+        }
+
+        /// <summary>
+        /// グループ化された図形を描画する(要件10.10)。グループ自身の回転を<c>canvas</c>の
+        /// 座標変換として適用したうえで、子要素(すでにページ座標へ変換済み)を出現順に
+        /// 再帰的に描画する。子要素個別の回転は、この変換がすでに適用された座標系の内側で
+        /// さらに<c>Save</c>/<c>RotateDegrees</c>/<c>Restore</c>するため、グループの回転と
+        /// 子要素個別の回転が<c>canvas</c>の変換行列のスタックにより正しく合成される
+        /// (design.md「Rendering レイヤー」参照)。
+        /// </summary>
+        private void DrawGroup(SKCanvas canvas, GroupCommand group, string reportCode, string sheetName)
+        {
+            var hasRotation = Math.Abs(group.RotationDegrees) > double.Epsilon;
+
+            if (hasRotation)
+            {
+                canvas.Save();
+                canvas.RotateDegrees((float)group.RotationDegrees, (float)group.Center.X, (float)group.Center.Y);
+            }
+
+            try
+            {
+                foreach (var child in group.Children)
+                {
+                    DrawSingleCommand(canvas, child, reportCode, sheetName);
                 }
             }
             finally
@@ -286,17 +396,41 @@ namespace Utsushi.Rendering
                     break;
 
                 case LinearGradientShapeFill gradient:
+                    var (colors, positions) = ToShaderStops(gradient.Stops);
                     var (start, end) = GradientEndpoints(rect, gradient.AngleDegrees);
-                    paint.Shader = SKShader.CreateLinearGradient(
-                        start,
-                        end,
-                        new[] { ToSkColor(gradient.StartColor), ToSkColor(gradient.EndColor) },
-                        null,
-                        SKShaderTileMode.Clamp);
+                    paint.Shader = SKShader.CreateLinearGradient(start, end, colors, positions, SKShaderTileMode.Clamp);
+                    break;
+
+                case RadialGradientShapeFill radial:
+                    var (radialColors, radialPositions) = ToShaderStops(radial.Stops);
+                    var center = new SKPoint(
+                        rect.Left + (rect.Width * (float)radial.CenterFraction.X),
+                        rect.Top + (rect.Height * (float)radial.CenterFraction.Y));
+                    var radius = (float)(Math.Sqrt((rect.Width * rect.Width) + (rect.Height * rect.Height)) / 2.0);
+                    paint.Shader = SKShader.CreateRadialGradient(center, radius, radialColors, radialPositions, SKShaderTileMode.Clamp);
                     break;
             }
 
             return paint;
+        }
+
+        /// <summary>
+        /// <see cref="GradientStop"/>のリストを、位置の昇順に並べたSkiaSharpのシェーダー引数
+        /// (色配列・位置配列)に変換する。<c>a:gsLst</c>の並び順はファイルの記述順であり
+        /// 昇順とは限らないため、ここで並べ替える(SkiaSharpは昇順を前提とするため)。
+        /// </summary>
+        private static (SKColor[] Colors, float[] Positions) ToShaderStops(IReadOnlyList<GradientStop> stops)
+        {
+            var sorted = stops.OrderBy(s => s.Position).ToList();
+            var colors = new SKColor[sorted.Count];
+            var positions = new float[sorted.Count];
+            for (var i = 0; i < sorted.Count; i++)
+            {
+                colors[i] = ToSkColor(sorted[i].Color);
+                positions[i] = (float)sorted[i].Position;
+            }
+
+            return (colors, positions);
         }
 
         /// <summary>
@@ -520,6 +654,8 @@ namespace Utsushi.Rendering
 
         private static SKRect ToSkRect(RectPt rect) =>
             new((float)rect.Left, (float)rect.Top, (float)rect.Right, (float)rect.Bottom);
+
+        private static SKPoint ToSkPoint(PointPt point) => new((float)point.X, (float)point.Y);
     }
 
     /// <summary>

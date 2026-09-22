@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using SkiaSharp;
 using Utsushi.Parsing.Model;
 using Xunit;
@@ -148,6 +149,192 @@ namespace Utsushi.Rendering.Tests
 
             var apex = path.Points[0];
             Assert.Equal(Rect.Left + (Rect.Width / 2f), apex.X, 3);
+        }
+
+        // -- 星形・フローチャート記号・吹き出し(新規プリセット) -------------------------------
+
+        [Theory]
+        [InlineData(ShapePresetType.Star4)]
+        [InlineData(ShapePresetType.Star5)]
+        [InlineData(ShapePresetType.Star6)]
+        [InlineData(ShapePresetType.Star8)]
+        public void 星形は指定矩形の内側に収まる(ShapePresetType preset)
+        {
+            using var path = ShapeGeometryBuilder.Build(preset, Array.Empty<double>(), Rect);
+
+            AssertBoundsWithin(Rect, path.Bounds);
+        }
+
+        [Theory]
+        [InlineData(ShapePresetType.FlowChartProcess)]
+        [InlineData(ShapePresetType.FlowChartDecision)]
+        [InlineData(ShapePresetType.FlowChartTerminator)]
+        [InlineData(ShapePresetType.FlowChartInputOutput)]
+        [InlineData(ShapePresetType.FlowChartPredefinedProcess)]
+        [InlineData(ShapePresetType.FlowChartConnector)]
+        public void ほとんどのフローチャート記号は指定矩形とちょうど一致する境界になる(ShapePresetType preset)
+        {
+            // 処理/判断/端子/入出力/定義済み処理/結合子は、いずれも矩形の4辺(または中点)に
+            // 頂点が接するため、パスの境界は入力矩形と完全に一致するはず。
+            using var path = ShapeGeometryBuilder.Build(preset, Array.Empty<double>(), Rect);
+
+            AssertBoundsApproximately(Rect, path.Bounds);
+        }
+
+        [Fact]
+        public void flowChartDocumentは下辺の波形ぶん矩形よりわずかに下へふくらむ()
+        {
+            // 書類の下辺は「緩やかな凹み」をQuadToの制御点で表現しており、制御点自体は
+            // 矩形の下端よりさらに下(高さの8%ぶん)に置かれるため、パスの境界は
+            // 矩形よりわずかに(意図的に)下へはみ出す。
+            using var path = ShapeGeometryBuilder.Build(ShapePresetType.FlowChartDocument, Array.Empty<double>(), Rect);
+
+            Assert.Equal(Rect.Left, path.Bounds.Left, 3);
+            Assert.Equal(Rect.Top, path.Bounds.Top, 3);
+            Assert.Equal(Rect.Right, path.Bounds.Right, 3);
+            Assert.True(path.Bounds.Bottom > Rect.Bottom, $"Bottom: expected > {Rect.Bottom} actual={path.Bounds.Bottom}");
+            Assert.True(path.Bounds.Bottom < Rect.Bottom + Rect.Height, "はみ出しは矩形の高さを超えないはず(意図しない破綻の検出)");
+        }
+
+        [Theory]
+        [InlineData(ShapePresetType.Star4, 0.25)]
+        [InlineData(ShapePresetType.Star5, 0.382)]
+        [InlineData(ShapePresetType.Star6, 0.577)]
+        [InlineData(ShapePresetType.Star8, 0.75)]
+        public void 星形の既定内側半径比はプリセットごとの規定値になる(ShapePresetType preset, double expectedRatio)
+        {
+            // 要件10.12: 内側頂点の半径比の既定値はECMA-376のadj既定値(0〜50000)を
+            // 50000で割った比率であり、star4/5/6/8で共通ではない。
+            using var path = ShapeGeometryBuilder.Build(preset, Array.Empty<double>(), Rect);
+
+            var centerX = (Rect.Left + Rect.Right) / 2f;
+            var centerY = (Rect.Top + Rect.Bottom) / 2f;
+            var outerRadius = Math.Min(Rect.Width, Rect.Height) / 2f;
+
+            // StarPathはi=0(外側)から始まり、奇数インデックス(i=1)が最初の内側頂点になる。
+            var innerVertex = path.Points[1];
+            var actualInnerRadius = Distance(innerVertex, centerX, centerY);
+            var expectedInnerRadius = outerRadius * (float)expectedRatio;
+
+            Assert.Equal(expectedInnerRadius, actualInnerRadius, 2);
+        }
+
+        [Fact]
+        public void 星形の既定内側半径比はstar4_5_6_8ですべて異なる()
+        {
+            // 単一の共通既定値(旧実装の0.38)へ後退していないことの回帰確認(要件10.12)。
+            var presets = new[] { ShapePresetType.Star4, ShapePresetType.Star5, ShapePresetType.Star6, ShapePresetType.Star8 };
+            var centerX = (Rect.Left + Rect.Right) / 2f;
+            var centerY = (Rect.Top + Rect.Bottom) / 2f;
+
+            var innerRadii = presets
+                .Select(preset =>
+                {
+                    using var path = ShapeGeometryBuilder.Build(preset, Array.Empty<double>(), Rect);
+                    return Distance(path.Points[1], centerX, centerY);
+                })
+                .ToList();
+
+            Assert.Equal(presets.Length, innerRadii.Distinct().Count());
+        }
+
+        [Fact]
+        public void cloudCalloutの引き出し位置は調整値を明示指定すると変わる()
+        {
+            // 要件10.13: adj1(X方向)/adj2(Y方向)を明示指定すると引き出し三角形の先端位置が変わる。
+            // 既定(adj1=-0.25)は本体の左外側を指すが、adj1=1.25を指定すると右外側を指すようになる。
+            using var defaultPath = ShapeGeometryBuilder.Build(ShapePresetType.CloudCallout, Array.Empty<double>(), Rect);
+            using var rightPath = ShapeGeometryBuilder.Build(ShapePresetType.CloudCallout, new[] { 1.25, 0.5 }, Rect);
+
+            Assert.True(
+                rightPath.Bounds.Right > defaultPath.Bounds.Right,
+                $"Right: default={defaultPath.Bounds.Right} right={rightPath.Bounds.Right}");
+            Assert.True(
+                rightPath.Bounds.Left > defaultPath.Bounds.Left,
+                $"Left: default={defaultPath.Bounds.Left} right={rightPath.Bounds.Left}");
+        }
+
+        private static float Distance(SKPoint point, float centerX, float centerY) =>
+            (float)Math.Sqrt(Math.Pow(point.X - centerX, 2) + Math.Pow(point.Y - centerY, 2));
+
+        [Fact]
+        public void cloudCalloutは楕円本体に加え引き出し先端ぶん本体矩形の外側へ広がる()
+        {
+            // wedge系の吹き出しと同じ既定の引き出し先端(adj1=-0.25)を使うため、左方向へ広がる
+            // (design.md参照。バンプの個数・半径は固定値で調整ガイドには対応しない)。
+            using var path = ShapeGeometryBuilder.Build(ShapePresetType.CloudCallout, Array.Empty<double>(), Rect);
+
+            Assert.False(path.IsEmpty);
+            Assert.True(path.Bounds.Left < Rect.Left, $"Left: expected < {Rect.Left} actual={path.Bounds.Left}");
+            // 引き出し先端以外(雲本体)は概ね矩形内に収まる想定であり、無制限にはみ出さない。
+            Assert.True(path.Bounds.Width < Rect.Width * 3, $"Width={path.Bounds.Width}");
+            Assert.True(path.Bounds.Height < Rect.Height * 3, $"Height={path.Bounds.Height}");
+        }
+
+        [Theory]
+        [InlineData(ShapePresetType.Callout1)]
+        [InlineData(ShapePresetType.Callout2)]
+        [InlineData(ShapePresetType.Callout3)]
+        public void callout系のBuildは本体矩形のみで引き出し線を含まない(ShapePresetType preset)
+        {
+            // Build(塗りつぶし用)は本体(矩形)のみであり、引き出し線(枠線専用)は含まない設計
+            // (design.md「no-fillの引き出し線」要件)。境界は入力矩形とちょうど一致するはず。
+            using var path = ShapeGeometryBuilder.Build(preset, Array.Empty<double>(), Rect);
+
+            AssertBoundsApproximately(Rect, path.Bounds);
+        }
+
+        [Theory]
+        [InlineData(ShapePresetType.Callout1, 1)]
+        [InlineData(ShapePresetType.Callout2, 2)]
+        [InlineData(ShapePresetType.Callout3, 3)]
+        public void callout系のBuildOutlineはBuildと異なり引き出し線ぶん矩形の外側へ広がる(ShapePresetType preset, int segments)
+        {
+            using var body = ShapeGeometryBuilder.Build(preset, Array.Empty<double>(), Rect);
+            using var outline = ShapeGeometryBuilder.BuildOutline(preset, Array.Empty<double>(), Rect);
+
+            // Buildは本体(矩形)のみの4点(+Close)だが、BuildOutlineは本体に加えて
+            // segments+1個の頂点からなる引き出し折れ線を追加で持つため点数が異なる。
+            Assert.NotEqual(body.PointCount, outline.PointCount);
+            Assert.True(outline.PointCount > body.PointCount + segments, "引き出し線の頂点が追加されているはず");
+
+            // Buildは矩形の外に出ないが、BuildOutlineは引き出し先端(既定で左下方向)ぶん外側へ広がる。
+            AssertBoundsApproximately(Rect, body.Bounds);
+            Assert.True(outline.Bounds.Left < Rect.Left, $"Left: expected < {Rect.Left} actual={outline.Bounds.Left}");
+            Assert.True(outline.Bounds.Bottom > Rect.Bottom, $"Bottom: expected > {Rect.Bottom} actual={outline.Bounds.Bottom}");
+        }
+
+        public static IEnumerable<object[]> PresetsOtherThanCallouts()
+        {
+            foreach (ShapePresetType preset in Enum.GetValues(typeof(ShapePresetType)))
+            {
+                if (preset is ShapePresetType.Callout1 or ShapePresetType.Callout2 or ShapePresetType.Callout3)
+                {
+                    continue;
+                }
+
+                yield return new object[] { preset };
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(PresetsOtherThanCallouts))]
+        public void callout系以外はBuildOutlineがBuildと同じジオメトリを返す(ShapePresetType preset)
+        {
+            using var body = ShapeGeometryBuilder.Build(preset, Array.Empty<double>(), Rect);
+            using var outline = ShapeGeometryBuilder.BuildOutline(preset, Array.Empty<double>(), Rect);
+
+            Assert.Equal(body.PointCount, outline.PointCount);
+            AssertBoundsApproximately(body.Bounds, outline.Bounds);
+        }
+
+        private static void AssertBoundsWithin(SKRect outer, SKRect inner)
+        {
+            const float tolerance = 0.01f;
+            Assert.True(inner.Left >= outer.Left - tolerance, $"Left: outer={outer.Left} inner={inner.Left}");
+            Assert.True(inner.Top >= outer.Top - tolerance, $"Top: outer={outer.Top} inner={inner.Top}");
+            Assert.True(inner.Right <= outer.Right + tolerance, $"Right: outer={outer.Right} inner={inner.Right}");
+            Assert.True(inner.Bottom <= outer.Bottom + tolerance, $"Bottom: outer={outer.Bottom} inner={inner.Bottom}");
         }
 
         private static void AssertBoundsApproximately(SKRect expected, SKRect actual)

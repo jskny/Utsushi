@@ -87,5 +87,9 @@ namespace Utsushi.Layout.Tests
         public static IEnumerable<ImageCommand> Images(PageLayout page) => page.Commands.OfType<ImageCommand>();
 
         public static IEnumerable<ShapeCommand> Shapes(PageLayout page) => page.Commands.OfType<ShapeCommand>();
+
+        public static IEnumerable<ConnectorCommand> Connectors(PageLayout page) => page.Commands.OfType<ConnectorCommand>();
+
+        public static IEnumerable<GroupCommand> Groups(PageLayout page) => page.Commands.OfType<GroupCommand>();
     }
 }

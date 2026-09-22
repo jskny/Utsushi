@@ -75,6 +75,45 @@ namespace Utsushi.Layout.Model
     /// <summary>図形内テキストの1行(要件10.4)。座標は<see cref="ShapeCommand.Rect"/>を基準とした、回転前のローカル座標。</summary>
     public sealed record ShapeTextLine(PointPt Origin, string Text, FontStyle Font, TextAnchor Anchor);
 
+    /// <summary>
+    /// 接続線1本の描画(要件10.9)。塗りつぶし・テキストを持たない。
+    /// </summary>
+    /// <param name="Rect">配置先の矩形(ページ左上原点、ポイント単位、余白・拡大縮小適用済み)。</param>
+    /// <param name="Preset">接続線のプリセット種別(直線・カギ線・曲線)。</param>
+    /// <param name="RotationDegrees"><see cref="Rect"/>の中心を軸とした回転角(度、時計回り)。</param>
+    /// <param name="FlipHorizontal">左右反転の有無(経路の折れ/曲がる向きを決める)。</param>
+    /// <param name="FlipVertical">上下反転の有無(経路の折れ/曲がる向きを決める)。</param>
+    /// <param name="Outline">枠線。<c>null</c>の場合、Renderingレイヤーが既定の黒い実線を補う。</param>
+    /// <param name="ResolvedStart">
+    /// 要件10.11の接続点解決に成功した場合の始点の絶対座標(ページ座標)。<c>null</c>の場合、
+    /// Renderingレイヤーは<see cref="Rect"/>と<see cref="FlipHorizontal"/>/<see cref="FlipVertical"/>
+    /// から始点を決める(要件10.9の既定動作)。
+    /// </param>
+    /// <param name="ResolvedEnd"><see cref="ResolvedStart"/>と同様の終点。</param>
+    public sealed record ConnectorCommand(
+        RectPt Rect,
+        ConnectorPresetType Preset,
+        double RotationDegrees,
+        bool FlipHorizontal,
+        bool FlipVertical,
+        ShapeOutline? Outline,
+        PointPt? ResolvedStart,
+        PointPt? ResolvedEnd) : DrawCommand;
+
+    /// <summary>
+    /// グループ化された図形の展開結果(要件10.10)。<paramref name="Children"/>は
+    /// グループの子座標空間からページ座標へ変換済みだが、グループ自身の回転は未適用であり、
+    /// Renderingレイヤーが<paramref name="Center"/>を軸に<paramref name="RotationDegrees"/>だけ
+    /// 回転させたうえで<paramref name="Children"/>を描画する(子要素個別の回転とは独立に合成する)。
+    /// </summary>
+    /// <param name="Center">グループ自身の配置矩形の中心(回転の軸)。</param>
+    /// <param name="RotationDegrees">グループ全体の回転角(度、時計回り)。</param>
+    /// <param name="Children">
+    /// 子座標空間からページ座標へ変換済みの描画命令(出現順)。<see cref="ShapeCommand"/>/
+    /// <see cref="ImageCommand"/>/<see cref="ConnectorCommand"/>/入れ子の<see cref="GroupCommand"/>のいずれか。
+    /// </param>
+    public sealed record GroupCommand(PointPt Center, double RotationDegrees, IReadOnlyList<DrawCommand> Children) : DrawCommand;
+
     /// <summary>テキストのX座標の解釈。</summary>
     public enum TextAnchor
     {

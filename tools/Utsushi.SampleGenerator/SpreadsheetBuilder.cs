@@ -31,13 +31,16 @@ internal sealed class SpreadsheetBuilder
     private readonly List<uint> _manualRowBreaks = new();
     private (int Row, int Column, double OffsetXPt, double OffsetYPt, double WidthPt, double HeightPt, byte[] Png)? _image;
     private readonly List<ShapeSpec> _shapes = new();
+    private readonly List<ConnectorSpec> _connectors = new();
+    private readonly List<GroupSpec> _groups = new();
 
     /// <summary>図形(要件10)1つぶんの配置情報。</summary>
     private readonly struct ShapeSpec
     {
         public ShapeSpec(
             int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
-            A.ShapeTypeValues preset, string? fillHex, string? outlineHex, double rotationDegrees, string? text)
+            A.ShapeTypeValues preset, string? fillHex, string? outlineHex, double rotationDegrees, string? text,
+            GradientSpec? gradient = null)
         {
             Row = row;
             Column = column;
@@ -50,6 +53,7 @@ internal sealed class SpreadsheetBuilder
             OutlineHex = outlineHex;
             RotationDegrees = rotationDegrees;
             Text = text;
+            Gradient = gradient;
         }
 
         public int Row { get; }
@@ -73,6 +77,145 @@ internal sealed class SpreadsheetBuilder
         public double RotationDegrees { get; }
 
         public string? Text { get; }
+
+        public GradientSpec? Gradient { get; }
+    }
+
+    /// <summary>グラデーション塗り(要件10.6)1つぶんの指定。</summary>
+    internal readonly struct GradientSpec
+    {
+        public GradientSpec(IReadOnlyList<(double Position, string ColorHex)> stops, double angleDegrees, bool radial)
+        {
+            Stops = stops;
+            AngleDegrees = angleDegrees;
+            Radial = radial;
+        }
+
+        public IReadOnlyList<(double Position, string ColorHex)> Stops { get; }
+
+        public double AngleDegrees { get; }
+
+        public bool Radial { get; }
+    }
+
+    /// <summary>接続線(要件10.9)1つぶんの配置情報。</summary>
+    private readonly struct ConnectorSpec
+    {
+        public ConnectorSpec(
+            int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
+            A.ShapeTypeValues preset, string? outlineHex, bool flipHorizontal, bool flipVertical,
+            int? startShapeHandle, uint? startSiteIndex, int? endShapeHandle, uint? endSiteIndex)
+        {
+            Row = row;
+            Column = column;
+            OffsetXPt = offsetXPt;
+            OffsetYPt = offsetYPt;
+            WidthPt = widthPt;
+            HeightPt = heightPt;
+            Preset = preset;
+            OutlineHex = outlineHex;
+            FlipHorizontal = flipHorizontal;
+            FlipVertical = flipVertical;
+            StartShapeHandle = startShapeHandle;
+            StartSiteIndex = startSiteIndex;
+            EndShapeHandle = endShapeHandle;
+            EndSiteIndex = endSiteIndex;
+        }
+
+        public int Row { get; }
+
+        public int Column { get; }
+
+        public double OffsetXPt { get; }
+
+        public double OffsetYPt { get; }
+
+        public double WidthPt { get; }
+
+        public double HeightPt { get; }
+
+        public A.ShapeTypeValues Preset { get; }
+
+        public string? OutlineHex { get; }
+
+        public bool FlipHorizontal { get; }
+
+        public bool FlipVertical { get; }
+
+        /// <summary>接続先の始点(要件10.11)。<see cref="SetShape"/>が返した図形のハンドル。<c>null</c>なら接続先無し。</summary>
+        public int? StartShapeHandle { get; }
+
+        public uint? StartSiteIndex { get; }
+
+        /// <summary>接続先の終点(要件10.11)。<see cref="StartShapeHandle"/>と同様。</summary>
+        public int? EndShapeHandle { get; }
+
+        public uint? EndSiteIndex { get; }
+    }
+
+    /// <summary>グループ(要件10.10)内の図形子要素1つぶんの配置情報(子座標空間上、ポイント単位)。</summary>
+    internal readonly struct GroupChildShapeSpec
+    {
+        public GroupChildShapeSpec(
+            double offsetXPt, double offsetYPt, double widthPt, double heightPt,
+            A.ShapeTypeValues preset, string? fillHex, string? outlineHex)
+        {
+            OffsetXPt = offsetXPt;
+            OffsetYPt = offsetYPt;
+            WidthPt = widthPt;
+            HeightPt = heightPt;
+            Preset = preset;
+            FillHex = fillHex;
+            OutlineHex = outlineHex;
+        }
+
+        public double OffsetXPt { get; }
+
+        public double OffsetYPt { get; }
+
+        public double WidthPt { get; }
+
+        public double HeightPt { get; }
+
+        public A.ShapeTypeValues Preset { get; }
+
+        public string? FillHex { get; }
+
+        public string? OutlineHex { get; }
+    }
+
+    /// <summary>グループ(要件10.10)1つぶんの配置情報。子座標空間は(0,0)を原点とし、グループ自身の表示サイズと同じ大きさとする(倍率1.0)。</summary>
+    private readonly struct GroupSpec
+    {
+        public GroupSpec(
+            int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
+            double rotationDegrees, IReadOnlyList<GroupChildShapeSpec> children)
+        {
+            Row = row;
+            Column = column;
+            OffsetXPt = offsetXPt;
+            OffsetYPt = offsetYPt;
+            WidthPt = widthPt;
+            HeightPt = heightPt;
+            RotationDegrees = rotationDegrees;
+            Children = children;
+        }
+
+        public int Row { get; }
+
+        public int Column { get; }
+
+        public double OffsetXPt { get; }
+
+        public double OffsetYPt { get; }
+
+        public double WidthPt { get; }
+
+        public double HeightPt { get; }
+
+        public double RotationDegrees { get; }
+
+        public IReadOnlyList<GroupChildShapeSpec> Children { get; }
     }
 
     public SpreadsheetBuilder(string sheetName)
@@ -138,11 +281,62 @@ internal sealed class SpreadsheetBuilder
     /// <param name="outlineHex">枠線色(6桁16進)。nullは枠線無し。</param>
     /// <param name="rotationDegrees">回転角(度、時計回り)。</param>
     /// <param name="text">図形内テキスト。nullはテキスト無し。</param>
-    public void SetShape(
+    /// <returns>
+    /// この図形のハンドル(<see cref="SetConnector"/>の接続先指定に使う。要件10.11)。
+    /// 実際の<c>NonVisualDrawingProperties/@id</c>とは異なり、このビルダー内でだけ意味を持つ通し番号。
+    /// </returns>
+    public int SetShape(
         int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
-        A.ShapeTypeValues preset, string? fillHex, string? outlineHex, double rotationDegrees = 0, string? text = null) =>
+        A.ShapeTypeValues preset, string? fillHex, string? outlineHex, double rotationDegrees = 0, string? text = null)
+    {
+        var handle = _shapes.Count;
         _shapes.Add(new ShapeSpec(
             row, column, offsetXPt, offsetYPt, widthPt, heightPt, preset, fillHex, outlineHex, rotationDegrees, text));
+        return handle;
+    }
+
+    /// <summary>
+    /// シートに、グラデーション塗り(要件10.6)の図形を1つ追加する。<paramref name="gradientStops"/>は
+    /// 位置(0.0〜1.0)と色(6桁16進)の組を2点以上指定する。<paramref name="radial"/>が
+    /// <c>true</c>なら放射状、<c>false</c>なら<paramref name="angleDegrees"/>を角度とする線形グラデーション。
+    /// </summary>
+    public void SetGradientShape(
+        int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
+        A.ShapeTypeValues preset, IReadOnlyList<(double Position, string ColorHex)> gradientStops,
+        double angleDegrees = 0, bool radial = false, string? outlineHex = null, double rotationDegrees = 0, string? text = null) =>
+        _shapes.Add(new ShapeSpec(
+            row, column, offsetXPt, offsetYPt, widthPt, heightPt, preset, fillHex: null, outlineHex, rotationDegrees, text,
+            new GradientSpec(gradientStops, angleDegrees, radial)));
+
+    /// <summary>
+    /// シートに接続線(要件10.9)を1つ追加する(oneCellAnchor)。<paramref name="preset"/>には
+    /// <c>straightConnector1</c>/<c>bentConnector2</c>/<c>bentConnector3</c>/
+    /// <c>curvedConnector2</c>/<c>curvedConnector3</c>のいずれかを指定する。
+    /// </summary>
+    /// <param name="startShapeHandle">
+    /// 始点の接続先(要件10.11)。<see cref="SetShape"/>が返したハンドル。<c>null</c>なら接続先無し
+    /// (アンカー矩形の対角点をそのまま始点にする、要件10.9の既定動作)。
+    /// </param>
+    /// <param name="startSiteIndex">始点の接続点番号(<c>a:stCxn/@idx</c>。0=上,1=左,2=下,3=右)。</param>
+    /// <param name="endShapeHandle">終点の接続先。<paramref name="startShapeHandle"/>と同様。</param>
+    /// <param name="endSiteIndex">終点の接続点番号。<paramref name="startSiteIndex"/>と同様。</param>
+    public void SetConnector(
+        int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
+        A.ShapeTypeValues preset, string? outlineHex = null, bool flipHorizontal = false, bool flipVertical = false,
+        int? startShapeHandle = null, uint? startSiteIndex = null, int? endShapeHandle = null, uint? endSiteIndex = null) =>
+        _connectors.Add(new ConnectorSpec(
+            row, column, offsetXPt, offsetYPt, widthPt, heightPt, preset, outlineHex, flipHorizontal, flipVertical,
+            startShapeHandle, startSiteIndex, endShapeHandle, endSiteIndex));
+
+    /// <summary>
+    /// シートにグループ化された図形(要件10.10)を1つ追加する(oneCellAnchor)。
+    /// 子要素の座標(<see cref="GroupChildShapeSpec"/>)は、グループ自身の表示サイズを
+    /// 子座標空間の大きさ(倍率1.0)として指定する。
+    /// </summary>
+    public void SetGroup(
+        int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
+        double rotationDegrees, IReadOnlyList<GroupChildShapeSpec> children) =>
+        _groups.Add(new GroupSpec(row, column, offsetXPt, offsetYPt, widthPt, heightPt, rotationDegrees, children));
 
     public void SetText(int row, int column, string? text, uint styleIndex = 0) =>
         _cells[Reference(row, column)] = (row, column, text, styleIndex, false);
@@ -184,9 +378,9 @@ internal sealed class SpreadsheetBuilder
         var worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
         worksheetPart.Worksheet = BuildWorksheet();
 
-        if (_image is not null || _shapes.Count > 0)
+        if (_image is not null || _shapes.Count > 0 || _connectors.Count > 0 || _groups.Count > 0)
         {
-            AppendDrawingObjects(worksheetPart, _image, _shapes);
+            AppendDrawingObjects(worksheetPart, _image, _shapes, _connectors, _groups);
         }
 
         var sheets = workbookPart.Workbook.AppendChild(new Sheets());
@@ -430,13 +624,18 @@ internal sealed class SpreadsheetBuilder
         name.Any(c => char.IsWhiteSpace(c) || c > 0x7F) ? "'" + name.Replace("'", "''") + "'" : name;
 
     /// <summary>
-    /// 画像(<c>xdr:pic</c>)・図形(<c>xdr:sp</c>)を、1つの<c>DrawingsPart</c>にまとめて
-    /// 追加する(出現順=重なり順。要件10.3)。画像は指定されていれば図形より前に置く。
+    /// 画像(<c>xdr:pic</c>)・図形(<c>xdr:sp</c>)・接続線(<c>xdr:cxnSp</c>)・グループ(<c>xdr:grpSp</c>)を、
+    /// 1つの<c>DrawingsPart</c>にまとめて追加する(出現順=重なり順。要件10.3)。
+    /// 画像→図形→接続線→グループの順に固定で並べる(サンプル生成専用の簡略化。
+    /// 実際のExcelファイルはdrawing.xml内の任意の出現順を取りうるが、z-order自体の検証は
+    /// Parsingレイヤーのユニットテストが個別のフィクスチャで行う)。
     /// </summary>
     private static void AppendDrawingObjects(
         WorksheetPart worksheetPart,
         (int Row, int Column, double OffsetXPt, double OffsetYPt, double WidthPt, double HeightPt, byte[] Png)? image,
-        IReadOnlyList<ShapeSpec> shapes)
+        IReadOnlyList<ShapeSpec> shapes,
+        IReadOnlyList<ConnectorSpec> connectors,
+        IReadOnlyList<GroupSpec> groups)
     {
         var drawingsPart = worksheetPart.AddNewPart<DrawingsPart>();
         var drawing = new Xdr.WorksheetDrawing();
@@ -448,9 +647,27 @@ internal sealed class SpreadsheetBuilder
             drawing.Append(BuildImageAnchor(drawingsPart, img, nextId++));
         }
 
-        foreach (var shape in shapes)
+        // 接続線の接続先解決(要件10.11)のため、SetShapeが返したハンドル(_shapesのindex)から
+        // 実際に割り当てたIDへのマップを、ID割り当てと同じ順序で構築する。
+        var shapeIds = new uint[shapes.Count];
+        for (var i = 0; i < shapes.Count; i++)
         {
-            drawing.Append(BuildShapeAnchor(shape, nextId++));
+            shapeIds[i] = nextId;
+            drawing.Append(BuildShapeAnchor(shapes[i], nextId));
+            nextId++;
+        }
+
+        foreach (var connector in connectors)
+        {
+            var startShapeId = connector.StartShapeHandle is { } startHandle ? shapeIds[startHandle] : (uint?)null;
+            var endShapeId = connector.EndShapeHandle is { } endHandle ? shapeIds[endHandle] : (uint?)null;
+            drawing.Append(BuildConnectorAnchor(
+                connector, nextId++, startShapeId, connector.StartSiteIndex, endShapeId, connector.EndSiteIndex));
+        }
+
+        foreach (var group in groups)
+        {
+            drawing.Append(BuildGroupAnchor(group, ref nextId));
         }
 
         drawingsPart.WorksheetDrawing = drawing;
@@ -506,9 +723,11 @@ internal sealed class SpreadsheetBuilder
         var heightEmu = (long)Math.Round(shape.HeightPt * EmusPerPoint);
         var rotationEmu = (int)Math.Round(shape.RotationDegrees * 60000.0);
 
-        OpenXmlElement fill = shape.FillHex is { } fillHex
-            ? new A.SolidFill(new A.RgbColorModelHex { Val = fillHex })
-            : new A.NoFill();
+        OpenXmlElement fill = shape.Gradient is { } gradient
+            ? BuildGradientFill(gradient)
+            : shape.FillHex is { } fillHex
+                ? new A.SolidFill(new A.RgbColorModelHex { Val = fillHex })
+                : new A.NoFill();
 
         var shapeProperties = new Xdr.ShapeProperties(
             new A.Transform2D(
@@ -552,6 +771,169 @@ internal sealed class SpreadsheetBuilder
             new Xdr.Extent { Cx = widthEmu, Cy = heightEmu },
             visualShape,
             new Xdr.ClientData());
+    }
+
+    /// <summary>グラデーション塗り(<c>a:gradFill</c>、要件10.6)を組み立てる。</summary>
+    private static A.GradientFill BuildGradientFill(GradientSpec gradient)
+    {
+        var stopList = new A.GradientStopList();
+        foreach (var (position, colorHex) in gradient.Stops)
+        {
+            var permille = (int)Math.Round(Math.Max(0.0, Math.Min(1.0, position)) * 100000.0);
+            stopList.Append(new A.GradientStop(new A.RgbColorModelHex { Val = colorHex }) { Position = permille });
+        }
+
+        var gradientFill = new A.GradientFill(stopList);
+        if (gradient.Radial)
+        {
+            gradientFill.Append(new A.PathGradientFill(new A.FillToRectangle()) { Path = A.PathShadeValues.Circle });
+        }
+        else
+        {
+            var angleEmu = (int)Math.Round(gradient.AngleDegrees * 60000.0);
+            gradientFill.Append(new A.LinearGradientFill { Angle = angleEmu });
+        }
+
+        return gradientFill;
+    }
+
+    /// <summary>
+    /// 接続線(<c>xdr:cxnSp</c>、oneCellAnchor)を組み立てる(要件10.9)。
+    /// <paramref name="startShapeId"/>/<paramref name="endShapeId"/>が指定されていれば、
+    /// <c>xdr:cNvCxnSpPr</c>配下に<c>a:stCxn</c>/<c>a:endCxn</c>(要件10.11)を追加する。
+    /// </summary>
+    private static Xdr.OneCellAnchor BuildConnectorAnchor(
+        ConnectorSpec connector, uint id, uint? startShapeId, uint? startSiteIndex, uint? endShapeId, uint? endSiteIndex)
+    {
+        var offsetXEmu = (long)Math.Round(connector.OffsetXPt * EmusPerPoint);
+        var offsetYEmu = (long)Math.Round(connector.OffsetYPt * EmusPerPoint);
+        var widthEmu = (long)Math.Round(connector.WidthPt * EmusPerPoint);
+        var heightEmu = (long)Math.Round(connector.HeightPt * EmusPerPoint);
+
+        var transform = new A.Transform2D(
+            new A.Offset { X = 0L, Y = 0L },
+            new A.Extents { Cx = widthEmu, Cy = heightEmu });
+        if (connector.FlipHorizontal)
+        {
+            transform.HorizontalFlip = true;
+        }
+
+        if (connector.FlipVertical)
+        {
+            transform.VerticalFlip = true;
+        }
+
+        var shapeProperties = new Xdr.ShapeProperties(
+            transform,
+            new A.PresetGeometry(new A.AdjustValueList()) { Preset = connector.Preset });
+
+        if (connector.OutlineHex is { } outlineHex)
+        {
+            shapeProperties.Append(new A.Outline(new A.SolidFill(new A.RgbColorModelHex { Val = outlineHex })) { Width = 12700 });
+        }
+
+        var connectorShapeDrawingProperties = new Xdr.NonVisualConnectorShapeDrawingProperties();
+        if (startShapeId is { } startId)
+        {
+            connectorShapeDrawingProperties.Append(new A.StartConnection { Id = startId, Index = startSiteIndex ?? 0 });
+        }
+
+        if (endShapeId is { } endId)
+        {
+            connectorShapeDrawingProperties.Append(new A.EndConnection { Id = endId, Index = endSiteIndex ?? 0 });
+        }
+
+        var connectionShape = new Xdr.ConnectionShape(
+            new Xdr.NonVisualConnectionShapeProperties(
+                new Xdr.NonVisualDrawingProperties { Id = id, Name = "Connector" + id.ToString(CultureInfo.InvariantCulture) },
+                connectorShapeDrawingProperties),
+            shapeProperties);
+
+        return new Xdr.OneCellAnchor(
+            new Xdr.FromMarker(
+                new Xdr.ColumnId((connector.Column - 1).ToString(CultureInfo.InvariantCulture)),
+                new Xdr.ColumnOffset(offsetXEmu.ToString(CultureInfo.InvariantCulture)),
+                new Xdr.RowId((connector.Row - 1).ToString(CultureInfo.InvariantCulture)),
+                new Xdr.RowOffset(offsetYEmu.ToString(CultureInfo.InvariantCulture))),
+            new Xdr.Extent { Cx = widthEmu, Cy = heightEmu },
+            connectionShape,
+            new Xdr.ClientData());
+    }
+
+    /// <summary>
+    /// グループ(<c>xdr:grpSp</c>、oneCellAnchor)を組み立てる(要件10.10)。子座標空間は
+    /// (0,0)を原点とし、グループ自身の表示サイズと同じ大きさ(倍率1.0)とする。
+    /// </summary>
+    private static Xdr.OneCellAnchor BuildGroupAnchor(GroupSpec group, ref uint nextId)
+    {
+        var offsetXEmu = (long)Math.Round(group.OffsetXPt * EmusPerPoint);
+        var offsetYEmu = (long)Math.Round(group.OffsetYPt * EmusPerPoint);
+        var widthEmu = (long)Math.Round(group.WidthPt * EmusPerPoint);
+        var heightEmu = (long)Math.Round(group.HeightPt * EmusPerPoint);
+        var rotationEmu = (int)Math.Round(group.RotationDegrees * 60000.0);
+
+        var groupId = nextId++;
+        var groupShapeProperties = new Xdr.GroupShapeProperties(
+            new A.TransformGroup(
+                new A.Offset { X = 0L, Y = 0L },
+                new A.Extents { Cx = widthEmu, Cy = heightEmu },
+                new A.ChildOffset { X = 0L, Y = 0L },
+                new A.ChildExtents { Cx = widthEmu, Cy = heightEmu })
+            {
+                Rotation = rotationEmu,
+            });
+
+        var groupShape = new Xdr.GroupShape(
+            new Xdr.NonVisualGroupShapeProperties(
+                new Xdr.NonVisualDrawingProperties { Id = groupId, Name = "Group" + groupId.ToString(CultureInfo.InvariantCulture) },
+                new Xdr.NonVisualGroupShapeDrawingProperties()),
+            groupShapeProperties);
+
+        foreach (var child in group.Children)
+        {
+            groupShape.Append(BuildGroupChildShape(child, nextId++));
+        }
+
+        return new Xdr.OneCellAnchor(
+            new Xdr.FromMarker(
+                new Xdr.ColumnId((group.Column - 1).ToString(CultureInfo.InvariantCulture)),
+                new Xdr.ColumnOffset(offsetXEmu.ToString(CultureInfo.InvariantCulture)),
+                new Xdr.RowId((group.Row - 1).ToString(CultureInfo.InvariantCulture)),
+                new Xdr.RowOffset(offsetYEmu.ToString(CultureInfo.InvariantCulture))),
+            new Xdr.Extent { Cx = widthEmu, Cy = heightEmu },
+            groupShape,
+            new Xdr.ClientData());
+    }
+
+    /// <summary>グループ内の図形子要素(<c>xdr:sp</c>、子座標空間上の<c>a:off</c>/<c>a:ext</c>)を組み立てる。</summary>
+    private static Xdr.Shape BuildGroupChildShape(GroupChildShapeSpec child, uint id)
+    {
+        var offsetXEmu = (long)Math.Round(child.OffsetXPt * EmusPerPoint);
+        var offsetYEmu = (long)Math.Round(child.OffsetYPt * EmusPerPoint);
+        var widthEmu = (long)Math.Round(child.WidthPt * EmusPerPoint);
+        var heightEmu = (long)Math.Round(child.HeightPt * EmusPerPoint);
+
+        OpenXmlElement fill = child.FillHex is { } fillHex
+            ? new A.SolidFill(new A.RgbColorModelHex { Val = fillHex })
+            : new A.NoFill();
+
+        var shapeProperties = new Xdr.ShapeProperties(
+            new A.Transform2D(
+                new A.Offset { X = offsetXEmu, Y = offsetYEmu },
+                new A.Extents { Cx = widthEmu, Cy = heightEmu }),
+            new A.PresetGeometry(new A.AdjustValueList()) { Preset = child.Preset },
+            fill);
+
+        if (child.OutlineHex is { } outlineHex)
+        {
+            shapeProperties.Append(new A.Outline(new A.SolidFill(new A.RgbColorModelHex { Val = outlineHex })) { Width = 12700 });
+        }
+
+        return new Xdr.Shape(
+            new Xdr.NonVisualShapeProperties(
+                new Xdr.NonVisualDrawingProperties { Id = id, Name = "GroupChild" + id.ToString(CultureInfo.InvariantCulture) },
+                new Xdr.NonVisualShapeDrawingProperties()),
+            shapeProperties);
     }
 }
 }

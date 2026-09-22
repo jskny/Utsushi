@@ -41,6 +41,26 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 画像のIdはNonVisualDrawingProperties_idを反映する()
+        {
+            // 要件10.11: 接続線の接続先解決のキーとなるIdを画像側でも保持する。
+            // ImageWorkbookFixtures.CreateWithPicture(oneCellAnchor)はNonVisualDrawingProperties.Idを
+            // 固定値2で組み立てる(BuildPictureの既定引数)。
+            var path = ImageWorkbookFixtures.CreateWithPicture("image/png", ImageWorkbookFixtures.TinyPng());
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                var image = Assert.Single(sheet.DrawingObjects.OfType<ImageModel>().ToList());
+
+                Assert.Equal(2u, image.Id);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void twoCellAnchorの画像を対角セルとして読み取る()
         {
             var path = ImageWorkbookFixtures.CreateWithPicture("image/png", ImageWorkbookFixtures.TinyPng(), useTwoCellAnchor: true);
@@ -117,16 +137,19 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 接続線はunsupportedElementsがerrorなら引き続き例外になる()
+        public void 対応済みプリセットの接続線はunsupportedElementsがerrorでも例外にならない()
         {
+            // 要件10.9(接続線対応)により、straightConnector1等の対応済みプリセットは
+            // 構造的なサポート外(旧: ElementKind="Drawing")の対象から外れ、ConnectorModelとして読み取られる。
             var path = ImageWorkbookFixtures.CreateWithConnectionShape();
             try
             {
                 var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("Drawing", ex.ElementKind);
+                var workbook = _reader.Read(stream, options);
+                var connector = Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<ConnectorModel>().ToList());
+                Assert.Equal(ConnectorPresetType.Straight, connector.Preset);
             }
             finally
             {

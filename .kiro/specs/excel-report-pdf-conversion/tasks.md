@@ -3,10 +3,19 @@
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
-> **状況**: 全タスク完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13: 2026-09-21、
-> タスク14: 2026-09-21)。`dotnet build` / `dotnet test`(311件、2026-09-21時点)/ `dotnet format`
-> はグリーン。実装時に決定した事項・判明した制約は `design.md` に反映済み。
-> タスク文面どおりに実現できなかった項目には各タスクに注記を付けた。
+> **状況**: タスク1〜15完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13〜14:
+> 2026-09-21、タスク15: 2026-09-21)。タスク15(接続線・グループ・追加プリセット・多段階/放射状
+> グラデーション)では、データモデル定義、Parsing/Layout/Renderingの3層すべてでの接続線・
+> グループ対応、多段階/放射状グラデーション、星形・フローチャート記号・雲形/引き出し線付き
+> 吹き出しのジオメトリ、SampleGeneratorへの機能追加とサンプル帳票への配置・ゴールデンテスト
+> 更新、各層のユニットテスト追加、最終レビュー対応まで完了した。CLIで生成したPDFを
+> `pdftoppm`でラスタライズして目視確認済み。`dotnet build` / `dotnet test`(427件、
+> 2026-09-21時点)/ `dotnet format` はグリーン。code-reviewer/security-reviewer/
+> layout-fidelity-reviewer/doc-reviewerによるレビューを実施し、指摘(shapeCount上限の
+> グループ経由での超過、画像検証順序の後退、グラデーションストップ数無制限、負のa:ext値に
+> よる未処理例外、requirements.mdの補足の掲載順・あいまいな相互参照)はいずれも修正済み。
+> 実装時に決定した事項・判明した制約は `design.md` に反映済み。タスク文面どおりに
+> 実現できなかった項目には各タスクに注記を付けた。
 
 - [x] 1. ソリューション基盤のセットアップ
   - `.kiro/steering/structure.md` の構成に従い、`Utsushi.sln` と各レイヤーの `.NET 5` クラスライブラリプロジェクト(Parsing/ReportDefinition/Substitution/Layout/Rendering)、および対応するテストプロジェクトを作成する
@@ -375,3 +384,247 @@
       既存の`FontStyle`と同じ確立済みパターンであり本PR起因の新規逸脱ではないため対応不要
       と判断
     - _Requirements: 10.7, 10.8, 6.4_
+
+- [x] 15. 図形対応の拡張(接続線・グループ・追加プリセット・多段階/放射状グラデーション)
+  - [x] 15.1 Parsingレイヤー: 接続線のデータモデル(`ConnectorModel` / `ConnectorPresetType`)を定義する
+    - _Requirements: 10.9_
+  - [x] 15.2 Parsingレイヤー: グループのデータモデル(`GroupShapeModel` / `GroupChildModel`
+        階層: `GroupChildShape`/`GroupChildImage`/`GroupChildConnector`/`GroupChildGroup`)を定義する
+    - _Requirements: 10.10_
+  - [x] 15.3 Parsingレイヤー: グラデーションのデータモデルを拡張する(`GradientStop`,
+        `LinearGradientShapeFill`を複数ストップ対応に変更, `RadialGradientShapeFill`を追加)
+    - 既存の`LinearGradientShapeFill(StartColor, EndColor, AngleDegrees)`を
+      `LinearGradientShapeFill(IReadOnlyList<GradientStop> Stops, AngleDegrees)`に変更したため、
+      既存の呼び出し箇所(Rendering層の`CreateShapeFillPaint`等)・テストを追随修正した
+    - _Requirements: 10.6_
+  - [x] 15.4 Parsingレイヤー: 追加プリセット(星形4種・フローチャート記号7種・
+        追加吹き出し4種)を`ShapePresetType`と`SupportedShapePresets`マッピング表に追加する
+    - 星形4種の調整ガイド名はECMA-376既定で`adj1`ではなく単一の`adj`であることを
+      SDKの`Dr.ShapeTypeValues`一覧で裏取りして採用した。フローチャート記号・
+      cloudCallout・callout1-3は固定比率/固定形状として描画するため調整ガイドを
+      読み取らない(`ShapeAdjustmentGuideNames`は空配列。design.md参照)
+    - _Requirements: 10.1_
+  - [x] 15.5 Parsingレイヤー: 多段階・放射状グラデーションを読み取る
+    - `a:gsLst`内の全`a:gs`(位置・色)を`GradientStop`のリストとして読み取り、
+      `a:lin`/`a:path`(`@path="circle"`のみ厳密対応、`"rect"`/`"shape"`は放射状に
+      フォールバック)を判別して`LinearGradientShapeFill`/`RadialGradientShapeFill`を
+      構築する
+    - _Requirements: 10.6_
+  - [x] 15.6 Parsingレイヤー: 接続線(`xdr:cxnSp`)を読み取る(`ReadConnector`)
+    - 対応済みプリセット(`straightConnector1`/`bentConnector2`/`bentConnector3`/
+      `curvedConnector2`/`curvedConnector3`)の判定、反転(`flipH`/`flipV`)・回転・枠線の
+      読み取りを行う。非対応プリセットは`UnsupportedShapePreset`として扱う
+    - _Requirements: 10.7, 10.9_
+  - [x] 15.7 Parsingレイヤー: グループ(`xdr:grpSp`)を読み取る(`ReadGroupShape`)
+    - `grpSpPr/a:xfrm`から`ChildOffset`/`ChildExtent`/回転を読み取り、直接の子要素
+      (`xdr:sp`/`xdr:pic`/`xdr:cxnSp`/入れ子の`xdr:grpSp`)を出現順に`GroupChildModel`へ
+      変換する再帰処理を実装した(`ReadGroupChildren`/`ReadGroupChildShape`/
+      `ReadGroupChildImage`/`ReadGroupChildConnector`/`ReadGroupChildGroup`)
+    - _Requirements: 10.10_
+  - [x] 15.8 Parsingレイヤー: `DetectUnsupportedElements`/`HasUnsupportedDrawingObject`を
+        拡張し、`xdr:cxnSp`/`xdr:grpSp`を構造的に許容する
+    - 既存の「`xdr:pic`/`xdr:sp`以外は`Drawing`」の判定に`xdr:cxnSp`/`xdr:grpSp`を追加した
+    - _Requirements: 10.9, 10.10_
+  - [x] 15.9 Parsingレイヤー: グループ内に非対応要素が1つでもあればグループ全体を
+        サポート外要素として扱う
+    - `ReadGroupChildren`が子孫(再帰的に)を検証し、対応済みプリセット一覧に含まれない
+      図形・接続線・`xdr:graphicFrame`等が1つでもあれば、Errorモードは即座に例外を送出し、
+      Ignoreモードは`null`を返してグループ全体を破棄する(トップレベル/ネストいずれも
+      呼び出し元が`null`を伝播させて全体を`unsupportedElements`ポリシーに従わせる)
+    - _Requirements: 10.10_
+  - [x] 15.10 セキュリティ対策: 接続線・グループを含めた合計個数上限とグループのネスト
+        段数上限を設ける
+    - 図形・接続線・グループ(グループ内部の子孫要素を含む)の合計個数を共通の
+      `MaxShapesPerSheet`でカウントする(画像は引き続き独立の`MaxImagesPerSheet`でカウント)。
+      グループのネスト段数の上限(既定5段、`ElementKind = "GroupNestingTooDeep"`。
+      トップレベルのグループ自身を1段目とする)を`MaxShapeNestingDepth`として追加した
+    - _Requirements: 10.8_
+  - [x] 15.11 Layoutレイヤー: 接続線のページ座標変換を実装する(`ConnectorCommand`生成)
+    - 画像・図形と共通の`TryComputeDrawingObjectRect`をそのまま流用する
+    - _Requirements: 10.9_
+  - [x] 15.12 Layoutレイヤー: グループの子座標空間からページ座標への変換を実装する
+    - グループ自身のページ矩形を求めたうえで、`ChildOffset`/`ChildExtent`から
+      各子要素の`LocalRect`を比例変換(非一様倍率)しページ座標へ変換する再帰処理
+      (`BuildGroupChildren`/`ToGroupChildRect`)を実装し、結果を`GroupCommand`にまとめた。
+      子座標空間の大きさが0以下、または変換後の矩形が異常に大きい場合の安全弁も設けた
+    - _Requirements: 10.10_
+  - [x] 15.13 Layoutレイヤー: グループ内図形のテキスト折り返しを既存ロジックで対応する
+    - `GroupChildShape.Text`を`BuildShapeTextLines`/`WrapShapeText`と同じロジックで
+      折り返す(`BuildGroupChildShapeCommand`がトップレベルの`BuildShapeCommand`と
+      同じ処理を再利用する)
+    - _Requirements: 10.10, 10.4_
+  - [x] 15.14 Renderingレイヤー: `DrawPage`のコマンド振り分けを再利用可能なヘルパーへ
+        切り出す
+    - `GroupCommand`の内部展開から個々の子コマンドを描画する際に同じ振り分けロジックを
+      再帰的に使うための準備として、既存の`switch`文を`DrawSingleCommand`へ抽出した
+      (抽象レコード型`DrawCommand`と紛らわしくなるため、型名とは別名にした)
+    - _Requirements: 10.10_
+  - [x] 15.15 Renderingレイヤー: 追加プリセット(星形・フローチャート記号)のパス生成を実装する
+    - `star4`/`star5`/`star6`/`star8`は外接円半径と内側頂点の半径比から交互に結ぶ2N角形
+      (`StarPath`)、フローチャート記号7種はそれぞれ専用のパス生成メソッド
+      (`DiamondPath`/`StadiumPath`/`ParallelogramPath`/`DocumentPath`/`PredefinedProcessPath`、
+      `flowChartProcess`/`flowChartConnector`は既存の`RectPath`/`EllipsePath`を再利用)を実装した。
+      `pdftoppm`でラスタライズして目視確認済み
+    - _Requirements: 10.1_
+  - [x] 15.16 Renderingレイヤー: 追加の吹き出し(`cloudCallout`, `callout1`/`callout2`/`callout3`)の
+        パス生成を実装する
+    - 雲形(`CloudCalloutPath`)は円の和集合(`SKPath.Op(SKPathOp.Union)`)+
+      wedge系と共通化した引き出し三角形(`AddWedgeTail`)、引き出し線付き吹き出しは
+      N本の折れ線を汎用ロジック(`BuildLeaderPoints`)で生成した。callout1/2/3は
+      本体(塗りつぶし対象)と引き出し線(塗りつぶし無し)でジオメトリが異なるため、
+      `ShapeGeometryBuilder`に塗りつぶし用の`Build`とは別に枠線用の`BuildOutline`を
+      新設し、`SkiaPdfRenderer.DrawShape`をFill/Outlineで別々のパスを使うよう変更した
+    - _Requirements: 10.1_
+  - [x] 15.17 Renderingレイヤー: 多段階・放射状グラデーションの描画を実装する
+    - `SKShader.CreateLinearGradient`/`CreateRadialGradient`に複数ストップを渡すよう
+      `CreateShapeFillPaint`を拡張した(`ToShaderStops`ヘルパーで位置昇順にソート)
+    - _Requirements: 10.6_
+  - [x] 15.18 Renderingレイヤー: 接続線のパス生成(`ConnectorGeometryBuilder`)と描画を実装する
+    - `ShapeGeometryBuilder`とは別に新設。`Outline`が無い接続線には既定の黒い実線1ptを補う
+      (`DefaultConnectorOutline`)。`pdftoppm`でラスタライズして5種のプリセットを目視確認済み
+    - _Requirements: 10.9_
+  - [x] 15.19 Renderingレイヤー: グループの描画(`GroupCommand`)を実装する
+    - `canvas.Save`/`RotateDegrees(Center)`/子コマンドの再帰描画(`DrawSingleCommand`)/
+      `Restore`で実装した。子要素の個別回転との合成を`pdftoppm`でラスタライズして
+      目視確認し、想定どおり正しく合成されることを確認した
+    - _Requirements: 10.10, 10.5_
+  - [x] 15.20 `Utsushi.SampleGenerator` に接続線・グループ・追加プリセット・多段階/放射状
+        グラデーションの埋め込み機能を追加する
+    - `SetGradientShape`(多段階線形/放射状グラデーション)、`SetConnector`、`SetGroup`
+      (`GroupChildShapeSpec`による子座標空間上の子図形指定)を追加した。追加プリセット
+      (星形・フローチャート記号等)は既存の`SetShape`が`A.ShapeTypeValues`を直接受け取る
+      ため追加変更不要だった
+    - _Requirements: 8.3_
+  - [x] 15.21 サンプル帳票に拡張分の図形を配置し、ゴールデンテストを更新する
+    - invoiceサンプルの6行目(件名行と合計行の間の空白行)に、線形グラデーション星形・
+      放射状グラデーションのflowChartTerminator・接続線(bentConnector3)・回転付き
+      グループ(楕円+矩形の2要素)を配置した。CLIで実際にPDFを生成し`pdftoppm`で
+      ラスタライズして目視確認し、既存の図形群(9行目)と重ならないことを確認した。
+      `GoldenSnapshot`が`ConnectorCommand`/`GroupCommand`を`unknown`としてしか
+      記述できていなかったため、専用の記述(接続線: rect/preset/rotation/flip/outline、
+      グループ: center/rotation/children数+子コマンドを再帰的にインデント記述)を追加した
+      うえでゴールデンファイルを更新した
+    - _Requirements: 10.1, 10.6, 10.9, 10.10, 8.3_
+  - [x] 15.22 Parsing層のユニットテストを追加する
+    - 接続線・グループの読み取り、グループ内非対応要素の検出(型不明・非対応プリセット)、
+      合計個数/ネスト段数の上限(境界値を含む)、多段階/放射状グラデーションの読み取りを
+      `ConnectorAndGroupReadingTests.cs`で検証した(test-writerが作成、26件)
+    - _Requirements: 10.1, 10.6, 10.8, 10.9, 10.10_
+  - [x] 15.23 Layout層のユニットテストを追加する
+    - 接続線の座標変換、グループの子座標空間変換(`ChildOffset`が非ゼロの場合の平行移動、
+      非一様倍率、`ChildExtent`が0以下の壊れた入力での安全な空振り)、入れ子グループの
+      再帰変換(2段ネストを手計算した期待値で検証)、改ページ境界での配置を
+      `ConnectorAndGroupLayoutTests.cs`で検証した(test-writerが作成、10件)
+    - _Requirements: 10.9, 10.10_
+  - [x] 15.24 Rendering層のユニットテストを追加する
+    - 追加プリセットのパス生成(星形・フローチャート記号のBounds、cloudCallout/calloutの
+      引き出し部分)、callout1/2/3のBuild(本体のみ)とBuildOutline(引き出し線含む)の
+      差異、それ以外のプリセットではBuildとBuildOutlineが一致すること、接続線5種の
+      経路生成(反転による端点入れ替えを含む)、GroupCommand/ConnectorCommandを含む
+      PagedLayoutのレンダリングが例外なく完了することを
+      `ShapeGeometryBuilderTests.cs`/`ConnectorGeometryBuilderTests.cs`/
+      `SkiaPdfRendererTests.cs`で検証した(test-writerが作成、Rendering層のテスト計163件)
+    - _Requirements: 10.1, 10.6, 10.9, 10.10_
+  - [x] 15.25 レビュー対応
+    - `code-reviewer`(shapeCount上限のグループ経由での超過、画像検証順序の後退、
+      TooManyShapesメッセージの不正確さを修正)、`security-reviewer`(グラデーション
+      ストップ数無制限を修正、OpenXml SDK再帰のStackOverflowリスクをdesign.mdに記録)、
+      `layout-fidelity-reviewer`(座標変換ロジックは問題なしと確認、Layout/Renderingの
+      ユニットテスト不足を指摘→15.23/15.24で対応)の指摘にすべて対応した。
+      最後に`doc-reviewer`でrequirements.md/design.md/tasks.mdの最終整合性を確認し、
+      補足の掲載順(要件10.1→10.6→10.7→10.8→10.9→10.10)と「下記補足」のあいまいな
+      使い回しをrequirements.mdで修正した(Critical該当なし)
+    - _Requirements: 10.8, 10.9, 10.10, 6.4_
+
+- [x] 16. 接続線の接続点(コネクションサイト)解決と星形・雲形吹き出しの近似精度向上
+  - [x] 16.1 Parsingレイヤー: 図形・画像・グループのID読み取り
+    - `NonVisualDrawingProperties/@id`を`ShapeModel`/`ImageModel`/`GroupShapeModel`、
+      グループ内の`GroupChildShape`/`GroupChildImage`/`GroupChildGroup`に`Id: uint`
+      として追加する(`GroupChildConnector`は不要)。既存の`ReadShape`/`ReadImage`/
+      `ReadGroupShape`/`ReadGroupChildShape`/`ReadGroupChildImage`/`ReadGroupChildGroup`
+      を拡張する
+    - _Requirements: 10.11_
+  - [x] 16.2 Parsingレイヤー: 接続線の接続点参照(`stCxn`/`endCxn`)を読み取る
+    - `ConnectionRef(uint ShapeId, uint SiteIndex)`を追加し、`ConnectorModel`/
+      `GroupChildConnector`に`StartConnection`/`EndConnection: ConnectionRef?`を追加する。
+      `ReadConnector`/`ReadGroupChildConnector`で`xdr:cNvCxnSpPr`配下の`a:stCxn`/`a:endCxn`
+      (`@id`+`@idx`)を読み取る。要素が無ければ`null`
+    - _Requirements: 10.11_
+  - [x] 16.3 Renderingレイヤー: 星形(star4/5/6/8)の既定内側半径比をプリセットごとに修正する
+    - `DefaultStarInnerRadiusRatio`(単一の0.38)を廃止し、`star4`=0.25、`star5`=0.382、
+      `star6`=0.577、`star8`=0.75をプリセットごとの定数として`ShapeGeometryBuilder`に
+      持たせる(design.md「未決事項」の推定値であることの注記を残す)
+    - _Requirements: 10.12_
+  - [x] 16.4 Parsing/Renderingレイヤー: 雲形吹き出し(cloudCallout)の引き出し位置調整ガイドを読み取る
+    - Parsing: `ShapeAdjustmentGuideNames[ShapePresetType.CloudCallout]`を
+      `["adj1", "adj2"]`に変更する。Rendering: `CloudCalloutPath`のシグネチャに
+      `adjustmentValues`を追加して`wedgeRectCallout`等と同じ`Adj`ヘルパーで読み取る
+      (既定値は変更しない)
+    - _Requirements: 10.13_
+  - [x] 16.5 共有定数の移動: `InputOutputSkewRatio`を`Utsushi.Parsing.Model`へ移す
+    - Layoutレイヤーの`ConnectionSiteResolver`(16.7)が`flowChartInputOutput`の
+      左右の接続点を実際の輪郭に合わせて補正するために、これまで
+      `Utsushi.Rendering.ShapeGeometryBuilder`の`private`定数だった
+      `InputOutputSkewRatio`を必要とする。しかし`Utsushi.Rendering`は
+      `Utsushi.Layout`に依存する向き(逆参照は循環参照になりビルド不可)のため、
+      両レイヤーがすでに依存している`Utsushi.Parsing.Model`に
+      `ShapeGeometryConstants`(`public static class`)としてこの定数を移し、
+      `ShapeGeometryBuilder`側の参照を書き換える(値・意味は変えない)。
+      `DocumentWaveDepthRatio`(`flowChartDocument`の波形の深さ比率)は
+      Layoutレイヤーから参照する必要が無いため、`ShapeGeometryBuilder`の
+      `private`定数のまま変更しない
+    - _Requirements: 10.11_
+  - [x] 16.6 Layoutレイヤー: 描画オブジェクトのID→ページ矩形解決テーブルを構築する
+    - `PageCommandBuilder`に`BuildConnectionTargetTable`を追加し、`_sheet.DrawingObjects`を
+      走査して(接続線を除く)各要素の`Id`→`(RectPt Rect, ShapePresetType? Preset)`を
+      `Dictionary`(ページごとに独立)に記録する。既存の`TryComputeDrawingObjectRect`/
+      `BuildGroupChildren`と同じ計算を流用するが、`DrawCommand`は生成しない
+      (コマンド生成は`EmitDrawingObjects`の既存の単一`foreach`が引き続き担当し、
+      出現順=z-orderは変更しない)。グループ内要素は`ToGroupChildRect`変換後の
+      最終ページ矩形を記録する
+    - _Requirements: 10.11_
+  - [x] 16.7 Layoutレイヤー: 接続点(コネクションサイト)を解決する
+    - `ConnectionSiteResolver.Resolve(rect, preset, siteIndex)`(既定は矩形の上下左右の
+      中点(`siteIndex % 4`で丸める)。`flowChartInputOutput`のみ左右の接続点を
+      16.5で移した共有定数を使って実際の輪郭に合わせて補正。`flowChartDocument`は
+      波形の谷の最深点が下辺中点と一致するため補正不要で既定のまま)を実装する。
+      `EmitDrawingObjects`の既存`foreach`が接続線(トップレベル・グループ内)に到達した
+      時点で16.6のテーブルを参照して解決し、`ConnectorCommand.ResolvedStart`/
+      `ResolvedEnd`を設定する。解決できない場合は`null`のままにする
+      (要件10.9の既定動作へのフォールバックはRenderingレイヤーの責務)
+    - _Requirements: 10.11_
+  - [x] 16.8 Renderingレイヤー: 接続線の描画で解決済み接続点を優先する
+    - `ConnectorCommand.ResolvedStart`/`ResolvedEnd`が両方とも非nullの場合、
+      `ConnectorGeometryBuilder.Build`がこの2点を始点・終点として使うよう拡張する
+      (`Rect`/`FlipHorizontal`/`FlipVertical`は無視する)
+    - _Requirements: 10.11_
+  - [x] 16.9 サンプル帳票への配置とゴールデンテスト更新
+    - `SpreadsheetBuilder`に、IDを指定して図形と接続線を関連付けるAPI(`SetShape`等が
+      返す/受け取るID、または`stCxn`/`endCxn`を組み立てる`SetConnector`の拡張)を追加し、
+      invoiceサンプルに接続点解決が効くケース(フローチャート記号同士を接続)を1つ配置する。
+      CLIでPDFを生成し`pdftoppm`でラスタライズして目視確認したうえでゴールデンファイルを
+      更新する
+    - _Requirements: 10.11, 8.3_
+  - [x] 16.10 Parsingレイヤーのユニットテストを追加する
+    - ID読み取り、`stCxn`/`endCxn`の読み取り(要素の有無両方)、雲形吹き出しの
+      `adj1`/`adj2`読み取りを検証する(星形の既定内側半径比の選択はRenderingレイヤーの
+      責務のため対象外。16.12で検証する)
+    - _Requirements: 10.11, 10.13_
+  - [x] 16.11 Layoutレイヤーのユニットテストを追加する
+    - 同一ページ内での接続点解決成功、参照先が異なるページにある場合のフォールバック、
+      グループ内要素を参照先とする解決、`flowChartInputOutput`の左右の接続点の補正、
+      `flowChartDocument`を含むそれ以外のプリセット・画像・グループでの4方向近似、
+      参照先ID不在時のフォールバックを検証する
+    - _Requirements: 10.11_
+  - [x] 16.12 Renderingレイヤーのユニットテストを追加する
+    - `ConnectorGeometryBuilder.Build`が`ResolvedStart`/`ResolvedEnd`指定時にそれを
+      使うこと(`Rect`/フラグを無視すること)、`DrawPage`側で解決済みの場合は
+      `ConnectorCommand.RotationDegrees`が非ゼロでも回転を適用しないこと、
+      星形の内側半径比がプリセットごとに異なること、雲形吹き出しの引き出し位置が
+      `adjustmentValues`に応じて変わることを検証する
+    - _Requirements: 10.11, 10.12, 10.13_
+  - [x] 16.13 レビュー対応
+    - `code-reviewer`/`layout-fidelity-reviewer`/`security-reviewer`の指摘に対応する
+      (ID解決テーブルの構築コスト、接続点解決が改ページ・グループネストと絡む場合の
+      エッジケースを重点的に確認する)
+    - _Requirements: 10.11, 10.12, 10.13_
