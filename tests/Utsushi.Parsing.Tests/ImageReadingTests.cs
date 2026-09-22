@@ -61,6 +61,42 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 回転角を度に変換して読み取る()
+        {
+            // 60,000分の1度単位。45度 = 2,700,000(要件9.7。捺印画像等の回転配置)。
+            var path = ImageWorkbookFixtures.CreateWithPicture(
+                "image/png", ImageWorkbookFixtures.TinyPng(), rotationEmu: 2_700_000);
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                var image = Assert.Single(sheet.DrawingObjects.OfType<ImageModel>().ToList());
+
+                Assert.Equal(45.0, image.RotationDegrees, 3);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 回転の指定が無い画像は回転角0として読み取る()
+        {
+            var path = ImageWorkbookFixtures.CreateWithPicture("image/png", ImageWorkbookFixtures.TinyPng());
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                var image = Assert.Single(sheet.DrawingObjects.OfType<ImageModel>().ToList());
+
+                Assert.Equal(0.0, image.RotationDegrees, 3);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void twoCellAnchorの画像を対角セルとして読み取る()
         {
             var path = ImageWorkbookFixtures.CreateWithPicture("image/png", ImageWorkbookFixtures.TinyPng(), useTwoCellAnchor: true);

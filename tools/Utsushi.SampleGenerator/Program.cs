@@ -144,6 +144,13 @@ internal static class Program
             preset: A.ShapeTypeValues.StraightConnector1, outlineHex: "444444",
             startShapeHandle: inputOutputA, startSiteIndex: 3, endShapeHandle: inputOutputB, endSiteIndex: 1);
 
+        // 捺印画像(要件9.7)。会社ロゴ(row 1)とは異なり、捺印画像は角度をつけて配置される
+        // 運用があるため、画像の回転(oneCellAnchorのa:xfrm/@rot)をゴールデンテストで確認する。
+        builder.SetImage(
+            row: 6, column: 1, offsetXPt: 440.0, offsetYPt: 0.0, widthPt: 30.0, heightPt: 30.0,
+            png: PlaceholderPng.CreateSolidColor(30, 30, r: 0xC0, g: 0x00, b: 0x00),
+            rotationDegrees: 20.0);
+
         // 宛先・発行情報
         builder.Merge("A3:C3");
         builder.SetText(3, 1, "株式会社サンプル商事 御中", Style.CustomerName);

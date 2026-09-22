@@ -242,7 +242,28 @@ namespace Utsushi.Rendering
                     $"画像(ContentType: {image.ContentType})をデコードできませんでした。", reportCode, sheetName);
             }
 
-            canvas.DrawBitmap(bitmap, ToSkRect(image.Rect));
+            var skRect = ToSkRect(image.Rect);
+            var hasRotation = Math.Abs(image.RotationDegrees) > double.Epsilon;
+
+            if (hasRotation)
+            {
+                canvas.Save();
+                var centerX = (skRect.Left + skRect.Right) / 2f;
+                var centerY = (skRect.Top + skRect.Bottom) / 2f;
+                canvas.RotateDegrees((float)image.RotationDegrees, centerX, centerY);
+            }
+
+            try
+            {
+                canvas.DrawBitmap(bitmap, skRect);
+            }
+            finally
+            {
+                if (hasRotation)
+                {
+                    canvas.Restore();
+                }
+            }
         }
 
         /// <summary>図形を描画する(要件10)。他のセル内容より最前面に描画される。</summary>

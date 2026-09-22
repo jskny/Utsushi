@@ -95,7 +95,8 @@ namespace Utsushi.Golden.Tests
                 + $"value={Quote(text.Text)}",
 
             ImageCommand image =>
-                $"image  rect={Rect(image.Rect)} contentType={image.ContentType} bytes={image.Data.Length}",
+                $"image  rect={Rect(image.Rect)} contentType={image.ContentType} bytes={image.Data.Length} "
+                + $"rotation={N(image.RotationDegrees)}",
 
             ShapeCommand shape =>
                 $"shape  rect={Rect(shape.Rect)} preset={shape.Preset} rotation={N(shape.RotationDegrees)} "

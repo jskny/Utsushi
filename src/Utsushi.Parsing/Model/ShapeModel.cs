@@ -227,8 +227,9 @@ namespace Utsushi.Parsing.Model
         ShapeTextBody? Text) : GroupChildModel(LocalRect);
 
     /// <summary>グループ内の画像。<see cref="Id"/>は接続線の接続先解決(要件10.11)のために保持する。</summary>
+    /// <param name="RotationDegrees"><c>a:xfrm/@rot</c> から変換した回転角(度、時計回り。要件9.7)。</param>
     public sealed record GroupChildImage(
-        uint Id, RectPt LocalRect, byte[] Data, string ContentType) : GroupChildModel(LocalRect);
+        uint Id, RectPt LocalRect, byte[] Data, string ContentType, double RotationDegrees) : GroupChildModel(LocalRect);
 
     /// <summary>
     /// グループ内の接続線。<see cref="Id"/>は持たない(接続先として参照される対象ではないため。

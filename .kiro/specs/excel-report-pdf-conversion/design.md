@@ -131,6 +131,11 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     - 2セルアンカー(対角セル指定)の幅・高さ計算は、対角セルにセル番地の上限
       (最大1,048,576行×16,384列)近くを指定された場合の計算量を抑えるため、
       合算する列/行数に上限(既定4096)を設ける。
+  - **回転(要件9.7)**: `xdr:pic/xdr:spPr/a:xfrm/@rot` を図形と全く同じ変換
+    (`ReadImage`/`ReadGroupChildImage`双方で図形の「回転」節と同じ60,000分の1度→度の
+    変換式を使う)で読み取り、`ImageModel.RotationDegrees`/`GroupChildImage.RotationDegrees`
+    に保持する。ロゴ画像は通常回転しないが、捺印画像(角度をつけた印影)のように
+    回転させて配置する運用があるため、画像対応(要件9)の当初実装から後付けで対応した。
 - **図形(要件10)**: 画像(`xdr:pic`)と同じ `xdr:twoCellAnchor` / `xdr:oneCellAnchor` の下に
   現れる `xdr:sp`(シェイプ)のうち、`xdr:spPr/a:prstGeom/@prst` が対応済みプリセット一覧
   (要件10.1補足)に含まれるものだけを読み取る。アンカー(左上セル・オフセット・
@@ -456,6 +461,10 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   `SKBitmap.Decode` で実際に展開する前に `SKBitmap.DecodeBounds` で宣言上のピクセル寸法を確認し、
   上限(既定4096px)を超える場合はデコードせず `PdfRenderingException` とする(要件9.6。
   ピクセル爆弾対策。詳細はParsingレイヤー節「信頼できない入力に対する安全弁」を参照)。
+  回転がある場合は、図形(要件10.5)と全く同じ`canvas.Save()` →
+  `canvas.RotateDegrees(RotationDegrees, centerX, centerY)`(中心は`Rect`の中心)→
+  `DrawBitmap` → `canvas.Restore()` のパターンで`RotationDegrees`を反映する(要件9.7。
+  捺印画像のように回転させて配置する運用があるため対応する)。
 - **図形の描画(要件10)**: `ShapeCommand` ごとに、回転がある場合は
   `canvas.Save()` → `canvas.RotateDegrees(RotationDegrees, centerX, centerY)`
   (中心は`Rect`の中心)→ 描画 → `canvas.Restore()` で図形本体とテキストの両方を
@@ -641,6 +650,7 @@ public sealed record ImageModel(
     uint Id,
     byte[] Data,
     string ContentType,                   // 例: "image/png"
+    double RotationDegrees,               // a:xfrm/@rot(60,000分の1度)を度に変換(要件9.7)
     CellAddress AnchorCell,
     PointPt AnchorOffset,
     AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
@@ -803,7 +813,8 @@ public sealed record LineCommand(
     PointPt From, PointPt To, ArgbColor Color, double WidthPt, LineDashStyle Dash) : DrawCommand;
 public sealed record TextCommand(
     PointPt Origin, string Text, FontStyle Font, TextAnchor Anchor, RectPt? ClipRect) : DrawCommand;
-public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType) : DrawCommand;
+// RotationDegreesはRectの中心を軸とした回転角(度、時計回り。要件9.7)。
+public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType, double RotationDegrees) : DrawCommand;
 
 // 図形(要件10)。Rect/TextLinesの座標は回転前のローカル座標。回転はRenderingレイヤーが適用する。
 public sealed record ShapeCommand(
@@ -953,10 +964,10 @@ public sealed record GroupCommand(
     ECMA-376の一次資料(`presetShapeDefinitions.xml`)への当たり直しができておらず、
     実装時にPDFをラスタライズして目視確認した推定値である。対象帳票で実際に見た目が
     ずれる場合に改めて検証する。
-  - 接続点解決テーブル(`BuildConnectionTargetTable`)は参照先図形の回転前の
-    `RectPt`のみを保持する。参照先図形自身、またはそれを含むグループが回転している
-    場合、実際に見えている(回転後の)辺の位置と計算上の接続点はずれる。回転した図形を
-    接続先にする帳票が実際に出てきた場合に改めて対応を検討する。
+  - 接続点解決テーブル(`BuildConnectionTargetTable`)は参照先図形(画像も接続先になりうる。
+    要件9.7)の回転前の`RectPt`のみを保持する。参照先自身、またはそれを含むグループが
+    回転している場合、実際に見えている(回転後の)辺の位置と計算上の接続点はずれる。
+    回転した図形・画像を接続先にする帳票が実際に出てきた場合に改めて対応を検討する。
   - 接続線自身が`RotationDegrees`を持ち、かつ両端点が解決済み(`ResolvedStart`/
     `ResolvedEnd`が共に非`null`)の場合、`ConnectorGeometryBuilder`は解決済みの
     絶対座標をそのまま線分の両端として使い、接続線自身の回転は適用しない
@@ -968,8 +979,11 @@ public sealed record GroupCommand(
   目視確認では正しく動作することを確認したが、「グループ自身が回転しており、かつ
   グループの子座標空間の拡大縮小が非一様(縦横で倍率が異なる)」という組み合わせでは、
   回転と非一様スケールの適用順序によって見た目が変わりうる(アフィン変換は一般に
-  可換ではないため)。Excel自身がこの組み合わせをどう扱うかの一次資料での裏取りは
-  していない。対象帳票で実際に問題になった場合に改めて検証する。
+  可換ではないため)。この限界は子要素が図形(`GroupChildShape`)の場合と同じ経路
+  (`ToGroupChildRect`で非一様スケール適用後、`canvas`回転を適用)を通る画像
+  (`GroupChildImage`。要件9.7)にも同様に当てはまる。Excel自身がこの組み合わせを
+  どう扱うかの一次資料での裏取りはしていない。対象帳票で実際に問題になった場合に
+  改めて検証する。
 - **雲形吹き出し(`cloudCallout`)・星形の近似精度の残存する限界**(要件10.12, 10.13):
   要件10.12/10.13で星形の既定内側半径比・雲形の引き出し位置の精度を改善したが、以下は
   引き続き近似のままである。雲形の輪郭(バンプの個数・半径)自体は固定値のままで

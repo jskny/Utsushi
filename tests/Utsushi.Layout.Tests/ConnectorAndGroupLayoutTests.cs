@@ -129,6 +129,31 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
+        public void グループ内画像の回転角はImageCommandにそのまま伝播する()
+        {
+            // 要件9.7。グループ内画像も図形と同様、Layoutレイヤーは座標変換のみ行い
+            // 回転角自体はそのまま引き継ぐ。
+            var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
+
+            var childImage = new GroupChildImage(1u, RectPt.FromBounds(5, 5, 15, 15), Array.Empty<byte>(), "image/png", 45.0);
+            var group = new GroupShapeModel(
+                 1u, new PointPt(0, 0),
+                new PointPt(40, 40),
+                new GroupChildModel[] { childImage },
+                0,
+                CellAddress.Parse("B2"),
+                new PointPt(2.0, 3.0),
+                new FixedAnchorExtent(40.0, 40.0));
+            sheet = sheet with { DrawingObjects = new[] { group } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var groupCommand = Assert.Single(Groups(page));
+            var childCommand = Assert.IsType<ImageCommand>(Assert.Single(groupCommand.Children));
+
+            Assert.Equal(45.0, childCommand.RotationDegrees, 3);
+        }
+
+        [Fact]
         public void グループの子座標空間の原点がずれている場合でも平行移動が正しく計算される()
         {
             // ChildOffset != (0,0) の場合、子の位置は「原点からの相対位置」ではなく
@@ -498,7 +523,7 @@ namespace Utsushi.Layout.Tests
             var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
 
             var target = new ImageModel(
-                13u, Array.Empty<byte>(), "image/png",
+                13u, Array.Empty<byte>(), "image/png", 0,
                 CellAddress.Parse("A1"), default, new FixedAnchorExtent(40.0, 20.0));
             var connector = new ConnectorModel(
                 ConnectorPresetType.Straight, 0, false, false, null,

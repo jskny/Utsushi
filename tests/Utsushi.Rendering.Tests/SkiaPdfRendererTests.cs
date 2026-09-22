@@ -250,7 +250,7 @@ namespace Utsushi.Rendering.Tests
 
             var layout = Layout(commands: new DrawCommand[]
             {
-                new ImageCommand(new RectPt(10, 10, 60, 20), TinyPng(), "image/png"),
+                new ImageCommand(new RectPt(10, 10, 60, 20), TinyPng(), "image/png", 0),
             });
 
             renderer.Render(layout, output);
@@ -261,6 +261,25 @@ namespace Utsushi.Rendering.Tests
         }
 
         [Fact]
+        public void 回転した画像の後にも他の描画命令が正しく描画される()
+        {
+            // 図形の回転と同様、画像の回転もcanvas.Save/RotateDegrees/Restoreで実装しており、
+            // Restore漏れがあると後続の描画命令の座標系がずれてしまう回帰テスト(要件9.7)。
+            var renderer = new SkiaPdfRenderer(_metrics);
+            using var output = new MemoryStream();
+
+            var layout = Layout(commands: new DrawCommand[]
+            {
+                new ImageCommand(new RectPt(10, 10, 60, 20), TinyPng(), "image/png", RotationDegrees: 30),
+                new FillRectCommand(new RectPt(100, 100, 30, 30), ArgbColor.Black),
+            });
+
+            renderer.Render(layout, output);
+
+            Assert.True(output.Length > 0);
+        }
+
+        [Fact]
         public void デコードできない画像は帳票コードとシート名を含む例外になる()
         {
             var renderer = new SkiaPdfRenderer(_metrics);
@@ -268,7 +287,7 @@ namespace Utsushi.Rendering.Tests
 
             var layout = Layout(commands: new DrawCommand[]
             {
-                new ImageCommand(new RectPt(0, 0, 10, 10), new byte[] { 0x00, 0x01, 0x02 }, "image/png"),
+                new ImageCommand(new RectPt(0, 0, 10, 10), new byte[] { 0x00, 0x01, 0x02 }, "image/png", 0),
             });
 
             var ex = Assert.Throws<PdfRenderingException>(() => renderer.Render(layout, output));
@@ -292,7 +311,7 @@ namespace Utsushi.Rendering.Tests
             var hugePng = BuildPngWithDeclaredSize(20000, 20000);
             var layout = Layout(commands: new DrawCommand[]
             {
-                new ImageCommand(new RectPt(0, 0, 10, 10), hugePng, "image/png"),
+                new ImageCommand(new RectPt(0, 0, 10, 10), hugePng, "image/png", 0),
             });
 
             Assert.True(hugePng.Length < 200, "この検証はファイルサイズが小さいことが前提(実データを展開させないため)");
