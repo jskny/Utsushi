@@ -774,6 +774,29 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
+        public void 描画オブジェクトの寸法上限は印刷拡大率適用後の表示サイズに適用される()
+        {
+            // 回帰テスト(layout-fidelity-reviewer指摘): 以前は上限(既定5000pt)を_scale適用前の
+            // 論理サイズに対して適用しており、印刷拡大率が100%を超える帳票では最終的な表示サイズが
+            // 上限を超過しうる(グループ内子要素の上限適用点とも食い違っていた)。
+            // 200%拡大 x 論理サイズ6000ptなら、修正前は min(6000,5000)*2.0=10000pt に、
+            // 修正後は min(6000*2.0,5000)=5000pt になるはず。
+            var sheet = UniformSheet(
+                rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0,
+                pageSetup: NoMarginA4(scaling: new PageScaling(200, null, null)));
+            var image = new ImageModel(
+                1u, Array.Empty<byte>(), "image/png", 0,
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(6000.0, 6000.0));
+            sheet = sheet with { DrawingObjects = new[] { image } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Images(page));
+
+            Assert.Equal(5000.0, command.Rect.Width, 3);
+            Assert.Equal(5000.0, command.Rect.Height, 3);
+        }
+
+        [Fact]
         public void 二セルアンカーの画像は対角セルまでの幅高さに変換される()
         {
             const double columnWidthChars = 10.0;

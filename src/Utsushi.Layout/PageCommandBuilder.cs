@@ -320,7 +320,13 @@ namespace Utsushi.Layout
                 switch (child)
                 {
                     case GroupChildShape shape:
-                        result.Add(BuildGroupChildShapeCommand(shape, childRect));
+                        // テキスト余白・フォントサイズにグループ自身のリサイズ比率(scaleX/scaleY)を
+                        // 反映するため、幾何平均を「等方的な」代表スケールとして渡す
+                        // (layout-fidelity-reviewer指摘: 以前は印刷拡大率(_scale)のみを見ており、
+                        // グループが大きく縮小されている場合に余白がシェイプ本体ほど縮まらず、
+                        // 縮小率次第ではテキストが矩形からはみ出す/消える境界に達しうる)。
+                        var groupScale = Math.Sqrt(Math.Abs(scaleX * scaleY));
+                        result.Add(BuildGroupChildShapeCommand(shape, childRect, groupScale));
                         break;
                     case GroupChildImage image:
                         result.Add(new ImageCommand(childRect, image.Data, image.ContentType, image.RotationDegrees));
@@ -364,11 +370,15 @@ namespace Utsushi.Layout
                 : RectPt.FromBounds(left, top, left + width, top + height);
         }
 
-        /// <summary>グループ内図形の描画命令を組み立てる(要件10.10)。テキスト折り返しはトップレベルの図形と同じロジックを再利用する。</summary>
-        private ShapeCommand BuildGroupChildShapeCommand(GroupChildShape shape, RectPt rect)
+        /// <summary>
+        /// グループ内図形の描画命令を組み立てる(要件10.10)。テキスト折り返しはトップレベルの図形と
+        /// 同じロジックを再利用するが、<paramref name="groupScale"/>でグループ自身のリサイズ比率を
+        /// 追加で反映する(トップレベルの図形は既定の1.0のまま、<see cref="BuildShapeCommand"/>参照)。
+        /// </summary>
+        private ShapeCommand BuildGroupChildShapeCommand(GroupChildShape shape, RectPt rect, double groupScale)
         {
             var textLines = shape.Text is { } text
-                ? BuildShapeTextLines(text, rect)
+                ? BuildShapeTextLines(text, rect, groupScale)
                 : Array.Empty<ShapeTextLine>();
 
             return new ShapeCommand(rect, shape.Preset, shape.AdjustmentValues, shape.RotationDegrees, shape.Fill, shape.Outline, textLines);
@@ -408,16 +418,22 @@ namespace Utsushi.Layout
                 _ => (0.0, 0.0),
             };
 
-            // 異常に大きいEMU値(またはその合算)による過大な矩形を防ぐ(security-reviewer指摘)。
-            widthPt = Math.Min(widthPt, MaxDrawingObjectDimensionPt);
-            heightPt = Math.Min(heightPt, MaxDrawingObjectDimensionPt);
-
             if (widthPt <= 0 || heightPt <= 0)
             {
                 return false;
             }
 
             rect = ToPageRect(left, top, left + widthPt, top + heightPt);
+
+            // 異常に大きいEMU値(またはその合算)による過大な矩形を防ぐ(security-reviewer指摘)。
+            // 上限は印刷拡大率(_scale)適用後の最終的な表示サイズに対して適用する
+            // (グループ内子要素のToGroupChildRectと適用点を揃える。layout-fidelity-reviewer指摘:
+            // 以前は_scale適用前のwidthPt/heightPtに上限を適用しており、印刷拡大率が100%を超える
+            // 帳票では上限の実効値がグループ内子要素と食い違っていた)。
+            var cappedWidth = Math.Min(rect.Width, MaxDrawingObjectDimensionPt);
+            var cappedHeight = Math.Min(rect.Height, MaxDrawingObjectDimensionPt);
+            rect = RectPt.FromBounds(rect.Left, rect.Top, rect.Left + cappedWidth, rect.Top + cappedHeight);
+
             return !rect.IsEmpty;
         }
 
@@ -431,13 +447,24 @@ namespace Utsushi.Layout
             return new ShapeCommand(rect, shape.Preset, shape.AdjustmentValues, shape.RotationDegrees, shape.Fill, shape.Outline, textLines);
         }
 
-        /// <summary>図形内テキストを矩形幅で折り返し、水平/垂直配置に基づく各行のローカル座標を確定させる(要件10.4)。</summary>
-        private IReadOnlyList<ShapeTextLine> BuildShapeTextLines(ShapeTextBody text, RectPt rect)
+        /// <summary>
+        /// 図形内テキストを矩形幅で折り返し、水平/垂直配置に基づく各行のローカル座標を確定させる(要件10.4)。
+        /// </summary>
+        /// <param name="groupScale">
+        /// グループ内図形の場合の、グループ自身のリサイズ比率(<see cref="BuildGroupChildren"/>が
+        /// scaleX/scaleYの幾何平均として算出)。トップレベルの図形は1.0(<see cref="BuildShapeCommand"/>)。
+        /// </param>
+        private IReadOnlyList<ShapeTextLine> BuildShapeTextLines(ShapeTextBody text, RectPt rect, double groupScale = 1.0)
         {
             // 拡大縮小率はセル内テキスト(EmitText)と同様、余白・フォントサイズの両方に適用する
             // (layout-fidelity-reviewer指摘: 図形の矩形自体はToPageRectで_scaleが掛かるのに、
             // 内側のテキストが原寸のままだと、印刷倍率を持つ帳票でテキストが矩形からはみ出す)。
-            var paddingPt = ShapeTextPaddingPt * _scale;
+            // groupScaleは、グループ内図形の矩形自体がグループのリサイズ比率で既に縮小/拡大されている
+            // ことに合わせて余白・フォントサイズも追従させるための追加の係数
+            // (layout-fidelity-reviewer指摘: グループが大きく縮小されている場合、以前は余白が
+            // _scale分しか縮まらずシェイプ本体ほど縮小されないため、縮小率次第でcontentRectが
+            // 0以下になりテキストが消える境界に達しうる)。
+            var paddingPt = ShapeTextPaddingPt * _scale * groupScale;
             var contentRect = RectPt.FromBounds(
                 rect.Left + paddingPt,
                 rect.Top + paddingPt,
@@ -449,7 +476,7 @@ namespace Utsushi.Layout
                 return Array.Empty<ShapeTextLine>();
             }
 
-            var wrapped = WrapShapeText(text, contentRect.Width);
+            var wrapped = WrapShapeText(text, contentRect.Width, groupScale);
             if (wrapped.Count == 0)
             {
                 return Array.Empty<ShapeTextLine>();
@@ -477,7 +504,7 @@ namespace Utsushi.Layout
         /// (図形は注記・吹き出し用途を想定した近似実装であり、セル内テキストほど厳密な混在対応はしない)。
         /// </summary>
         private List<(string Text, HorizontalAlignment HAlign, FontStyle Font)> WrapShapeText(
-            ShapeTextBody text, double availableWidthPt)
+            ShapeTextBody text, double availableWidthPt, double groupScale = 1.0)
         {
             var lines = new List<(string, HorizontalAlignment, FontStyle)>();
             foreach (var paragraph in text.Paragraphs)
@@ -489,8 +516,9 @@ namespace Utsushi.Layout
                 }
 
                 // 拡大縮小率はフォントサイズにも適用する(セル内テキストのEmitTextと同様。
-                // 座標だけを縮めると文字が矩形に収まらなくなるため)。
-                var scaledFont = paragraph.Runs[0].Font with { SizePt = paragraph.Runs[0].Font.SizePt * _scale };
+                // 座標だけを縮めると文字が矩形に収まらなくなるため)。groupScaleは
+                // グループ内図形の場合の追加のリサイズ比率(BuildShapeTextLines参照)。
+                var scaledFont = paragraph.Runs[0].Font with { SizePt = paragraph.Runs[0].Font.SizePt * _scale * groupScale };
                 var paragraphText = string.Concat(paragraph.Runs.Select(run => run.Text));
                 foreach (var line in WrapLines(scaledFont, paragraphText, availableWidthPt))
                 {
@@ -608,9 +636,17 @@ namespace Utsushi.Layout
             return new BorderSet(left, right, top, bottom, anchorBorders.DiagonalDown, anchorBorders.DiagonalUp);
         }
 
+        /// <summary>
+        /// 結合範囲の列方向の枠線を、範囲内の各セルを走査して探す。走査するセル数には
+        /// <see cref="SpanWidthPt"/>等と同じ<see cref="MaxSpanCells"/>の上限を設け、
+        /// 結合範囲の対角セルにセル番地の上限近く(最大1,048,576行)を指定する不正な入力
+        /// (`mergeCell`はParsingレイヤーでサイズ上限を設けていない)による計算量の増大を防ぐ
+        /// (code-reviewer指摘)。
+        /// </summary>
         private BorderEdge ResolveColumnEdge(int column, int firstRow, int lastRow, Func<BorderSet, BorderEdge> selector)
         {
-            for (var row = firstRow; row <= lastRow; row++)
+            var boundedLastRow = Math.Min(lastRow, firstRow + MaxSpanCells);
+            for (var row = firstRow; row <= boundedLastRow; row++)
             {
                 var edge = selector(_sheet.GetCell(new CellAddress(row, column))?.Style.Borders ?? BorderSet.None);
                 if (edge.IsVisible)
@@ -622,9 +658,11 @@ namespace Utsushi.Layout
             return BorderEdge.None;
         }
 
+        /// <summary>結合範囲の行方向の枠線を探す。<see cref="ResolveColumnEdge"/>と同様の考え方。</summary>
         private BorderEdge ResolveRowEdge(int row, int firstColumn, int lastColumn, Func<BorderSet, BorderEdge> selector)
         {
-            for (var column = firstColumn; column <= lastColumn; column++)
+            var boundedLastColumn = Math.Min(lastColumn, firstColumn + MaxSpanCells);
+            for (var column = firstColumn; column <= boundedLastColumn; column++)
             {
                 var edge = selector(_sheet.GetCell(new CellAddress(row, column))?.Style.Borders ?? BorderSet.None);
                 if (edge.IsVisible)
@@ -959,14 +997,17 @@ namespace Utsushi.Layout
         /// <remarks>
         /// 印刷タイトルの繰り返しにより、ページ上の指標は必ずしも連続しない。
         /// 結合範囲が非連続な位置にまたがる場合は、見えている範囲全体を1つの矩形として扱う。
+        /// 走査する指標数には<see cref="ResolveColumnEdge"/>と同じ<see cref="MaxSpanCells"/>の
+        /// 上限を設ける(code-reviewer指摘)。
         /// </remarks>
         private static (int First, int Last) FindVisibleSpan(
             int first, int last, IReadOnlyDictionary<int, int> index)
         {
             var minPos = int.MaxValue;
             var maxPos = -1;
+            var boundedLast = Math.Min(last, first + MaxSpanCells);
 
-            for (var value = first; value <= last; value++)
+            for (var value = first; value <= boundedLast; value++)
             {
                 if (!index.TryGetValue(value, out var pos))
                 {

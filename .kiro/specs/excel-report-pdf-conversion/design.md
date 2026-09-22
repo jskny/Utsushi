@@ -373,7 +373,13 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     を使って、各子要素の`LocalRect`(子座標空間上の位置・サイズ)を
     `pageRect = groupRect.TopLeft + (LocalRect.TopLeft - ChildOffset) * (scaleX, scaleY)`
     でページ座標へ変換し、`ShapeCommand`/`ImageCommand`/`ConnectorCommand`を生成する
-    (`GroupChildShape`のテキスト折り返しも通常の図形と同じロジックを流用する)。
+    (`GroupChildShape`のテキスト折り返しも通常の図形と同じロジックを流用するが、
+    矩形自体が`scaleX`/`scaleY`で縮小/拡大されているのに合わせて、内側余白
+    (`ShapeTextPaddingPt`)・フォントサイズにも`scaleX`と`scaleY`の幾何平均を追加の係数として
+    掛ける。トップレベルの図形はこの係数が1.0になるため、印刷拡大率(`_scale`)のみが
+    効く従来どおりの挙動のままである。グループが大きく縮小されている場合に余白が
+    シェイプ本体ほど縮まらずテキストが矩形からはみ出す/消えることを防ぐための対応
+    〈layout-fidelity-reviewer指摘〉)。
     入れ子の`GroupChildGroup`は、自身の`pageRect`を新たな`groupRect`として同じ変換を
     再帰的に適用する。
     こうして生成した子要素の`DrawCommand`列を、`GroupCommand(Center, RotationDegrees, Children)`

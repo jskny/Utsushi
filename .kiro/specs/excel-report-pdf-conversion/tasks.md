@@ -29,8 +29,8 @@
     (`.kiro/steering/tech.md`「Visual Studio 2019 対応」参照)。
 
 - [x] 2. Parsingレイヤー: WorkbookModel の実装
-  - [x] 2.1 `DocumentFormat.OpenXml` を依存に追加し、`.xlsx` からセル値・スタイル(フォント/罫線/配置/数値書式/背景色)を読み取る `IWorkbookReader` を実装する
-    - _Requirements: 1.1, 1.2, 7.1_
+  - [x] 2.1 `DocumentFormat.OpenXml` を依存に追加し、`.xlsx` からセル値・スタイル(フォント/罫線/配置/数値書式/背景色)を読み取る `IWorkbookReader` を実装する(数式セルは評価せずキャッシュ済み計算結果を読む)
+    - _Requirements: 1.1, 1.2, 1.6, 7.1_
   - [x] 2.2 列幅・行高・結合セル範囲の読み取りを実装する
     - _Requirements: 1.2_
   - [x] 2.3 印刷範囲・手動改ページ・用紙サイズ/余白/拡大縮小・印刷タイトル・印刷順序の読み取りを実装する
@@ -65,8 +65,10 @@
 - [x] 5. Layoutレイヤー: ページ分割と座標計算
   - [x] 5.1 列幅(文字単位)・行高からポイント単位への換算ロジックをプロトタイプし、対象帳票での誤差を検証した上で実装する
     - _Requirements: 4.5_
-  - [x] 5.2 印刷範囲によるクリッピングを実装する
-    - _Requirements: 3.1_
+  - [x] 5.2 印刷範囲によるクリッピングを実装する(印刷範囲・印刷タイトルが確定した時点で、
+    必須置換フィールドの対象セルがいずれにも含まれない場合にエラーとする
+    `ReportLayoutEngine.ValidateRequiredFieldsAreInPrintRanges` を含む)
+    - _Requirements: 3.1, 2.6_
   - [x] 5.3 手動改ページの適用を実装する
     - _Requirements: 3.2_
   - [x] 5.4 自動改ページ計算(用紙サイズ・余白・拡大縮小率から導く印字可能領域に基づく行/列分割)を実装する
