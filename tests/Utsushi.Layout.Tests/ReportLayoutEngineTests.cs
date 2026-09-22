@@ -452,6 +452,51 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
+        public void 巨大な結合範囲の外周罫線走査は上限を超えた位置の罫線を検出しない()
+        {
+            // 回帰テスト(security-reviewer/layout-fidelity-reviewer指摘): mergeCellの範囲サイズは
+            // Parsingレイヤーで上限を設けていないため、ResolveColumnEdge/ResolveRowEdgeにも
+            // SpanWidthPt/SpanHeightPtと同じMaxSpanCells(既定4096。PageCommandBuilder内のprivate定数
+            // のためここでは直値で表す)の上限を設けた。上限を超えた位置(4110行目)のLeft罫線は
+            // 範囲の先頭から4096行ぶんしか走査しないため見つからず、出力されないことを確認する。
+            const int rows = 4110;
+            const int maxSpanCells = 4096;
+            var thin = new BorderEdge(BorderLineStyle.Thin, ArgbColor.Black);
+
+            var cells = new Dictionary<CellAddress, CellModel>();
+            for (var r = 1; r <= rows; r++)
+            {
+                var style = r == rows
+                    ? CellStyle.Default with
+                    {
+                        Borders = new BorderSet(thin, BorderEdge.None, BorderEdge.None, BorderEdge.None, BorderEdge.None, BorderEdge.None),
+                    }
+                    : CellStyle.Default;
+                cells[new CellAddress(r, 1)] = new CellModel(r.ToString(), CellValueKind.Text, style, r.ToString());
+            }
+
+            var sheet = new SheetModel(
+                "テストシート",
+                cells,
+                new List<MergedRange> { new(CellRange.Parse($"A1:A{rows}")) },
+                new List<double> { 10.0 },
+                Enumerable.Repeat(0.05, rows).ToList(),
+                10.0,
+                0.05,
+                new HashSet<int>(),
+                new HashSet<int>(),
+                NoMarginA4(),
+                Array.Empty<DrawingObjectModel>());
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var lines = Lines(page).ToList();
+
+            // 上限(先頭行+4096)を超えた最終行(4110行目)のLeft罫線は走査範囲外のため出力されない。
+            Assert.True(rows > maxSpanCells + 1, "この検証は境界を超える行数が前提");
+            Assert.DoesNotContain(lines, l => l.From.X == 0.0 && l.To.X == 0.0);
+        }
+
+        [Fact]
         public void 改ページをまたぐ結合セルは各ページの切れ目に本来無い罫線を描かない()
         {
             // A1:A2を結合し、A1にTop・A2にBottomの罫線を設定したうえで、A1とA2の間で改ページする。
@@ -771,6 +816,29 @@ namespace Utsushi.Layout.Tests
             var command = Assert.Single(Images(page));
 
             Assert.Equal(45.0, command.RotationDegrees, 3);
+        }
+
+        [Fact]
+        public void 描画オブジェクトの寸法上限は印刷拡大率適用後の表示サイズに適用される()
+        {
+            // 回帰テスト(layout-fidelity-reviewer指摘): 以前は上限(既定5000pt)を_scale適用前の
+            // 論理サイズに対して適用しており、印刷拡大率が100%を超える帳票では最終的な表示サイズが
+            // 上限を超過しうる(グループ内子要素の上限適用点とも食い違っていた)。
+            // 200%拡大 x 論理サイズ6000ptなら、修正前は min(6000,5000)*2.0=10000pt に、
+            // 修正後は min(6000*2.0,5000)=5000pt になるはず。
+            var sheet = UniformSheet(
+                rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0,
+                pageSetup: NoMarginA4(scaling: new PageScaling(200, null, null)));
+            var image = new ImageModel(
+                1u, Array.Empty<byte>(), "image/png", 0,
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(6000.0, 6000.0));
+            sheet = sheet with { DrawingObjects = new[] { image } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Images(page));
+
+            Assert.Equal(5000.0, command.Rect.Width, 3);
+            Assert.Equal(5000.0, command.Rect.Height, 3);
         }
 
         [Fact]

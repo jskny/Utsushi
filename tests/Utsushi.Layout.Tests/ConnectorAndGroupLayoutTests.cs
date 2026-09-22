@@ -154,6 +154,39 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
+        public void グループ内図形のテキスト余白とフォントサイズはグループのリサイズ比率に追従する()
+        {
+            // 回帰テスト(layout-fidelity-reviewer指摘): 子座標空間80x80のグループを40x40
+            // (半分)に縮小して配置すると、シェイプ本体の矩形は半分になるのに、以前は
+            // 余白・フォントサイズが印刷拡大率(_scale=1.0)分しか反映されず原寸のままだった。
+            // 修正後はscaleX=scaleY=0.5の幾何平均(=0.5)ぶん、余白・フォントサイズも半分になるはず。
+            var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
+            var font = new FontStyle("Calibri", 10.0, false, false, UnderlineStyle.None, false, ArgbColor.Black);
+            var text = new ShapeTextBody(
+                new[] { new ShapeTextParagraph(new[] { new ShapeTextRun("A", font) }, HorizontalAlignment.Left) },
+                VerticalAlignment.Top);
+
+            var childShape = new GroupChildShape(
+                 1u, RectPt.FromBounds(0, 0, 80, 80), ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, text);
+            var group = new GroupShapeModel(
+                 1u, new PointPt(0, 0),
+                new PointPt(80, 80),
+                new GroupChildModel[] { childShape },
+                0,
+                CellAddress.Parse("A1"),
+                new PointPt(0, 0),
+                new FixedAnchorExtent(40.0, 40.0));
+            sheet = sheet with { DrawingObjects = new[] { group } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var groupCommand = Assert.Single(Groups(page));
+            var childCommand = Assert.IsType<ShapeCommand>(Assert.Single(groupCommand.Children));
+            var line = Assert.Single(childCommand.TextLines);
+
+            Assert.Equal(5.0, line.Font.SizePt, 3);
+        }
+
+        [Fact]
         public void グループの子座標空間の原点がずれている場合でも平行移動が正しく計算される()
         {
             // ChildOffset != (0,0) の場合、子の位置は「原点からの相対位置」ではなく

@@ -29,8 +29,8 @@
     (`.kiro/steering/tech.md`「Visual Studio 2019 対応」参照)。
 
 - [x] 2. Parsingレイヤー: WorkbookModel の実装
-  - [x] 2.1 `DocumentFormat.OpenXml` を依存に追加し、`.xlsx` からセル値・スタイル(フォント/罫線/配置/数値書式/背景色)を読み取る `IWorkbookReader` を実装する
-    - _Requirements: 1.1, 1.2, 7.1_
+  - [x] 2.1 `DocumentFormat.OpenXml` を依存に追加し、`.xlsx` からセル値・スタイル(フォント/罫線/配置/数値書式/背景色)を読み取る `IWorkbookReader` を実装する(数式セルは評価せずキャッシュ済み計算結果を読む)
+    - _Requirements: 1.1, 1.2, 1.6, 7.1_
   - [x] 2.2 列幅・行高・結合セル範囲の読み取りを実装する
     - _Requirements: 1.2_
   - [x] 2.3 印刷範囲・手動改ページ・用紙サイズ/余白/拡大縮小・印刷タイトル・印刷順序の読み取りを実装する
@@ -65,8 +65,10 @@
 - [x] 5. Layoutレイヤー: ページ分割と座標計算
   - [x] 5.1 列幅(文字単位)・行高からポイント単位への換算ロジックをプロトタイプし、対象帳票での誤差を検証した上で実装する
     - _Requirements: 4.5_
-  - [x] 5.2 印刷範囲によるクリッピングを実装する
-    - _Requirements: 3.1_
+  - [x] 5.2 印刷範囲によるクリッピングを実装する(印刷範囲・印刷タイトルが確定した時点で、
+    必須置換フィールドの対象セルがいずれにも含まれない場合にエラーとする
+    `ReportLayoutEngine.ValidateRequiredFieldsAreInPrintRanges` を含む)
+    - _Requirements: 3.1, 2.6_
   - [x] 5.3 手動改ページの適用を実装する
     - _Requirements: 3.2_
   - [x] 5.4 自動改ページ計算(用紙サイズ・余白・拡大縮小率から導く印字可能領域に基づく行/列分割)を実装する
@@ -684,3 +686,42 @@
   - [x] 18.6 レビュー対応
     - `code-reviewer`/`layout-fidelity-reviewer`の指摘に対応する
     - _Requirements: 9.7_
+
+- [x] 19. 全体棚卸し監査の推奨指摘への対応
+  - [x] 19.1 tasks.mdのトレーサビリティ参照を補完する
+    - 要件1.6(数式セルはキャッシュ値のみ読む)をタスク2.1に、要件2.6(必須置換フィールドが
+      印刷範囲/印刷タイトル外ならエラー)をタスク5.2に、それぞれ`_Requirements`として追記する
+      (実装は既に満たしていたが、タスク側の参照記載が漏れていた)
+    - _Requirements: 1.6, 2.6_
+  - [x] 19.2 CLAUDE.md/docs/開発環境メモ.mdの軽微な更新漏れを直す
+    - CLAUDE.mdの「現在の状態」一覧に`docs/ライブラリの使い方.md`を追加し、
+      docs/開発環境メモ.mdのフォント未インストール前提がセッションを跨いだ際に曖昧に
+      ならないよう注記する
+  - [x] 19.3 PageCommandBuilder: 結合セル外周罫線走査にMaxSpanCellsの上限を追加する
+    - `ResolveColumnEdge`/`ResolveRowEdge`/`FindVisibleSpan`に、`SpanWidthPt`/`SpanHeightPt`と
+      同じ`MaxSpanCells`(既定4096)の上限を設ける(`mergeCell`の範囲サイズはParsingレイヤーで
+      上限を設けていないため)
+    - _Requirements: 10.8_
+  - [x] 19.4 PageCommandBuilder: 描画オブジェクトの寸法上限の適用点を統一する
+    - `TryComputeDrawingObjectRect`の`MaxDrawingObjectDimensionPt`適用を、印刷拡大率(`_scale`)
+      適用後の最終表示サイズに変更し、グループ内子要素(`ToGroupChildRect`)と適用点を揃える
+    - _Requirements: 9.6, 10.8_
+  - [x] 19.5 PageCommandBuilder: グループ内図形のテキスト余白・フォントサイズをグループの
+        リサイズ比率に追従させる
+    - `BuildGroupChildren`でグループのscaleX/scaleYの幾何平均を`groupScale`として算出し、
+      `BuildShapeTextLines`/`WrapShapeText`の内側余白・フォントサイズに反映する
+    - _Requirements: 10.10_
+  - [x] 19.6 Parsingレイヤー: 結合セル範囲の個数に上限を追加する
+    - `ReadMergedRanges`に、画像・図形と同じ考え方の`MaxMergedRangesPerSheet`(既定1000)を追加する
+      (`ElementKind = "TooManyMergedRanges"`。`SheetModel.FindMergedRange`の線形走査がページ内
+      セル数×結合範囲数で増大するDoSベクトルへの対策。security-reviewer指摘)
+    - _Requirements: 2.9_
+  - [x] 19.7 ユニットテストを追加する
+    - Layout: 巨大な結合範囲の外周罫線走査が上限を超えた位置の罫線を検出しないこと、
+      寸法上限が印刷拡大率適用後の表示サイズに適用されること、グループ内図形のテキスト余白/
+      フォントサイズがグループのリサイズ比率に追従することを検証する
+    - Parsing: 結合セル範囲の個数が上限を超える場合、ignore/errorそれぞれの挙動を検証する
+    - _Requirements: 2.9, 9.6, 9.7, 10.8, 10.10_
+  - [x] 19.8 レビュー対応
+    - `layout-fidelity-reviewer`/`security-reviewer`の指摘に対応する
+    - _Requirements: 2.9, 10.8, 10.10_

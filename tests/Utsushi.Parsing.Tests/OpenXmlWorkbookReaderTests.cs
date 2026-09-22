@@ -93,6 +93,44 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 結合セル範囲の数が上限を超える場合はunsupportedElementsがignoreなら上限までしか読み取らない()
+        {
+            // security-reviewer指摘: mergeCellの範囲サイズだけでなく個数にも上限を設ける
+            // (Layoutレイヤーの結合セル矩形統合・罫線合成が結合範囲の個数に比例するため)。
+            var path = MergedRangeWorkbookFixtures.CreateWithManyMergedRanges(
+                OpenXmlWorkbookReader.MaxMergedRangesPerSheet + 5);
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                Assert.Equal(OpenXmlWorkbookReader.MaxMergedRangesPerSheet, sheet.MergedRanges.Count);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 結合セル範囲の数が上限を超える場合はunsupportedElementsがerrorなら例外になる()
+        {
+            var path = MergedRangeWorkbookFixtures.CreateWithManyMergedRanges(
+                OpenXmlWorkbookReader.MaxMergedRangesPerSheet + 5);
+            try
+            {
+                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                using var stream = File.OpenRead(path);
+
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
+                Assert.Equal("TooManyMergedRanges", ex.ElementKind);
+                Assert.Equal(ProcessingStage.Parsing, ex.Stage);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void ページ設定と印刷範囲を読み取る()
         {
             var sheet = ReadInvoiceSheet();

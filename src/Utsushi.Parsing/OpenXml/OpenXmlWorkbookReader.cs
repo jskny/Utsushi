@@ -201,7 +201,7 @@ namespace Utsushi.Parsing.OpenXml
             }
 
             var (columnWidths, hiddenColumns) = ReadColumns(worksheet, defaultColumnWidth);
-            var mergedRanges = ReadMergedRanges(worksheet);
+            var mergedRanges = ReadMergedRanges(name, worksheet, options);
             var pageSetup = ReadPageSetup(name, worksheet, definedNames);
             var drawingObjects = ReadDrawingObjects(name, worksheetPart, options);
 
@@ -343,7 +343,12 @@ namespace Utsushi.Parsing.OpenXml
             return (widths, hidden);
         }
 
-        private static List<MergedRange> ReadMergedRanges(X.Worksheet worksheet)
+        /// <summary>
+        /// <c>mergeCell</c>要素を<see cref="MergedRange"/>のリストとして読み取る。個数には
+        /// <see cref="MaxMergedRangesPerSheet"/>の上限を設ける(security-reviewer指摘。
+        /// 画像・図形と同じ理由によるDoS対策)。
+        /// </summary>
+        private static List<MergedRange> ReadMergedRanges(string sheetName, X.Worksheet worksheet, WorkbookReadOptions options)
         {
             var result = new List<MergedRange>();
             var mergeCells = worksheet.GetFirstChild<X.MergeCells>();
@@ -354,10 +359,28 @@ namespace Utsushi.Parsing.OpenXml
 
             foreach (var merge in mergeCells.Elements<X.MergeCell>())
             {
-                if (merge.Reference?.Value is { } reference && CellRange.TryParse(reference, out var range))
+                if (merge.Reference?.Value is not { } reference || !CellRange.TryParse(reference, out var range))
                 {
-                    result.Add(new MergedRange(range));
+                    continue;
                 }
+
+                if (result.Count >= MaxMergedRangesPerSheet)
+                {
+                    if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                    {
+                        throw new UnsupportedWorkbookElementException(
+                            $"シート '{sheetName}' の結合セル範囲の数が上限({MaxMergedRangesPerSheet}個)を超えています。"
+                            + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                            "TooManyMergedRanges",
+                            options.ReportCode,
+                            sheetName);
+                    }
+
+                    // ignore時は上限以降の結合範囲を無視する(以降のセルは通常セルとして扱われる)。
+                    break;
+                }
+
+                result.Add(new MergedRange(range));
             }
 
             return result;
@@ -382,6 +405,15 @@ namespace Utsushi.Parsing.OpenXml
 
         /// <summary>画像1枚あたりの読み取りバイト数の上限(10MB)。ピクセル爆弾等への安全弁。</summary>
         private const long MaxImageDataBytes = 10 * 1024 * 1024;
+
+        /// <summary>
+        /// 1シートに含める結合セル範囲(<c>mergeCell</c>)の数の上限。画像・図形と同様、
+        /// 信頼できない入力による計算量の増大を防ぐための安全弁である
+        /// (Layoutレイヤーの結合セル矩形統合・罫線合成は結合範囲の個数に比例する処理のため。
+        /// security-reviewer指摘)。個々の結合範囲の大きさ(行数・列数)自体は
+        /// Layoutレイヤー側の<c>MaxSpanCells</c>で別途上限を設けている。
+        /// </summary>
+        internal const int MaxMergedRangesPerSheet = 1000;
 
         /// <summary>
         /// 対応済みプリセットジオメトリ(要件10.1補足)。自社帳票での実用上の必要性を踏まえた
