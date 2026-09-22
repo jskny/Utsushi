@@ -131,6 +131,11 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     - 2セルアンカー(対角セル指定)の幅・高さ計算は、対角セルにセル番地の上限
       (最大1,048,576行×16,384列)近くを指定された場合の計算量を抑えるため、
       合算する列/行数に上限(既定4096)を設ける。
+  - **回転(要件9.7)**: `xdr:pic/xdr:spPr/a:xfrm/@rot` を図形と全く同じ変換
+    (`ReadImage`/`ReadGroupChildImage`双方で図形の「回転」節と同じ60,000分の1度→度の
+    変換式を使う)で読み取り、`ImageModel.RotationDegrees`/`GroupChildImage.RotationDegrees`
+    に保持する。ロゴ画像は通常回転しないが、捺印画像(角度をつけた印影)のように
+    回転させて配置する運用があるため、画像対応(要件9)の当初実装から後付けで対応した。
 - **図形(要件10)**: 画像(`xdr:pic`)と同じ `xdr:twoCellAnchor` / `xdr:oneCellAnchor` の下に
   現れる `xdr:sp`(シェイプ)のうち、`xdr:spPr/a:prstGeom/@prst` が対応済みプリセット一覧
   (要件10.1補足)に含まれるものだけを読み取る。アンカー(左上セル・オフセット・
@@ -456,6 +461,10 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   `SKBitmap.Decode` で実際に展開する前に `SKBitmap.DecodeBounds` で宣言上のピクセル寸法を確認し、
   上限(既定4096px)を超える場合はデコードせず `PdfRenderingException` とする(要件9.6。
   ピクセル爆弾対策。詳細はParsingレイヤー節「信頼できない入力に対する安全弁」を参照)。
+  回転がある場合は、図形(要件10.5)と全く同じ`canvas.Save()` →
+  `canvas.RotateDegrees(RotationDegrees, centerX, centerY)`(中心は`Rect`の中心)→
+  `DrawBitmap` → `canvas.Restore()` のパターンで`RotationDegrees`を反映する(要件9.7。
+  捺印画像のように回転させて配置する運用があるため対応する)。
 - **図形の描画(要件10)**: `ShapeCommand` ごとに、回転がある場合は
   `canvas.Save()` → `canvas.RotateDegrees(RotationDegrees, centerX, centerY)`
   (中心は`Rect`の中心)→ 描画 → `canvas.Restore()` で図形本体とテキストの両方を
@@ -641,6 +650,7 @@ public sealed record ImageModel(
     uint Id,
     byte[] Data,
     string ContentType,                   // 例: "image/png"
+    double RotationDegrees,               // a:xfrm/@rot(60,000分の1度)を度に変換(要件9.7)
     CellAddress AnchorCell,
     PointPt AnchorOffset,
     AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
@@ -803,7 +813,8 @@ public sealed record LineCommand(
     PointPt From, PointPt To, ArgbColor Color, double WidthPt, LineDashStyle Dash) : DrawCommand;
 public sealed record TextCommand(
     PointPt Origin, string Text, FontStyle Font, TextAnchor Anchor, RectPt? ClipRect) : DrawCommand;
-public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType) : DrawCommand;
+// RotationDegreesはRectの中心を軸とした回転角(度、時計回り。要件9.7)。
+public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType, double RotationDegrees) : DrawCommand;
 
 // 図形(要件10)。Rect/TextLinesの座標は回転前のローカル座標。回転はRenderingレイヤーが適用する。
 public sealed record ShapeCommand(

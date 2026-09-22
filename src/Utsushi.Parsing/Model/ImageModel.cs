@@ -10,6 +10,7 @@ namespace Utsushi.Parsing.Model
     /// </param>
     /// <param name="Data">画像のバイナリ。</param>
     /// <param name="ContentType">MIMEタイプ(例: <c>"image/png"</c>)。</param>
+    /// <param name="RotationDegrees"><c>a:xfrm/@rot</c> から変換した回転角(度、時計回り)。</param>
     /// <param name="AnchorCell">アンカー左上セル。</param>
     /// <param name="AnchorOffset">アンカーセル左上からのオフセット(ポイント)。</param>
     /// <param name="Extent">画像の終端(サイズ)の決め方。</param>
@@ -17,6 +18,7 @@ namespace Utsushi.Parsing.Model
         uint Id,
         byte[] Data,
         string ContentType,
+        double RotationDegrees,
         CellAddress AnchorCell,
         PointPt AnchorOffset,
         AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);

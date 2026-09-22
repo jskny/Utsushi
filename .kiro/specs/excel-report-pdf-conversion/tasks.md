@@ -651,3 +651,36 @@
   - [x] 17.3 レビュー対応
     - `code-reviewer`の指摘に対応する
     - _Requirements: 3.7, 3.8_
+
+- [x] 18. 画像の回転(`&rot`)対応
+  - [x] 18.1 Parsingレイヤー: `ImageModel`/`GroupChildImage`に`RotationDegrees`を追加する
+    - `ImageModel`(トップレベル画像)・`GroupChildImage`(グループ内画像)に`RotationDegrees`
+      (度)を追加する。図形の`RotationDegrees`読み取り(`ReadShape`/`ReadGroupChildShape`の
+      `(shapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0`)と全く同じ変換を
+      `ReadImage`/`ReadGroupChildImage`にも適用する(`picture.ShapeProperties?.Transform2D`)
+    - _Requirements: 9.7_
+  - [x] 18.2 Layoutレイヤー: `ImageCommand`に`RotationDegrees`を追加する
+    - `DrawCommand.ImageCommand`に`RotationDegrees`を追加し、`PageCommandBuilder`の
+      2箇所の生成元(トップレベルの`EmitDrawingObjects`、グループ内の`BuildGroupChildren`)
+      で`image.RotationDegrees`をそのまま渡す
+    - _Requirements: 9.7_
+  - [x] 18.3 Renderingレイヤー: `DrawImage`で回転を適用する
+    - `SkiaPdfRenderer.DrawImage`を、`DrawShape`/`DrawConnector`と同じ
+      `hasRotation`判定→`canvas.Save()`→`canvas.RotateDegrees(RotationDegrees, centerX, centerY)`
+      (中心は`Rect`の中心)→描画→`finally`で`canvas.Restore()`のパターンに変更する
+    - _Requirements: 9.7_
+  - [x] 18.4 サンプル帳票への配置とゴールデンテスト更新
+    - 捺印画像を模した回転画像をinvoiceサンプルに1つ配置し、CLIでPDFを生成し
+      `pdftoppm`でラスタライズして目視確認したうえでゴールデンファイルを更新する
+    - _Requirements: 9.7, 8.3_
+  - [x] 18.5 ユニットテストを追加する
+    - Parsing: `a:xfrm/@rot`が`ImageModel.RotationDegrees`/`GroupChildImage.RotationDegrees`に
+      反映されること、指定が無ければ0のままであることを検証する
+    - Layout: `image.RotationDegrees`が`ImageCommand.RotationDegrees`にそのまま伝播することを
+      トップレベル・グループ内画像の両方で検証する
+    - Rendering: 回転が非ゼロの場合に`canvas`へ`Save`/`RotateDegrees`/`Restore`が
+      適用されること(既存の図形回転テストと同様の検証方法)を確認する
+    - _Requirements: 9.7_
+  - [ ] 18.6 レビュー対応
+    - `code-reviewer`/`layout-fidelity-reviewer`の指摘に対応する
+    - _Requirements: 9.7_

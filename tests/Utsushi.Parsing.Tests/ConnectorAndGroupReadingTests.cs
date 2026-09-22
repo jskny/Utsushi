@@ -286,6 +286,34 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void グループ内画像の回転角を度に変換して読み取る()
+        {
+            // 60,000分の1度単位。90度 = 5,400,000(要件9.7。グループ内画像でも図形と同じ変換)。
+            var path = ConnectorAndGroupWorkbookFixtures.CreateWorkbookWithImage((drawingsPart, imagePart) =>
+            {
+                var image = ConnectorAndGroupWorkbookFixtures.GroupChildImageElement(
+                    drawingsPart, imagePart, 0L, 0L, 900000L, 900000L, id: 11U, rotationEmu: 5_400_000);
+                var group = ConnectorAndGroupWorkbookFixtures.GroupShapeElement(
+                    new OpenXmlElement[] { image }, 0L, 0L, 900000L, 900000L, id: 2U);
+
+                return ConnectorAndGroupWorkbookFixtures.WrapInOneCellAnchor(group, widthEmu: 900000L, heightEmu: 900000L);
+            });
+
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                var group = Assert.Single(sheet.DrawingObjects.OfType<GroupShapeModel>());
+                var imageChild = Assert.IsType<GroupChildImage>(Assert.Single(group.Children));
+
+                Assert.Equal(90.0, imageChild.RotationDegrees, 3);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void グループ内に非対応プリセットの図形が1つでもあればunsupportedElementsがignoreならグループ全体が破棄される()
         {
             var goodShape1 = ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(

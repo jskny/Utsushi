@@ -738,7 +738,7 @@ namespace Utsushi.Layout.Tests
                 rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
             var image = new ImageModel(
                  1u, new byte[] { 1, 2, 3 },
-                "image/png",
+                "image/png", 0,
                 CellAddress.Parse("B2"),
                 new PointPt(2.0, 3.0),
                 new FixedAnchorExtent(15.0, 8.0));
@@ -757,6 +757,23 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
+        public void 画像の回転角はImageCommandにそのまま伝播する()
+        {
+            // 要件9.7。座標変換はLayoutレイヤーの責務だが、回転角自体はRenderingレイヤーが
+            // 適用するため、Layoutレイヤーは変換せずそのまま引き継ぐだけでよい。
+            var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
+            var image = new ImageModel(
+                1u, Array.Empty<byte>(), "image/png", 45.0,
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+            sheet = sheet with { DrawingObjects = new[] { image } };
+
+            var page = Assert.Single(Compute(sheet).Pages);
+            var command = Assert.Single(Images(page));
+
+            Assert.Equal(45.0, command.RotationDegrees, 3);
+        }
+
+        [Fact]
         public void 二セルアンカーの画像は対角セルまでの幅高さに変換される()
         {
             const double columnWidthChars = 10.0;
@@ -767,7 +784,7 @@ namespace Utsushi.Layout.Tests
                 rows: 5, columns: 5, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
             var image = new ImageModel(
                  1u, Array.Empty<byte>(),
-                "image/png",
+                "image/png", 0,
                 CellAddress.Parse("A1"),
                 new PointPt(0.0, 0.0),
                 new CellSpanAnchorExtent(CellAddress.Parse("C2"), new PointPt(4.0, 5.0)));
@@ -798,7 +815,7 @@ namespace Utsushi.Layout.Tests
                 pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("A1:C3") }));
             var image = new ImageModel(
                  1u, Array.Empty<byte>(),
-                "image/png",
+                "image/png", 0,
                 CellAddress.Parse("C1"),
                 new PointPt(0.0, 0.0),
                 // 印刷範囲(A1:C3)の外にあるE2まで(D列・E列は印刷範囲外)。
@@ -821,7 +838,7 @@ namespace Utsushi.Layout.Tests
                 rows: 4, columns: 2, columnWidth: 10.0, rowHeightPt: 20.0,
                 pageSetup: NoMarginA4(rowBreaks: new[] { 3 }));
             var image = new ImageModel(
-                 1u, Array.Empty<byte>(), "image/png", CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+                 1u, Array.Empty<byte>(), "image/png", 0, CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
             sheet = sheet with { DrawingObjects = new[] { image } };
 
             var layout = Compute(sheet);
@@ -962,7 +979,7 @@ namespace Utsushi.Layout.Tests
         {
             var sheet = UniformSheet(rows: 2, columns: 2, columnWidth: 40.0, rowHeightPt: 60.0, pageSetup: NoMarginA4());
             var image = new ImageModel(
-                 1u, Array.Empty<byte>(), "image/png", CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
+                 1u, Array.Empty<byte>(), "image/png", 0, CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));
             var shape = new ShapeModel(
                  1u, ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, null,
                 CellAddress.Parse("A1"), default, new FixedAnchorExtent(5.0, 5.0));

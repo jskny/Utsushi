@@ -45,7 +45,8 @@ namespace Utsushi.Layout.Model
     /// <param name="Rect">配置先の矩形(ページ左上原点、ポイント単位、余白・拡大縮小適用済み)。</param>
     /// <param name="Data">画像のバイナリ。</param>
     /// <param name="ContentType">MIMEタイプ(例: <c>"image/png"</c>)。</param>
-    public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType) : DrawCommand;
+    /// <param name="RotationDegrees"><see cref="Rect"/>の中心を軸とした回転角(度、時計回り。要件9.7)。</param>
+    public sealed record ImageCommand(RectPt Rect, byte[] Data, string ContentType, double RotationDegrees) : DrawCommand;
 
     /// <summary>
     /// 図形1つの描画(要件10)。他のセル内容(背景・罫線・文字)より最前面に描画される。

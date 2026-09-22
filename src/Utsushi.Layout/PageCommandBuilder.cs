@@ -152,7 +152,7 @@ namespace Utsushi.Layout
                 switch (drawingObject)
                 {
                     case ImageModel image:
-                        _drawingObjects.Add(new ImageCommand(rect, image.Data, image.ContentType));
+                        _drawingObjects.Add(new ImageCommand(rect, image.Data, image.ContentType, image.RotationDegrees));
                         break;
                     case ShapeModel shape:
                         _drawingObjects.Add(BuildShapeCommand(shape, rect));
@@ -323,7 +323,7 @@ namespace Utsushi.Layout
                         result.Add(BuildGroupChildShapeCommand(shape, childRect));
                         break;
                     case GroupChildImage image:
-                        result.Add(new ImageCommand(childRect, image.Data, image.ContentType));
+                        result.Add(new ImageCommand(childRect, image.Data, image.ContentType, image.RotationDegrees));
                         break;
                     case GroupChildConnector connector:
                         var (resolvedStart, resolvedEnd) = ResolveConnectorEndpoints(

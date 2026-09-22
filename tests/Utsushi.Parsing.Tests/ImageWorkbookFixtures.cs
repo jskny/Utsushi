@@ -22,7 +22,11 @@ namespace Utsushi.Parsing.Tests
         /// 含む最小の .xlsx を一時ファイルとして作成し、そのパスを返す。呼び出し側で削除すること。
         /// </summary>
         public static string CreateWithPicture(
-            string contentType, byte[] imageData, bool useTwoCellAnchor = false, ImagePartType partType = ImagePartType.Png)
+            string contentType,
+            byte[] imageData,
+            bool useTwoCellAnchor = false,
+            ImagePartType partType = ImagePartType.Png,
+            int rotationEmu = 0)
         {
             var path = Path.Combine(Path.GetTempPath(), "utsushi-image-test-" + Guid.NewGuid().ToString("N") + ".xlsx");
 
@@ -53,7 +57,9 @@ namespace Utsushi.Parsing.Tests
                 }
 
                 var drawing = new Xdr.WorksheetDrawing();
-                drawing.Append(useTwoCellAnchor ? BuildTwoCellAnchor(drawingsPart, imagePart) : BuildOneCellAnchor(drawingsPart, imagePart));
+                drawing.Append(useTwoCellAnchor
+                    ? BuildTwoCellAnchor(drawingsPart, imagePart)
+                    : BuildOneCellAnchor(drawingsPart, imagePart, rotationEmu));
                 drawingsPart.WorksheetDrawing = drawing;
 
                 worksheetPart.Worksheet.Append(new Drawing { Id = worksheetPart.GetIdOfPart(drawingsPart) });
@@ -172,7 +178,7 @@ namespace Utsushi.Parsing.Tests
             return path;
         }
 
-        private static Xdr.OneCellAnchor BuildOneCellAnchor(DrawingsPart drawingsPart, ImagePart imagePart)
+        private static Xdr.OneCellAnchor BuildOneCellAnchor(DrawingsPart drawingsPart, ImagePart imagePart, int rotationEmu = 0)
         {
             const long widthEmu = 60L * (long)EmusPerPoint;
             const long heightEmu = 20L * (long)EmusPerPoint;
@@ -184,7 +190,7 @@ namespace Utsushi.Parsing.Tests
                     new Xdr.RowId("2"), // 0始まり → CellAddress上は行3
                     new Xdr.RowOffset("0")),
                 new Xdr.Extent { Cx = widthEmu, Cy = heightEmu },
-                BuildPicture(drawingsPart, imagePart, widthEmu, heightEmu),
+                BuildPicture(drawingsPart, imagePart, widthEmu, heightEmu, rotationEmu: rotationEmu),
                 new Xdr.ClientData());
         }
 
@@ -220,7 +226,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         private static Xdr.Picture BuildPicture(
-            DrawingsPart drawingsPart, ImagePart imagePart, long widthEmu, long heightEmu, uint id = 2U) =>
+            DrawingsPart drawingsPart, ImagePart imagePart, long widthEmu, long heightEmu, uint id = 2U, int rotationEmu = 0) =>
             new(
                 new Xdr.NonVisualPictureProperties(
                     new Xdr.NonVisualDrawingProperties { Id = id, Name = "Logo" },
@@ -231,7 +237,10 @@ namespace Utsushi.Parsing.Tests
                 new Xdr.ShapeProperties(
                     new A.Transform2D(
                         new A.Offset { X = 0L, Y = 0L },
-                        new A.Extents { Cx = widthEmu, Cy = heightEmu }),
+                        new A.Extents { Cx = widthEmu, Cy = heightEmu })
+                    {
+                        Rotation = rotationEmu,
+                    },
                     new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
 
         /// <summary>

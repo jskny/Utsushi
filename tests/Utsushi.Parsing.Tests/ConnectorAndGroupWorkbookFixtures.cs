@@ -330,7 +330,8 @@ namespace Utsushi.Parsing.Tests
             long offY,
             long extCx,
             long extCy,
-            uint id = 20U) =>
+            uint id = 20U,
+            int rotationEmu = 0) =>
             new(
                 new Xdr.NonVisualPictureProperties(
                     new Xdr.NonVisualDrawingProperties { Id = id, Name = "GroupImage" + id.ToString(CultureInfo.InvariantCulture) },
@@ -341,7 +342,10 @@ namespace Utsushi.Parsing.Tests
                 new Xdr.ShapeProperties(
                     new A.Transform2D(
                         new A.Offset { X = offX, Y = offY },
-                        new A.Extents { Cx = extCx, Cy = extCy }),
+                        new A.Extents { Cx = extCx, Cy = extCy })
+                    {
+                        Rotation = rotationEmu,
+                    },
                     new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
 
         /// <summary>

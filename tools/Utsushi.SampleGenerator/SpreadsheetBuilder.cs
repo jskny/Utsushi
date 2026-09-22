@@ -29,10 +29,44 @@ internal sealed class SpreadsheetBuilder
     private readonly Dictionary<int, double> _columnWidths = new();
     private readonly Dictionary<int, double> _rowHeights = new();
     private readonly List<uint> _manualRowBreaks = new();
-    private (int Row, int Column, double OffsetXPt, double OffsetYPt, double WidthPt, double HeightPt, byte[] Png)? _image;
+    private readonly List<ImageSpec> _images = new();
     private readonly List<ShapeSpec> _shapes = new();
     private readonly List<ConnectorSpec> _connectors = new();
     private readonly List<GroupSpec> _groups = new();
+
+    /// <summary>画像(要件9)1枚ぶんの配置情報。</summary>
+    private readonly struct ImageSpec
+    {
+        public ImageSpec(
+            int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
+            byte[] png, double rotationDegrees)
+        {
+            Row = row;
+            Column = column;
+            OffsetXPt = offsetXPt;
+            OffsetYPt = offsetYPt;
+            WidthPt = widthPt;
+            HeightPt = heightPt;
+            Png = png;
+            RotationDegrees = rotationDegrees;
+        }
+
+        public int Row { get; }
+
+        public int Column { get; }
+
+        public double OffsetXPt { get; }
+
+        public double OffsetYPt { get; }
+
+        public double WidthPt { get; }
+
+        public double HeightPt { get; }
+
+        public byte[] Png { get; }
+
+        public double RotationDegrees { get; }
+    }
 
     /// <summary>図形(要件10)1つぶんの配置情報。</summary>
     private readonly struct ShapeSpec
@@ -266,13 +300,16 @@ internal sealed class SpreadsheetBuilder
     public void AddManualRowBreak(uint rowIndex) => _manualRowBreaks.Add(rowIndex);
 
     /// <summary>
-    /// シートに画像(要件9)を1枚配置する。<paramref name="row"/>/<paramref name="column"/>のセル左上を
+    /// シートに画像(要件9)を1枚追加する。<paramref name="row"/>/<paramref name="column"/>のセル左上を
     /// 基準に、そこから<paramref name="offsetXPt"/>/<paramref name="offsetYPt"/>だけ離れた位置へ、
     /// <paramref name="widthPt"/>x<paramref name="heightPt"/>の固定サイズで配置する(oneCellAnchor)。
+    /// 複数回呼べば出現順に重なる。
     /// </summary>
+    /// <param name="rotationDegrees">回転角(度、時計回り。要件9.7)。</param>
     public void SetImage(
-        int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt, byte[] png) =>
-        _image = (row, column, offsetXPt, offsetYPt, widthPt, heightPt, png);
+        int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt, byte[] png,
+        double rotationDegrees = 0) =>
+        _images.Add(new ImageSpec(row, column, offsetXPt, offsetYPt, widthPt, heightPt, png, rotationDegrees));
 
     /// <summary>
     /// シートに図形(要件10)を1つ追加する(oneCellAnchor)。複数回呼べば出現順に重なる。
@@ -378,9 +415,9 @@ internal sealed class SpreadsheetBuilder
         var worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
         worksheetPart.Worksheet = BuildWorksheet();
 
-        if (_image is not null || _shapes.Count > 0 || _connectors.Count > 0 || _groups.Count > 0)
+        if (_images.Count > 0 || _shapes.Count > 0 || _connectors.Count > 0 || _groups.Count > 0)
         {
-            AppendDrawingObjects(worksheetPart, _image, _shapes, _connectors, _groups);
+            AppendDrawingObjects(worksheetPart, _images, _shapes, _connectors, _groups);
         }
 
         var sheets = workbookPart.Workbook.AppendChild(new Sheets());
@@ -632,7 +669,7 @@ internal sealed class SpreadsheetBuilder
     /// </summary>
     private static void AppendDrawingObjects(
         WorksheetPart worksheetPart,
-        (int Row, int Column, double OffsetXPt, double OffsetYPt, double WidthPt, double HeightPt, byte[] Png)? image,
+        IReadOnlyList<ImageSpec> images,
         IReadOnlyList<ShapeSpec> shapes,
         IReadOnlyList<ConnectorSpec> connectors,
         IReadOnlyList<GroupSpec> groups)
@@ -642,9 +679,9 @@ internal sealed class SpreadsheetBuilder
 
         var nextId = 2U;
 
-        if (image is { } img)
+        foreach (var image in images)
         {
-            drawing.Append(BuildImageAnchor(drawingsPart, img, nextId++));
+            drawing.Append(BuildImageAnchor(drawingsPart, image, nextId++));
         }
 
         // 接続線の接続先解決(要件10.11)のため、SetShapeが返したハンドル(_shapesのindex)から
@@ -676,10 +713,7 @@ internal sealed class SpreadsheetBuilder
         worksheetPart.Worksheet.Append(new Drawing { Id = worksheetPart.GetIdOfPart(drawingsPart) });
     }
 
-    private static Xdr.OneCellAnchor BuildImageAnchor(
-        DrawingsPart drawingsPart,
-        (int Row, int Column, double OffsetXPt, double OffsetYPt, double WidthPt, double HeightPt, byte[] Png) image,
-        uint id)
+    private static Xdr.OneCellAnchor BuildImageAnchor(DrawingsPart drawingsPart, ImageSpec image, uint id)
     {
         var imagePart = drawingsPart.AddImagePart(ImagePartType.Png);
         using (var stream = new MemoryStream(image.Png))
@@ -691,6 +725,7 @@ internal sealed class SpreadsheetBuilder
         var offsetYEmu = (long)Math.Round(image.OffsetYPt * EmusPerPoint);
         var widthEmu = (long)Math.Round(image.WidthPt * EmusPerPoint);
         var heightEmu = (long)Math.Round(image.HeightPt * EmusPerPoint);
+        var rotationEmu = (int)Math.Round(image.RotationDegrees * 60000.0);
 
         return new Xdr.OneCellAnchor(
             new Xdr.FromMarker(
@@ -709,7 +744,10 @@ internal sealed class SpreadsheetBuilder
                 new Xdr.ShapeProperties(
                     new A.Transform2D(
                         new A.Offset { X = 0L, Y = 0L },
-                        new A.Extents { Cx = widthEmu, Cy = heightEmu }),
+                        new A.Extents { Cx = widthEmu, Cy = heightEmu })
+                    {
+                        Rotation = rotationEmu,
+                    },
                     new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle })),
             new Xdr.ClientData());
     }
