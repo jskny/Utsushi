@@ -598,7 +598,7 @@
       `ConnectorGeometryBuilder.Build`がこの2点を始点・終点として使うよう拡張する
       (`Rect`/`FlipHorizontal`/`FlipVertical`は無視する)
     - _Requirements: 10.11_
-  - [ ] 16.9 サンプル帳票への配置とゴールデンテスト更新
+  - [x] 16.9 サンプル帳票への配置とゴールデンテスト更新
     - `SpreadsheetBuilder`に、IDを指定して図形と接続線を関連付けるAPI(`SetShape`等が
       返す/受け取るID、または`stCxn`/`endCxn`を組み立てる`SetConnector`の拡張)を追加し、
       invoiceサンプルに接続点解決が効くケース(フローチャート記号同士を接続)を1つ配置する。

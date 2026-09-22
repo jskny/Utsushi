@@ -103,7 +103,8 @@ internal sealed class SpreadsheetBuilder
     {
         public ConnectorSpec(
             int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
-            A.ShapeTypeValues preset, string? outlineHex, bool flipHorizontal, bool flipVertical)
+            A.ShapeTypeValues preset, string? outlineHex, bool flipHorizontal, bool flipVertical,
+            int? startShapeHandle, uint? startSiteIndex, int? endShapeHandle, uint? endSiteIndex)
         {
             Row = row;
             Column = column;
@@ -115,6 +116,10 @@ internal sealed class SpreadsheetBuilder
             OutlineHex = outlineHex;
             FlipHorizontal = flipHorizontal;
             FlipVertical = flipVertical;
+            StartShapeHandle = startShapeHandle;
+            StartSiteIndex = startSiteIndex;
+            EndShapeHandle = endShapeHandle;
+            EndSiteIndex = endSiteIndex;
         }
 
         public int Row { get; }
@@ -136,6 +141,16 @@ internal sealed class SpreadsheetBuilder
         public bool FlipHorizontal { get; }
 
         public bool FlipVertical { get; }
+
+        /// <summary>接続先の始点(要件10.11)。<see cref="SetShape"/>が返した図形のハンドル。<c>null</c>なら接続先無し。</summary>
+        public int? StartShapeHandle { get; }
+
+        public uint? StartSiteIndex { get; }
+
+        /// <summary>接続先の終点(要件10.11)。<see cref="StartShapeHandle"/>と同様。</summary>
+        public int? EndShapeHandle { get; }
+
+        public uint? EndSiteIndex { get; }
     }
 
     /// <summary>グループ(要件10.10)内の図形子要素1つぶんの配置情報(子座標空間上、ポイント単位)。</summary>
@@ -266,11 +281,19 @@ internal sealed class SpreadsheetBuilder
     /// <param name="outlineHex">枠線色(6桁16進)。nullは枠線無し。</param>
     /// <param name="rotationDegrees">回転角(度、時計回り)。</param>
     /// <param name="text">図形内テキスト。nullはテキスト無し。</param>
-    public void SetShape(
+    /// <returns>
+    /// この図形のハンドル(<see cref="SetConnector"/>の接続先指定に使う。要件10.11)。
+    /// 実際の<c>NonVisualDrawingProperties/@id</c>とは異なり、このビルダー内でだけ意味を持つ通し番号。
+    /// </returns>
+    public int SetShape(
         int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
-        A.ShapeTypeValues preset, string? fillHex, string? outlineHex, double rotationDegrees = 0, string? text = null) =>
+        A.ShapeTypeValues preset, string? fillHex, string? outlineHex, double rotationDegrees = 0, string? text = null)
+    {
+        var handle = _shapes.Count;
         _shapes.Add(new ShapeSpec(
             row, column, offsetXPt, offsetYPt, widthPt, heightPt, preset, fillHex, outlineHex, rotationDegrees, text));
+        return handle;
+    }
 
     /// <summary>
     /// シートに、グラデーション塗り(要件10.6)の図形を1つ追加する。<paramref name="gradientStops"/>は
@@ -290,11 +313,20 @@ internal sealed class SpreadsheetBuilder
     /// <c>straightConnector1</c>/<c>bentConnector2</c>/<c>bentConnector3</c>/
     /// <c>curvedConnector2</c>/<c>curvedConnector3</c>のいずれかを指定する。
     /// </summary>
+    /// <param name="startShapeHandle">
+    /// 始点の接続先(要件10.11)。<see cref="SetShape"/>が返したハンドル。<c>null</c>なら接続先無し
+    /// (アンカー矩形の対角点をそのまま始点にする、要件10.9の既定動作)。
+    /// </param>
+    /// <param name="startSiteIndex">始点の接続点番号(<c>a:stCxn/@idx</c>。0=上,1=左,2=下,3=右)。</param>
+    /// <param name="endShapeHandle">終点の接続先。<paramref name="startShapeHandle"/>と同様。</param>
+    /// <param name="endSiteIndex">終点の接続点番号。<paramref name="startSiteIndex"/>と同様。</param>
     public void SetConnector(
         int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
-        A.ShapeTypeValues preset, string? outlineHex = null, bool flipHorizontal = false, bool flipVertical = false) =>
+        A.ShapeTypeValues preset, string? outlineHex = null, bool flipHorizontal = false, bool flipVertical = false,
+        int? startShapeHandle = null, uint? startSiteIndex = null, int? endShapeHandle = null, uint? endSiteIndex = null) =>
         _connectors.Add(new ConnectorSpec(
-            row, column, offsetXPt, offsetYPt, widthPt, heightPt, preset, outlineHex, flipHorizontal, flipVertical));
+            row, column, offsetXPt, offsetYPt, widthPt, heightPt, preset, outlineHex, flipHorizontal, flipVertical,
+            startShapeHandle, startSiteIndex, endShapeHandle, endSiteIndex));
 
     /// <summary>
     /// シートにグループ化された図形(要件10.10)を1つ追加する(oneCellAnchor)。
@@ -615,14 +647,22 @@ internal sealed class SpreadsheetBuilder
             drawing.Append(BuildImageAnchor(drawingsPart, img, nextId++));
         }
 
-        foreach (var shape in shapes)
+        // 接続線の接続先解決(要件10.11)のため、SetShapeが返したハンドル(_shapesのindex)から
+        // 実際に割り当てたIDへのマップを、ID割り当てと同じ順序で構築する。
+        var shapeIds = new uint[shapes.Count];
+        for (var i = 0; i < shapes.Count; i++)
         {
-            drawing.Append(BuildShapeAnchor(shape, nextId++));
+            shapeIds[i] = nextId;
+            drawing.Append(BuildShapeAnchor(shapes[i], nextId));
+            nextId++;
         }
 
         foreach (var connector in connectors)
         {
-            drawing.Append(BuildConnectorAnchor(connector, nextId++));
+            var startShapeId = connector.StartShapeHandle is { } startHandle ? shapeIds[startHandle] : (uint?)null;
+            var endShapeId = connector.EndShapeHandle is { } endHandle ? shapeIds[endHandle] : (uint?)null;
+            drawing.Append(BuildConnectorAnchor(
+                connector, nextId++, startShapeId, connector.StartSiteIndex, endShapeId, connector.EndSiteIndex));
         }
 
         foreach (var group in groups)
@@ -757,8 +797,13 @@ internal sealed class SpreadsheetBuilder
         return gradientFill;
     }
 
-    /// <summary>接続線(<c>xdr:cxnSp</c>、oneCellAnchor)を組み立てる(要件10.9)。</summary>
-    private static Xdr.OneCellAnchor BuildConnectorAnchor(ConnectorSpec connector, uint id)
+    /// <summary>
+    /// 接続線(<c>xdr:cxnSp</c>、oneCellAnchor)を組み立てる(要件10.9)。
+    /// <paramref name="startShapeId"/>/<paramref name="endShapeId"/>が指定されていれば、
+    /// <c>xdr:cNvCxnSpPr</c>配下に<c>a:stCxn</c>/<c>a:endCxn</c>(要件10.11)を追加する。
+    /// </summary>
+    private static Xdr.OneCellAnchor BuildConnectorAnchor(
+        ConnectorSpec connector, uint id, uint? startShapeId, uint? startSiteIndex, uint? endShapeId, uint? endSiteIndex)
     {
         var offsetXEmu = (long)Math.Round(connector.OffsetXPt * EmusPerPoint);
         var offsetYEmu = (long)Math.Round(connector.OffsetYPt * EmusPerPoint);
@@ -787,10 +832,21 @@ internal sealed class SpreadsheetBuilder
             shapeProperties.Append(new A.Outline(new A.SolidFill(new A.RgbColorModelHex { Val = outlineHex })) { Width = 12700 });
         }
 
+        var connectorShapeDrawingProperties = new Xdr.NonVisualConnectorShapeDrawingProperties();
+        if (startShapeId is { } startId)
+        {
+            connectorShapeDrawingProperties.Append(new A.StartConnection { Id = startId, Index = startSiteIndex ?? 0 });
+        }
+
+        if (endShapeId is { } endId)
+        {
+            connectorShapeDrawingProperties.Append(new A.EndConnection { Id = endId, Index = endSiteIndex ?? 0 });
+        }
+
         var connectionShape = new Xdr.ConnectionShape(
             new Xdr.NonVisualConnectionShapeProperties(
                 new Xdr.NonVisualDrawingProperties { Id = id, Name = "Connector" + id.ToString(CultureInfo.InvariantCulture) },
-                new Xdr.NonVisualConnectorShapeDrawingProperties()),
+                connectorShapeDrawingProperties),
             shapeProperties);
 
         return new Xdr.OneCellAnchor(

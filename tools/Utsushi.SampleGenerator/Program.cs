@@ -128,6 +128,22 @@ internal static class Program
                     preset: A.ShapeTypeValues.Rectangle, fillHex: null, outlineHex: "C00000"),
             });
 
+        // 接続点(コネクションサイト)解決の見本(要件10.11)。flowChartInputOutput(平行四辺形)は
+        // 左右の接続点が既定の4方向近似(矩形の左端/右端)からずれるプリセットのため、
+        // その補正が効くケースをゴールデンテストで確認する。承認印グループのさらに右に配置する。
+        var inputOutputA = builder.SetShape(
+            row: 6, column: 1, offsetXPt: 270.0, offsetYPt: 0.0, widthPt: 60.0, heightPt: 30.0,
+            preset: A.ShapeTypeValues.FlowChartInputOutput,
+            fillHex: "FFFFFF", outlineHex: "444444");
+        var inputOutputB = builder.SetShape(
+            row: 6, column: 1, offsetXPt: 360.0, offsetYPt: 0.0, widthPt: 60.0, heightPt: 30.0,
+            preset: A.ShapeTypeValues.FlowChartInputOutput,
+            fillHex: "FFFFFF", outlineHex: "444444");
+        builder.SetConnector(
+            row: 6, column: 1, offsetXPt: 330.0, offsetYPt: 0.0, widthPt: 30.0, heightPt: 30.0,
+            preset: A.ShapeTypeValues.StraightConnector1, outlineHex: "444444",
+            startShapeHandle: inputOutputA, startSiteIndex: 3, endShapeHandle: inputOutputB, endSiteIndex: 1);
+
         // 宛先・発行情報
         builder.Merge("A3:C3");
         builder.SetText(3, 1, "株式会社サンプル商事 御中", Style.CustomerName);

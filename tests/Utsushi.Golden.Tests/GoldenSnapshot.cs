@@ -104,7 +104,9 @@ namespace Utsushi.Golden.Tests
 
             ConnectorCommand connector =>
                 $"connector rect={Rect(connector.Rect)} preset={connector.Preset} rotation={N(connector.RotationDegrees)} "
-                + $"flipH={connector.FlipHorizontal} flipV={connector.FlipVertical} outline={Outline(connector.Outline)}",
+                + $"flipH={connector.FlipHorizontal} flipV={connector.FlipVertical} outline={Outline(connector.Outline)} "
+                + $"resolvedStart={(connector.ResolvedStart is { } s ? Point(s) : "none")} "
+                + $"resolvedEnd={(connector.ResolvedEnd is { } e ? Point(e) : "none")}",
 
             GroupCommand group =>
                 $"group  center={Point(group.Center)} rotation={N(group.RotationDegrees)} children={group.Children.Count}",
