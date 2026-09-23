@@ -1,0 +1,34 @@
+name: CI
+
+# .NET 5(net5.0)は既にEOLでdotnet-sdk-5.0はaptから外れているが、新しいSDK
+# (このセッションでは10.0.x)だけでnet5.0のビルド・dotnet test実行まで問題なく
+# 行えることを実機検証済み(docs/開発環境メモ.md「1. .NET SDK」参照)。
+# .NET 5ランタイム自体のインストールは不要。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test --no-build --configuration Release
+
+      - name: Format check
+        run: dotnet format --verify-no-changes
