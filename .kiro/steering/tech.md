@@ -93,6 +93,19 @@ dotnet format        # コードスタイル整形
   PDFバイナリは生成日時・圧縮・ライブラリのバージョンで変わり、回帰検出に使えないため。
   詳細は `.kiro/specs/excel-report-pdf-conversion/design.md`「テスト戦略」を参照。
 - テストフレームワークは xUnit を基本とする。パッケージバージョンは net5.0 世代のものに合わせる(`Microsoft.NET.Test.Sdk` 17.1.0 / `xunit` 2.4.1 / `xunit.runner.visualstudio` 2.4.3 の組み合わせで `dotnet test` が正常に動作することを確認済み。新しすぎる組み合わせ〔`Microsoft.NET.Test.Sdk` 17.11.1 等〕はnet5.0でテストが発見されない事象を確認しているため避ける)。
+- **現実的なテストでは到達できない大きさの安全弁定数の検証方法**: 画像枚数(`MaxImagesPerSheet`)や
+  結合セル範囲数(`MaxMergedRangesPerSheet`)のように上限値が小さい(数十〜数千)場合は、
+  実際に上限+αの要素を持つ`.xlsx`フィクスチャを作ってテストする。一方、ファイルサイズ上限
+  (`MaxXlsxPackageBytes`、既定1GiB)や共有文字列数上限(`MaxSharedStringCount`、既定20万件)の
+  ように、実際に上限を超えるテストデータを用意すること自体が非現実的(生成に時間がかかる・
+  テストスイートが遅くなる)な場合は、上限値の比較・例外構築ロジックを
+  `internal`のテスト可能なオーバーロード(上限値を明示的な引数として渡せる形)に分離し、
+  本番コードは既定の定数を渡すだけのラッパーにする。これにより、テストは小さな値
+  (例: `maxBytes: 10`)で境界(超過する/しない)の両方を検証でき、本番コードパスと
+  完全に同じロジックを通す(テスト用に別実装を持たない)。実例:
+  `OpenXmlWorkbookReader.GuardPackageSize`/`CopyWithSizeLimit`/`ReadSharedStrings`、
+  `StyleTable.Create`、`ColorResolver.Create`(いずれも`tests/Utsushi.Parsing.Tests/InputSizeGuardTests.cs`
+  参照)。
 
 ## 依存ライブラリ追加時のルール
 

@@ -927,6 +927,31 @@ public sealed record GroupCommand(
 - すべての例外は、帳票コード・シート名・セル番地・処理段階(Parsing/Substitution/Layout/Rendering)を構造化プロパティとして保持し、ログ出力時に特定できるようにする(要件6.4)。
 - Renderingレイヤーは一時ファイル/一時ストリームに書き込み、正常終了時のみ最終出力先へ確定させる(要件5.4: 不完全PDFを残さない)。
 
+### 信頼できない入力に対する安全弁 一覧(要件6.6)
+
+`security-reviewer` が横断確認を行う際の起点として、既知の安全弁(上限定数)を一覧にする。
+新しく上限を追加した場合はここに追記し、`src/Utsushi.Parsing/OpenXml/` 配下の
+`foreach`/`Elements<...>()` ループを新規に追加した場合は、対応する上限がこの表に
+載っているかを確認する。
+
+| レイヤー / クラス | 定数 | 既定値 | 超過時の挙動 |
+|---|---|---|---|
+| Parsing / `OpenXmlWorkbookReader` | `MaxXlsxPackageBytes` | 1 GiB | `InvalidExcelFileException(TooLarge)` |
+| Parsing / `OpenXmlWorkbookReader` | `MaxSharedStringCount` | 200,000件 | `InvalidExcelFileException(TooLarge)` |
+| Parsing / `OpenXmlWorkbookReader` | `MaxCellsPerSheet` | 500,000個/シート | `InvalidExcelFileException(TooLarge)` |
+| Parsing / `OpenXmlWorkbookReader` | `MaxImagesPerSheet` | 50枚/シート | `UnsupportedWorkbookElementException(TooManyImages)` |
+| Parsing / `OpenXmlWorkbookReader` | `MaxImageDataBytes` | 10 MiB/画像 | `UnsupportedWorkbookElementException(ImageTooLarge)` |
+| Parsing / `OpenXmlWorkbookReader` | `MaxShapesPerSheet` | 50個/シート(図形・接続線・グループ合計) | `UnsupportedWorkbookElementException(TooManyShapes)` |
+| Parsing / `OpenXmlWorkbookReader` | `MaxShapeTextLength` | 2,000文字 | `UnsupportedWorkbookElementException(ShapeTextTooLong)` |
+| Parsing / `OpenXmlWorkbookReader` | `MaxShapeNestingDepth` | 5段 | `UnsupportedWorkbookElementException(GroupNestingTooDeep)` |
+| Parsing / `OpenXmlWorkbookReader` | `MaxGradientStopsPerFill` | 64個/塗りつぶし | 打ち切り(超過分は無視、例外化なし) |
+| Parsing / `OpenXmlWorkbookReader` | `MaxMergedRangesPerSheet` | 1,000件/シート | `UnsupportedWorkbookElementException(TooManyMergedRanges)` |
+| Parsing / `StyleTable` | `MaxStyleTableEntries` | 10,000件(フォント/塗りつぶし/罫線/数値書式/cellXfs各々) | 打ち切り(超過分は既定書式にフォールバック、例外化なし) |
+| Parsing / `ColorResolver` | `MaxIndexedColorCount` | 10,000件 | 打ち切り(超過分は呼び出し元のfallback色、例外化なし) |
+| Layout / `PageCommandBuilder` | `MaxSpanCells` | 4,096セル | 結合セル・可視範囲の走査を打ち切り(例外化なし) |
+| Layout / `PageCommandBuilder` | `MaxDrawingObjectDimensionPt` | 5,000pt | 描画オブジェクトの寸法をクランプ(例外化なし) |
+| Rendering / `SkiaPdfRenderer` | `MaxDecodedImageDimensionPx` | 4,096px | `PdfRenderingException`(デコード前に宣言サイズを検査) |
+
 ## テスト戦略
 
 - **ユニットテスト**: 各レイヤーのインターフェース単位(特にLayoutレイヤーの改ページ計算・フォントメトリクス換算、Substitutionレイヤーの必須/未知キー判定)。
