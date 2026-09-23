@@ -1,9 +1,14 @@
 name: CI
 
-# .NET 5(net5.0)は既にEOLでdotnet-sdk-5.0はaptから外れているが、新しいSDK
-# (このセッションでは10.0.x)だけでnet5.0のビルド・dotnet test実行まで問題なく
-# 行えることを実機検証済み(docs/開発環境メモ.md「1. .NET SDK」参照)。
-# .NET 5ランタイム自体のインストールは不要。
+# .NET 5(net5.0)は既にEOLでdotnet-sdk-5.0はaptから外れている。
+# docs/開発環境メモ.md「1. .NET SDK」には、Claude Code on the webの実行環境で
+# apt-get経由の新しいSDK(.NET 10.0.x)だけを使ってnet5.0のビルド・dotnet test
+# 実行まで行えることを実機検証済みと記載されている(.NET 5ランタイム自体は
+# 別途インストールしない)。ただし同メモは「ローカル開発機やCI環境には基本的に
+# 当てはまらない」と明記しており、GitHub Actions(actions/setup-dotnet経由、
+# ubuntu-latestランナー)上での動作はこの原則を踏まえた類推であって実機検証
+# 済みではない。このワークフロー自身の初回実行結果(Actionsのログ)で成否を
+# 確認し、失敗した場合はここを見直すこと。
 
 on:
   push:

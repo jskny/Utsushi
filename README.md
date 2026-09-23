@@ -25,7 +25,7 @@ dotnet format
 - `samples/reports/` — 帳票定義とテンプレートの合成サンプル(実運用の帳票テンプレートは社内データのため含まれない)
 - `docs/` — スキーマ・利用方法・開発環境固有の注意点・過去の失敗事例集
 
-対象開発環境はVisual Studio 2019(.NET 5、C# 9.0)。詳細は [`.kiro/steering/tech.md`](.kiro/steering/tech.md) を参照。
+呼び出し元プロダクトの開発環境がVisual Studio 2019(.NET 5、C# 9.0まで)であるため、その制約に合わせている(このプロジェクト自体の開発にVisual Studioは必須ではない)。詳細は [`.kiro/steering/tech.md`](.kiro/steering/tech.md) を参照。
 
 ## ライセンス
 
