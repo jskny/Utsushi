@@ -10,6 +10,7 @@ tools: Read, Grep, Glob, Bash
 - `.kiro/steering/tech.md`(技術制約: 商用ライブラリ/Interop禁止、採用ライブラリ)
 - `.kiro/steering/structure.md`(レイヤー構成・依存方向)
 - 変更対象に関連する `.kiro/specs/*/requirements.md` と `design.md`
+- `docs/実装設計失敗事例集.md`(過去の不具合・設計ミス。特に「サイレントなデータ欠落」「横並びの型・経路の対応漏れ」のパターンが変更対象に再発していないか確認する)
 
 ## レビュー観点
 

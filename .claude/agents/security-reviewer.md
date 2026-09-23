@@ -9,6 +9,7 @@ tools: Read, Grep, Glob, Bash
 - `.kiro/steering/product.md`(想定される入力の性質: 既知の自社帳票であり、任意のインターネット由来ファイルではない点)
 - `.kiro/steering/tech.md`(ライセンス制約)
 - 関連する `.kiro/specs/*/requirements.md` の要件6(エラーハンドリング)、要件7(無償・自己完結)
+- `docs/実装設計失敗事例集.md`の「4. セキュリティ・DoS対策」(上限チェックが差分駆動レビューでは後追いでしか見つからなかった経緯)
 
 ## レビュー観点
 
