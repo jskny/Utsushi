@@ -33,6 +33,14 @@ namespace Utsushi.Parsing.OpenXml
         private const int AutomaticForegroundIndex = 64;
         private const int AutomaticBackgroundIndex = 65;
 
+        /// <summary>
+        /// <c>indexedColors</c>に含める色数の上限。信頼できない入力による計算量・メモリの増大を
+        /// 防ぐ安全弁(要件6, 7。security-reviewer指摘)。<see cref="StyleTable"/>の
+        /// <c>MaxStyleTableEntries</c>と同じ考え方で、上限超過分は読み取らない
+        /// (超過分を参照する索引は既存の「範囲外索引はfallback」挙動にそのまま従う)。
+        /// </summary>
+        private const int MaxIndexedColorCount = 10_000;
+
         private readonly IReadOnlyList<uint> _indexedPalette;
         private readonly IReadOnlyList<ArgbColor> _themeColors;
 
@@ -43,9 +51,16 @@ namespace Utsushi.Parsing.OpenXml
         }
 
         /// <summary>ワークブックパートからテーマ色・インデックスパレットを読み出してリゾルバを構築する。</summary>
-        public static ColorResolver Create(WorkbookPart workbookPart)
+        public static ColorResolver Create(WorkbookPart workbookPart) => Create(workbookPart, MaxIndexedColorCount);
+
+        /// <summary>
+        /// <see cref="Create(WorkbookPart)"/>の本体。実際の上限(<see cref="MaxIndexedColorCount"/>、
+        /// 既定1万件)は現実的なユニットテストでは大量の色を用意しないと到達できないため、
+        /// <paramref name="maxIndexedColors"/>を明示的に指定できる形にしてテスト可能にしている。
+        /// </summary>
+        internal static ColorResolver Create(WorkbookPart workbookPart, int maxIndexedColors)
         {
-            var palette = ReadIndexedPalette(workbookPart);
+            var palette = ReadIndexedPalette(workbookPart, maxIndexedColors);
             var theme = ReadThemeColors(workbookPart);
             return new ColorResolver(palette, theme);
         }
@@ -188,7 +203,7 @@ namespace Utsushi.Parsing.OpenXml
         private static ArgbColor FromUInt(uint value) =>
             new((byte)((value >> 24) & 0xFF), (byte)((value >> 16) & 0xFF), (byte)((value >> 8) & 0xFF), (byte)(value & 0xFF));
 
-        private static IReadOnlyList<uint> ReadIndexedPalette(WorkbookPart workbookPart)
+        private static IReadOnlyList<uint> ReadIndexedPalette(WorkbookPart workbookPart, int maxIndexedColors)
         {
             var colors = workbookPart.WorkbookStylesPart?.Stylesheet?.Colors?.IndexedColors;
             if (colors is null)
@@ -199,6 +214,11 @@ namespace Utsushi.Parsing.OpenXml
             var result = new List<uint>();
             foreach (var rgbColor in colors.Elements<X.RgbColor>())
             {
+                if (result.Count >= maxIndexedColors)
+                {
+                    break;
+                }
+
                 if (rgbColor.Rgb?.Value is { } hex
                     && uint.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
                 {
