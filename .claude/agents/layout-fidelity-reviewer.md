@@ -11,6 +11,7 @@ tools: Read, Grep, Glob, Bash
 - `.kiro/specs/excel-report-pdf-conversion/requirements.md` の要件3(改ページ・印刷範囲)・要件4(書式再現)
 - `.kiro/specs/excel-report-pdf-conversion/design.md` のLayout/Renderingレイヤーの設計
 - `.kiro/steering/tech.md`(採用ライブラリ: `DocumentFormat.OpenXml` / `SkiaSharp`)
+- `docs/実装設計失敗事例集.md`の「1. Layout/Renderingレイヤー」(結合セルの罫線・改ページ・印刷範囲・グループのスケール伝播などで実際に発生した不具合と教訓)
 
 ## レビュー観点
 

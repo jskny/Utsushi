@@ -9,6 +9,7 @@ tools: Read, Write, Edit, Grep, Glob, Bash
 - `.kiro/steering/tech.md`(テスト戦略の方針)
 - `.kiro/steering/structure.md`(テストプロジェクトの配置規則)
 - 対象コードに関連する `.kiro/specs/*/requirements.md`(受け入れ基準)と `design.md`
+- `docs/実装設計失敗事例集.md`の「5. テスト・ゴールデンテストの検出漏れ」(既存の型に新しいプロパティを追加した際、ゴールデンスナップショットのフォーマッタ側への反映漏れでテストが回帰を検知できなかった事例。同種の型(`ShapeCommand`/`ImageCommand`等)に新しいプロパティを追加する際は、既存の型の検証コードと横並びで比較する)
 
 ## テスト対象ごとの重点
 
