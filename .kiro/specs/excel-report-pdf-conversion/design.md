@@ -93,6 +93,30 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   汎用の数値書式エンジンではなく、自社帳票が使う範囲(金額・数量・日付・パーセント)のサブセット実装とする。
   解釈できない書式(指数表記・分数表記など)は例外にせず General 相当へフォールバックし、
   表示の崩れはゴールデンテストで検出する。
+- **入力ファイル全体の規模に対する安全弁(要件6.6)**: 画像・図形・結合セルのような個別の
+  描画オブジェクトの上限とは別に、ファイル全体の規模に対しても上限を設ける。
+  - `SpreadsheetDocument.Open` の前に `GuardPackageSize` で、ZIPエントリの宣言サイズ
+    (中央ディレクトリの展開後サイズ)の合計を `MaxXlsxPackageBytes`(既定1GiB)と比較する
+    (いわゆる「ZIP爆弾」対策)。不正なZIP構造の判定はこの時点では行わず、
+    `SpreadsheetDocument.Open` 失敗時の既存の分類(`MapOpenFailure`)に委ねる。
+  - `Read(Stream, ...)` がシーク不可ストリームをメモリへ複製する箇所(`EnsureSeekable`)にも
+    同じ `MaxXlsxPackageBytes` を上限として設け、複製中に超過した時点で打ち切る
+    (ファイルからの `FileStream` は常にシーク可能なため通常はこの経路を通らないが、
+    任意の `Stream` を受け付ける `IWorkbookReader.Read` の公開APIとしての安全弁)。
+  - 共有文字列(`sharedStrings.xml`)の件数に `MaxSharedStringCount`(既定20万件)、
+    1シートのセル総数に `MaxCellsPerSheet`(既定50万個)の上限を設ける。
+    行番号(`row/@r`)自体が上限近くを指す不正な入力は、実際のセル数によらず
+    行高リストの構築(`EnsureSize`)を巨大化させるため、セルを読む前にこの時点で拒否する。
+  - 上記いずれも超過時は `unsupportedElements` の設定によらず常に
+    `InvalidExcelFileException`(`Reason = TooLarge`)を送出する(要件6.6補足のとおり、
+    特定の要素だけをスキップして続行できる性質のものではないため)。
+  - フォント・塗りつぶし・罫線・数値書式・`cellXfs`(`styles.xml`)の件数には
+    `StyleTable.MaxStyleTableEntries`(既定1万件)・`ColorResolver.MaxIndexedColorCount`
+    (既定1万件)で上限を設けるが、こちらは例外化せず読み取りを打ち切るのみとする。
+    範囲外の`styleIndex`・色索引は既存の「既定書式/fallbackへフォールバック」という
+    挙動(`StyleTable.GetCellStyle`・`ColorResolver.ResolveIndexed`)にそのまま従うため、
+    値の欠落ではなく見た目の劣化にとどまり、画像・図形の個数上限をIgnoreモードで
+    超過した場合と同水準の扱いになる。
 - **結合セル範囲(要件2.9)**: `mergeCell` 要素を `MergedRange` として読み取る。1シートあたりの
   結合範囲の個数に上限(`MaxMergedRangesPerSheet`、既定1000)を設ける(`ElementKind =
   "TooManyMergedRanges"`。`unsupportedElements` ポリシーに従う)。Layoutレイヤーの結合セル矩形統合・
@@ -890,11 +914,14 @@ public sealed record GroupCommand(
     対応済み一覧に無いプリセットジオメトリ(図形・接続線どちらの場合も共通)を示す
     `"UnsupportedShapePreset"`、図形・接続線・グループの合計個数の上限超過を示す
     `"TooManyShapes"`、図形内テキストの文字数上限超過を示す`"ShapeTextTooLong"`、
-    グループのネスト段数の上限超過を示す`"GroupNestingTooDeep"`を持つ)
+    グループのネスト段数の上限超過を示す`"GroupNestingTooDeep"`、
+    結合セル範囲の個数上限超過を示す`"TooManyMergedRanges"`(要件2.9)を持つ)
   - `SubstitutionKeyNotFoundException` / `RequiredSubstitutionValueMissingException`(要件2.3, 2.4)
   - `InvalidCellOverrideAddressException`(要件2.8。セル番地直接指定がA1形式として解釈できない場合)
   - `NonAnchorMergedCellOverrideException`(要件2.9。セル番地直接指定の対象が結合セル範囲の非アンカー位置の場合)
-  - `InvalidExcelFileException`(要件6.1, 6.2, 6.5。`Reason` で非xlsx/破損/パスワード保護/ファイルを開けない(存在しない・アクセス不可)を区別する)
+  - `InvalidExcelFileException`(要件6.1, 6.2, 6.5, 6.6。`Reason` で非xlsx/破損/パスワード保護/
+    ファイルを開けない(存在しない・アクセス不可)/ワークシートが無い/ファイル・共有文字列・
+    セル数が上限超過(`TooLarge`)を区別する)
   - `ReportDefinitionSchemaException`(要件6.3。問題のあったプロパティパスを保持する)
   - `LayoutComputationException` / `PdfRenderingException` / `FontNotAvailableException`
 - すべての例外は、帳票コード・シート名・セル番地・処理段階(Parsing/Substitution/Layout/Rendering)を構造化プロパティとして保持し、ログ出力時に特定できるようにする(要件6.4)。
@@ -930,6 +957,12 @@ public sealed record GroupCommand(
   太らせて再現する方式に変更。Type 3 にならず、文字列検索も維持される。
 - ~~複数の印刷範囲~~ → 範囲ごとに独立したページ群として出力する。要件3.6 として要件化済み。
 - ~~ヘッダー/フッター~~ → 読み取りと描画に対応。要件3.7〜3.9 として要件化済み。
+- ~~OOXMLパーツ全体の非圧縮サイズに対する上限が無い~~ → `SpreadsheetDocument.Open`前に
+  `GuardPackageSize`でZIPエントリの宣言サイズ合計に上限(`MaxXlsxPackageBytes`、既定1GiB)を
+  設け、あわせて共有文字列数(`MaxSharedStringCount`)・シート内セル数(`MaxCellsPerSheet`)にも
+  個別に上限を設けた。要件6.6として要件化済み。フォント・罫線等のスタイル要素の件数は
+  範囲外索引が既定書式にフォールバックする既存の挙動で吸収できるため、例外化はせず
+  読み取り数を`MaxStyleTableEntries`で打ち切るのみとした(詳細はParsingレイヤー節)。
 
 ## 未決事項 / 今後の検討
 
@@ -1033,15 +1066,6 @@ public sealed record GroupCommand(
 - **放射状グラデーションの`a:path`種別**(要件10.6): `a:path type="circle"`のみを
   厳密に扱い、`"rect"`/`"shape"`は同じ放射状近似にフォールバックする。矩形・図形に
   沿った塗りつぶしの厳密な再現は行わない。
-- **OOXMLパーツ全体の非圧縮サイズに対する上限が無い**(security-reviewer指摘、要件6.1系の
-  信頼できない入力に対する安全弁の一部として今後検討): `SpreadsheetDocument.Open` は
-  `OpenSettings`(`MaxCharactersInPart`等)を指定せずに呼んでいるため、`drawing.xml`を含む
-  各パーツ全体のDOM展開自体には上限が無い。要件9.6・10.8で設けた画像枚数・図形個数・
-  図形内テキスト文字数の上限は、あくまで「DOM展開後、実際のデコード・折り返し計算等の
-  重い処理へ進む前」の安全弁であり、DOM展開そのものを止める仕組みではない。画像対応時から
-  存在する既存のギャップだが、図形内テキスト(`xdr:txBody`)という「XML中に際限なく
-  埋め込める」経路が増えたことで実害が生じやすくなったため、対象帳票で問題になった場合は
-  `OpenSettings.MaxCharactersInPart`の設定を検討する。
 - **画像・図形の上限がシート単位でありワークブック単位の合算上限が無い**(security-reviewer指摘):
   `MaxImagesPerSheet`/`MaxShapesPerSheet`はシートごとにリセットされるカウンタであり、
   ワークブック全体でシートをまたいだ合算上限は無い。`ReportPdfConverter.Convert`は

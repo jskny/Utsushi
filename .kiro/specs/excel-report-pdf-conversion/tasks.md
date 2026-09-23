@@ -725,3 +725,42 @@
   - [x] 19.8 レビュー対応
     - `layout-fidelity-reviewer`/`security-reviewer`の指摘に対応する
     - _Requirements: 2.9, 10.8, 10.10_
+
+- [x] 20. 入力ファイル全体の規模に対する安全弁の追加
+  - [x] 20.1 requirements.mdに要件6.6を追加する
+    - 入力ファイルサイズ・展開後サイズ・共有文字列数・シート内セル数の上限超過を、
+      `unsupportedElements`の設定によらず常に処理を中止する要件として追加する
+    - _Requirements: 6.6_
+  - [x] 20.2 `InvalidExcelFileReason.TooLarge`を追加する
+    - `Utsushi.Core.Exceptions.ParsingExceptions.cs`に新しい理由種別を追加する
+    - _Requirements: 6.6_
+  - [x] 20.3 Parsingレイヤー: ZIP展開後総サイズの事前ガードを追加する
+    - `SpreadsheetDocument.Open`の前に`GuardPackageSize`でZIPエントリの宣言サイズ合計を
+      `MaxXlsxPackageBytes`(既定1GiB)と比較する(いわゆる「ZIP爆弾」対策)。
+      シーク不可ストリームをメモリへ複製する`EnsureSeekable`にも同じ上限を設ける
+    - _Requirements: 6.6_
+  - [x] 20.4 Parsingレイヤー: 共有文字列数・シート内セル数の上限を追加する
+    - `ReadSharedStrings`に`MaxSharedStringCount`(既定20万件)、`ReadSheet`のセル走査に
+      `MaxCellsPerSheet`(既定50万個)の上限を設ける。行番号自体が上限近くを指す不正な
+      入力は、セルを読む前に拒否する(`EnsureSize`による行高リストの巨大化を防ぐため)
+    - _Requirements: 6.6_
+  - [x] 20.5 Parsingレイヤー: スタイル要素の件数上限を追加する
+    - `StyleTable`(フォント・塗りつぶし・罫線・数値書式・`cellXfs`)・`ColorResolver`
+      (`indexedColors`)の各読み取りループに`MaxStyleTableEntries`/`MaxIndexedColorCount`
+      (既定1万件)の上限を設ける。範囲外索引は既存の既定書式へのフォールバックに従うため
+      例外化はしない
+    - _Requirements: 6.6_
+  - [x] 20.6 design.mdを更新する
+    - Parsingレイヤー節に新しい安全弁の説明を追加し、決定済みの旧未決事項に
+      「OOXMLパーツ全体の非圧縮サイズに対する上限が無い」の解消を記録する。
+      エラーハンドリング方針の例外一覧(`InvalidExcelFileException`・
+      `UnsupportedWorkbookElementException`)を更新する
+    - _Requirements: 6.6_
+  - [x] 20.7 ユニットテストを追加する
+    - 各上限に対する超過時の例外化を検証する(ZIP総サイズ、共有文字列数、
+      シート内セル数、行番号自体の上限超過)。スタイル要素の上限は打ち切り後も
+      既定書式へフォールバックすることを検証する
+    - _Requirements: 6.6_
+  - [ ] 20.8 レビュー対応
+    - `security-reviewer`の指摘に対応する
+    - _Requirements: 6.6_

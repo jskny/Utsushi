@@ -34,7 +34,9 @@ namespace Utsushi.Parsing.OpenXml
             var opts = options ?? WorkbookReadOptions.Default;
 
             // SpreadsheetDocument はシーク可能なストリームを要求するため、必要ならメモリ上へ複製する。
-            var seekable = EnsureSeekable(xlsxStream, out var ownsStream);
+            // 複製時のバイト数には上限を設ける(要件6, 7。シーク不可ストリーム経由での無制限な
+            // メモリ確保を防ぐ安全弁。security-reviewer指摘)。
+            var seekable = EnsureSeekable(xlsxStream, out var ownsStream, opts.ReportCode);
             try
             {
                 return ReadCore(seekable, opts);
@@ -70,6 +72,8 @@ namespace Utsushi.Parsing.OpenXml
 
         private static WorkbookModel ReadCore(Stream stream, WorkbookReadOptions options)
         {
+            GuardPackageSize(stream, options.ReportCode);
+
             SpreadsheetDocument document;
             try
             {
@@ -92,7 +96,7 @@ namespace Utsushi.Parsing.OpenXml
 
                 var colors = ColorResolver.Create(workbookPart);
                 var styles = StyleTable.Create(workbookPart, colors);
-                var sharedStrings = ReadSharedStrings(workbookPart);
+                var sharedStrings = ReadSharedStrings(workbookPart, options.ReportCode);
                 var definedNames = ReadDefinedNames(workbookPart);
 
                 var sheets = new List<SheetModel>();
@@ -169,6 +173,7 @@ namespace Utsushi.Parsing.OpenXml
             var sheetData = worksheet.GetFirstChild<X.SheetData>();
             if (sheetData is not null)
             {
+                var cellCount = 0;
                 foreach (var row in sheetData.Elements<X.Row>())
                 {
                     var rowIndex = (int)(row.RowIndex?.Value ?? 0U);
@@ -176,6 +181,11 @@ namespace Utsushi.Parsing.OpenXml
                     {
                         continue;
                     }
+
+                    // rowIndex自体がセル番地の上限近く(最大1,048,576)を指す不正な入力の場合、
+                    // 実際のセル数に関わらずEnsureSizeが行高リストを巨大化させてしまうため、
+                    // 個々のセルを読む前にこの時点で拒否する(要件6, 7。security-reviewer指摘)。
+                    EnsureRowIndexWithinLimit(rowIndex, name, options.ReportCode);
 
                     EnsureSize(rowHeights, rowIndex, defaultRowHeight);
                     if (row.CustomHeight?.Value == true && row.Height?.Value is { } height)
@@ -194,6 +204,9 @@ namespace Utsushi.Parsing.OpenXml
                         {
                             continue;
                         }
+
+                        cellCount++;
+                        EnsureCellCountWithinLimit(cellCount, name, options.ReportCode);
 
                         cells[address] = ReadCell(cell, styles, sharedStrings);
                     }
@@ -414,6 +427,69 @@ namespace Utsushi.Parsing.OpenXml
         /// Layoutレイヤー側の<c>MaxSpanCells</c>で別途上限を設けている。
         /// </summary>
         internal const int MaxMergedRangesPerSheet = 1000;
+
+        /// <summary>
+        /// 入力ファイル自体のバイト数、および展開後のZIPエントリ宣言サイズ合計の上限(1GiB)。
+        /// 数百バイトのファイルが展開後に極端に大きくなる「ZIP爆弾」や、シーク不可ストリーム経由での
+        /// 無制限なメモリ確保を防ぐための安全弁(要件6, 7。security-reviewer指摘)。自社帳票は
+        /// 埋め込み画像を含めてもこの上限に達することは想定していない
+        /// (画像1枚10MB×上限50枚=1シートあたり最大500MB相当が既存の上限だが、
+        /// これより十分大きく設定し、通常の帳票運用を妨げないようにする)。
+        /// </summary>
+        internal const long MaxXlsxPackageBytes = 1024L * 1024 * 1024;
+
+        /// <summary>
+        /// 1ブックに含める共有文字列(<c>sharedStrings.xml</c>の<c>si</c>要素)の数の上限。
+        /// 上限を超えて読み取ると、以降の共有文字列を参照するセルは(既存の「範囲外索引は空欄」
+        /// 挙動と同じ経路で)空欄になる。画像・図形と異なり`unsupportedElements`の対象ではなく、
+        /// 常にこの挙動になる(要件6, 7。security-reviewer指摘)。
+        /// </summary>
+        private const int MaxSharedStringCount = 200_000;
+
+        /// <summary>
+        /// 1シートに含めるセルの総数の上限。Excelの理論上限(最大1,048,576行×16,384列)まで
+        /// 密にセルを敷き詰めた入力による計算量・メモリの増大を防ぐ安全弁(要件6, 7。
+        /// security-reviewer指摘)。登録済み自社帳票は台帳形式で通常数百〜数千セル程度であり、
+        /// この上限に達することは想定していない。
+        /// </summary>
+        private const int MaxCellsPerSheet = 500_000;
+
+        /// <summary>
+        /// <paramref name="rowIndex"/>が<see cref="MaxCellsPerSheet"/>を超えていないか確認する。
+        /// 実際の上限は現実的なユニットテストでは大量の行を用意しないと到達できないため、
+        /// 比較・例外構築のロジック自体を分離してテスト可能にしている。
+        /// </summary>
+        private static void EnsureRowIndexWithinLimit(int rowIndex, string sheetName, string? reportCode) =>
+            EnsureRowIndexWithinLimit(rowIndex, MaxCellsPerSheet, sheetName, reportCode);
+
+        internal static void EnsureRowIndexWithinLimit(int rowIndex, int maxRows, string sheetName, string? reportCode)
+        {
+            if (rowIndex > maxRows)
+            {
+                throw new InvalidExcelFileException(
+                    $"シート '{sheetName}' の行番号({rowIndex})が上限({maxRows})を超えています。",
+                    InvalidExcelFileReason.TooLarge,
+                    reportCode);
+            }
+        }
+
+        /// <summary>
+        /// <paramref name="cellCount"/>が<see cref="MaxCellsPerSheet"/>を超えていないか確認する。
+        /// <see cref="EnsureRowIndexWithinLimit(int, string, string?)"/>と同じ理由でテスト可能にしている。
+        /// </summary>
+        private static void EnsureCellCountWithinLimit(int cellCount, string sheetName, string? reportCode) =>
+            EnsureCellCountWithinLimit(cellCount, MaxCellsPerSheet, sheetName, reportCode);
+
+        internal static void EnsureCellCountWithinLimit(int cellCount, int maxCells, string sheetName, string? reportCode)
+        {
+            if (cellCount > maxCells)
+            {
+                throw new InvalidExcelFileException(
+                    $"シート '{sheetName}' のセル数が上限({maxCells}個)を超えています。",
+                    InvalidExcelFileReason.TooLarge,
+                    reportCode);
+            }
+        }
 
         /// <summary>
         /// 対応済みプリセットジオメトリ(要件10.1補足)。自社帳票での実用上の必要性を踏まえた
@@ -1945,7 +2021,16 @@ namespace Utsushi.Parsing.OpenXml
             return false;
         }
 
-        private static List<string> ReadSharedStrings(WorkbookPart workbookPart)
+        private static List<string> ReadSharedStrings(WorkbookPart workbookPart, string? reportCode) =>
+            ReadSharedStrings(workbookPart, MaxSharedStringCount, reportCode);
+
+        /// <summary>
+        /// <see cref="ReadSharedStrings(WorkbookPart, string?)"/>の本体。実際の上限
+        /// (<see cref="MaxSharedStringCount"/>、既定20万件)は現実的なユニットテストでは
+        /// 大量の共有文字列を用意しないと到達できないため、<paramref name="maxCount"/>を
+        /// 明示的に指定できる形にしてテスト可能にしている。
+        /// </summary>
+        internal static List<string> ReadSharedStrings(WorkbookPart workbookPart, int maxCount, string? reportCode)
         {
             var result = new List<string>();
             var table = workbookPart.SharedStringTablePart?.SharedStringTable;
@@ -1956,6 +2041,14 @@ namespace Utsushi.Parsing.OpenXml
 
             foreach (var item in table.Elements<X.SharedStringItem>())
             {
+                if (result.Count >= maxCount)
+                {
+                    throw new InvalidExcelFileException(
+                        $"共有文字列の数が上限({maxCount}件)を超えています。",
+                        InvalidExcelFileReason.TooLarge,
+                        reportCode);
+                }
+
                 // リッチテキスト(複数 run)の場合は run を連結する。run 単位の書式差は再現しない。
                 if (item.Text?.Text is { } text)
                 {
@@ -2057,7 +2150,7 @@ namespace Utsushi.Parsing.OpenXml
             }
         }
 
-        private static Stream EnsureSeekable(Stream stream, out bool ownsStream)
+        private static Stream EnsureSeekable(Stream stream, out bool ownsStream, string? reportCode)
         {
             if (stream.CanSeek)
             {
@@ -2066,10 +2159,94 @@ namespace Utsushi.Parsing.OpenXml
             }
 
             var buffer = new MemoryStream();
-            stream.CopyTo(buffer);
+            CopyWithSizeLimit(stream, buffer, reportCode);
             buffer.Position = 0;
             ownsStream = true;
             return buffer;
+        }
+
+        /// <summary>
+        /// <see cref="EnsureSeekable"/>専用。シーク不可ストリームを<see cref="MaxXlsxPackageBytes"/>を
+        /// 超えない範囲でのみメモリへ複製する。超過した時点で複製済みバッファは破棄し、
+        /// 例外化する(要件6, 7。無制限なメモリ確保を防ぐ安全弁)。
+        /// </summary>
+        private static void CopyWithSizeLimit(Stream source, MemoryStream destination, string? reportCode) =>
+            CopyWithSizeLimit(source, destination, MaxXlsxPackageBytes, reportCode);
+
+        /// <summary>
+        /// <see cref="CopyWithSizeLimit(Stream, MemoryStream, string?)"/>の本体。実際の上限
+        /// (<see cref="MaxXlsxPackageBytes"/>、既定1GiB)は現実的なユニットテストでは到達できない
+        /// 大きさのため、<paramref name="maxBytes"/>を明示的に指定できる形にしてテスト可能にしている。
+        /// </summary>
+        internal static void CopyWithSizeLimit(Stream source, MemoryStream destination, long maxBytes, string? reportCode)
+        {
+            var buffer = new byte[81920];
+            long total = 0;
+            int read;
+            while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                total += read;
+                if (total > maxBytes)
+                {
+                    throw new InvalidExcelFileException(
+                        $"入力ファイルのサイズが上限({maxBytes / (1024 * 1024)}MB)を超えています。",
+                        InvalidExcelFileReason.TooLarge,
+                        reportCode);
+                }
+
+                destination.Write(buffer, 0, read);
+            }
+        }
+
+        /// <summary>
+        /// <c>SpreadsheetDocument.Open</c>で実際にパートを展開する前に、ZIPエントリの宣言サイズ
+        /// (中央ディレクトリの展開後サイズ)の合計が<see cref="MaxXlsxPackageBytes"/>を超えていないか
+        /// 確認する(要件6, 7)。数百バイトのZIPファイルが展開後に極端に大きくなる、
+        /// いわゆる「ZIP爆弾」対策(security-reviewer指摘)。ストリームは末尾へ移動して読み戻すため、
+        /// 呼び出し前後で<c>Position</c>を復元する。不正なZIP構造(<see cref="InvalidDataException"/>)は
+        /// このメソッドでは判定せず、後続の<c>SpreadsheetDocument.Open</c>失敗時の
+        /// <see cref="MapOpenFailure"/>による分類に委ねる(検証ロジックの重複を避けるため)。
+        /// </summary>
+        private static void GuardPackageSize(Stream stream, string? reportCode) =>
+            GuardPackageSize(stream, MaxXlsxPackageBytes, reportCode);
+
+        /// <summary>
+        /// <see cref="GuardPackageSize(Stream, string?)"/>の本体。実際の上限
+        /// (<see cref="MaxXlsxPackageBytes"/>、既定1GiB)は現実的なユニットテストでは到達できない
+        /// 大きさのため、<paramref name="maxBytes"/>を明示的に指定できる形にしてテスト可能にしている。
+        /// </summary>
+        internal static void GuardPackageSize(Stream stream, long maxBytes, string? reportCode)
+        {
+            if (!stream.CanSeek)
+            {
+                return;
+            }
+
+            var position = stream.Position;
+            try
+            {
+                using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+                long total = 0;
+                foreach (var entry in archive.Entries)
+                {
+                    total += entry.Length;
+                    if (total > maxBytes)
+                    {
+                        throw new InvalidExcelFileException(
+                            $"入力ファイルの展開後サイズが上限({maxBytes / (1024 * 1024)}MB)を超えています。",
+                            InvalidExcelFileReason.TooLarge,
+                            reportCode);
+                    }
+                }
+            }
+            catch (InvalidDataException)
+            {
+                // 不正なZIP構造はSpreadsheetDocument.Open側の失敗分類に委ねる。
+            }
+            finally
+            {
+                stream.Position = position;
+            }
         }
 
         /// <summary>

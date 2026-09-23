@@ -39,6 +39,15 @@ namespace Utsushi.Core.Exceptions
 
         /// <summary>ワークシートを1つも含まない。</summary>
         NoWorksheet,
+
+        /// <summary>
+        /// ファイルサイズ・展開後サイズ・シート内のセル数・共有文字列数のいずれかが
+        /// 安全な処理を続けられる上限を超えている(要件6, 7)。信頼できない入力
+        /// (帳票定義への登録前のExcelファイル)に対する安全弁であり、`unsupportedElements`の
+        /// 設定によらず常に例外化する(パスワード保護・破損ファイルと同様、要素単位の
+        /// スキップでは対処できない、ファイル全体の異常として扱う)。
+        /// </summary>
+        TooLarge,
     }
 
     /// <summary>

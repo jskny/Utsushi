@@ -13,6 +13,15 @@ namespace Utsushi.Parsing.OpenXml
     /// </summary>
     internal sealed class StyleTable
     {
+        /// <summary>
+        /// フォント/塗りつぶし/罫線/数値書式/セル書式(<c>cellXfs</c>)それぞれの要素数の上限。
+        /// 信頼できない入力による計算量・メモリの増大を防ぐ安全弁(要件6, 7。security-reviewer指摘)。
+        /// 上限を超えた分は読み取らず、それを参照する<c>styleIndex</c>は既存の「範囲外索引は
+        /// 既定書式」という挙動(<see cref="GetCellStyle"/>)にそのまま従う(画像・図形の個数上限が
+        /// 超過分を無視するのと同様の扱いであり、例外化はしない)。
+        /// </summary>
+        private const int MaxStyleTableEntries = 10_000;
+
         private readonly IReadOnlyList<CellStyle> _cellStyles;
         private readonly CellStyle _fallback;
 
@@ -26,7 +35,16 @@ namespace Utsushi.Parsing.OpenXml
         /// <summary>ブックの標準フォント(<c>cellXfs</c> 索引0のフォント)。列幅換算の基準に用いる。</summary>
         public FontStyle DefaultFont { get; }
 
-        public static StyleTable Create(WorkbookPart workbookPart, ColorResolver colors)
+        public static StyleTable Create(WorkbookPart workbookPart, ColorResolver colors) =>
+            Create(workbookPart, colors, MaxStyleTableEntries);
+
+        /// <summary>
+        /// <see cref="Create(WorkbookPart, ColorResolver)"/>の本体。実際の上限
+        /// (<see cref="MaxStyleTableEntries"/>、既定1万件)は現実的なユニットテストでは
+        /// 大量のスタイル要素を用意しないと到達できないため、<paramref name="maxEntries"/>を
+        /// 明示的に指定できる形にしてテスト可能にしている。
+        /// </summary>
+        internal static StyleTable Create(WorkbookPart workbookPart, ColorResolver colors, int maxEntries)
         {
             var stylesheet = workbookPart.WorkbookStylesPart?.Stylesheet;
             if (stylesheet is null)
@@ -34,14 +52,19 @@ namespace Utsushi.Parsing.OpenXml
                 return new StyleTable(Array.Empty<CellStyle>(), CellStyle.Default, FontStyle.Default);
             }
 
-            var numberFormats = ReadCustomNumberFormats(stylesheet);
-            var fonts = ReadFonts(stylesheet, colors);
-            var fills = ReadFills(stylesheet, colors);
-            var borders = ReadBorders(stylesheet, colors);
+            var numberFormats = ReadCustomNumberFormats(stylesheet, maxEntries);
+            var fonts = ReadFonts(stylesheet, colors, maxEntries);
+            var fills = ReadFills(stylesheet, colors, maxEntries);
+            var borders = ReadBorders(stylesheet, colors, maxEntries);
 
             var resolved = new List<CellStyle>();
             foreach (var xf in stylesheet.CellFormats?.Elements<X.CellFormat>() ?? Array.Empty<X.CellFormat>())
             {
+                if (resolved.Count >= maxEntries)
+                {
+                    break;
+                }
+
                 resolved.Add(ResolveCellFormat(xf, fonts, fills, borders, numberFormats));
             }
 
@@ -94,11 +117,16 @@ namespace Utsushi.Parsing.OpenXml
         private static T ResolveIndexed<T>(IReadOnlyList<T> list, uint? index, T fallback) =>
             index is { } i && i < list.Count ? list[(int)i] : fallback;
 
-        private static Dictionary<int, string> ReadCustomNumberFormats(X.Stylesheet stylesheet)
+        private static Dictionary<int, string> ReadCustomNumberFormats(X.Stylesheet stylesheet, int maxEntries)
         {
             var result = new Dictionary<int, string>();
             foreach (var numFmt in stylesheet.NumberingFormats?.Elements<X.NumberingFormat>() ?? Array.Empty<X.NumberingFormat>())
             {
+                if (result.Count >= maxEntries)
+                {
+                    break;
+                }
+
                 if (numFmt.NumberFormatId?.Value is { } id && numFmt.FormatCode?.Value is { } code)
                 {
                     result[(int)id] = code;
@@ -108,11 +136,16 @@ namespace Utsushi.Parsing.OpenXml
             return result;
         }
 
-        private static List<FontStyle> ReadFonts(X.Stylesheet stylesheet, ColorResolver colors)
+        private static List<FontStyle> ReadFonts(X.Stylesheet stylesheet, ColorResolver colors, int maxEntries)
         {
             var result = new List<FontStyle>();
             foreach (var font in stylesheet.Fonts?.Elements<X.Font>() ?? Array.Empty<X.Font>())
             {
+                if (result.Count >= maxEntries)
+                {
+                    break;
+                }
+
                 var name = font.FontName?.Val?.Value ?? FontStyle.Default.Name;
                 var size = font.FontSize?.Val?.Value ?? FontStyle.Default.SizePt;
                 var bold = IsOn(font.Bold);
@@ -152,11 +185,16 @@ namespace Utsushi.Parsing.OpenXml
             return UnderlineStyle.Single;
         }
 
-        private static List<ArgbColor> ReadFills(X.Stylesheet stylesheet, ColorResolver colors)
+        private static List<ArgbColor> ReadFills(X.Stylesheet stylesheet, ColorResolver colors, int maxEntries)
         {
             var result = new List<ArgbColor>();
             foreach (var fill in stylesheet.Fills?.Elements<X.Fill>() ?? Array.Empty<X.Fill>())
             {
+                if (result.Count >= maxEntries)
+                {
+                    break;
+                }
+
                 var pattern = fill.PatternFill;
                 if (pattern?.PatternType is null || pattern.PatternType.Value == X.PatternValues.None)
                 {
@@ -178,11 +216,16 @@ namespace Utsushi.Parsing.OpenXml
             return result;
         }
 
-        private static List<BorderSet> ReadBorders(X.Stylesheet stylesheet, ColorResolver colors)
+        private static List<BorderSet> ReadBorders(X.Stylesheet stylesheet, ColorResolver colors, int maxEntries)
         {
             var result = new List<BorderSet>();
             foreach (var border in stylesheet.Borders?.Elements<X.Border>() ?? Array.Empty<X.Border>())
             {
+                if (result.Count >= maxEntries)
+                {
+                    break;
+                }
+
                 var diagonalDown = border.DiagonalDown?.Value ?? false;
                 var diagonalUp = border.DiagonalUp?.Value ?? false;
                 var diagonal = ReadEdge(border.DiagonalBorder, colors);
