@@ -927,6 +927,31 @@ public sealed record GroupCommand(
 - すべての例外は、帳票コード・シート名・セル番地・処理段階(Parsing/Substitution/Layout/Rendering)を構造化プロパティとして保持し、ログ出力時に特定できるようにする(要件6.4)。
 - Renderingレイヤーは一時ファイル/一時ストリームに書き込み、正常終了時のみ最終出力先へ確定させる(要件5.4: 不完全PDFを残さない)。
 
+### 信頼できない入力に対する安全弁 一覧
+
+`security-reviewer` が横断確認を行う際の起点として、既知の安全弁(上限定数)を一覧にする。
+新しく上限を追加した場合はここに追記し、`src/Utsushi.Parsing/OpenXml/` 配下の
+`foreach`/`Elements<...>()` ループを新規に追加した場合は、対応する上限がこの表に
+載っているかを確認する。根拠要件は表ごとに異なる点に注意(単一の要件に対応する表ではない)。
+
+| レイヤー / クラス | 定数 | 既定値 | 超過時の挙動 | 根拠要件 |
+|---|---|---|---|---|
+| Parsing / `OpenXmlWorkbookReader` | `MaxXlsxPackageBytes` | 1 GiB | `InvalidExcelFileException(TooLarge)` | 6.6 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxSharedStringCount` | 200,000件 | `InvalidExcelFileException(TooLarge)` | 6.6 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxCellsPerSheet` | 500,000(シート内セル数、および行番号の上限を兼ねる) | `InvalidExcelFileException(TooLarge)` | 6.6 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxImagesPerSheet` | 50枚/シート | `UnsupportedWorkbookElementException(TooManyImages)` | 9.6 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxImageDataBytes` | 10 MiB/画像 | `UnsupportedWorkbookElementException(ImageTooLarge)` | 9.6 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxShapesPerSheet` | 50個/シート(図形・接続線・グループ合計) | `UnsupportedWorkbookElementException(TooManyShapes)` | 10.8 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxShapeTextLength` | 2,000文字 | `UnsupportedWorkbookElementException(ShapeTextTooLong)` | 10.8 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxShapeNestingDepth` | 5段 | `UnsupportedWorkbookElementException(GroupNestingTooDeep)` | 10.8 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxGradientStopsPerFill` | 64個/塗りつぶし | 打ち切り(超過分は無視、例外化なし) | 設計判断(DoS対策、要件番号なし) |
+| Parsing / `OpenXmlWorkbookReader` | `MaxMergedRangesPerSheet` | 1,000件/シート | `UnsupportedWorkbookElementException(TooManyMergedRanges)` | 2.9 |
+| Parsing / `StyleTable` | `MaxStyleTableEntries` | 10,000件(フォント/塗りつぶし/罫線/数値書式/cellXfs各々) | 打ち切り(超過分は既定書式にフォールバック、例外化なし) | 要件6.6の対象外(6.6補足文の通り、既定書式フォールバックで吸収できるため意図的に例外化していない) |
+| Parsing / `ColorResolver` | `MaxIndexedColorCount` | 10,000件 | 打ち切り(超過分は呼び出し元のfallback色、例外化なし) | 要件6.6の対象外(上記と同様の理由) |
+| Layout / `PageCommandBuilder` | `MaxSpanCells` | 4,096セル | 結合セル・可視範囲の走査を打ち切り(例外化なし) | 設計判断(DoS対策、要件番号なし) |
+| Layout / `PageCommandBuilder` | `MaxDrawingObjectDimensionPt` | 5,000pt | 描画オブジェクトの寸法をクランプ(例外化なし) | 設計判断(DoS対策、要件番号なし) |
+| Rendering / `SkiaPdfRenderer` | `MaxDecodedImageDimensionPx` | 4,096px | `PdfRenderingException`(デコード前に宣言サイズを検査) | 設計判断(DoS対策、要件番号なし) |
+
 ## テスト戦略
 
 - **ユニットテスト**: 各レイヤーのインターフェース単位(特にLayoutレイヤーの改ページ計算・フォントメトリクス換算、Substitutionレイヤーの必須/未知キー判定)。
