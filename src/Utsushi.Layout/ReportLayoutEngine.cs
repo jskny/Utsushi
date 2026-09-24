@@ -72,6 +72,7 @@ namespace Utsushi.Layout
             // 複数の印刷範囲はそれぞれ独立したページ群になる(要件3.6)。
             var printRanges = ResolvePrintRanges(sheet, definition);
             ValidateRequiredFieldsAreInPrintRanges(definition, sheet, printRanges, pageSetup.PrintTitles);
+            ValidateSubstitutedCellsAreInPrintRanges(report, printRanges, pageSetup.PrintTitles);
 
             var pages = new List<PageLayout>();
 
@@ -264,6 +265,33 @@ namespace Utsushi.Layout
                     definition.ReportCode,
                     sheet.Name,
                     field.Cell);
+            }
+        }
+
+        /// <summary>
+        /// 空でない置換値が差し込まれたセル(任意の置換キー・セル番地直接指定を含む)が、
+        /// 実際に出力される印刷範囲(印刷タイトルを含む)の内側にあることを確認する(要件2.13)。
+        /// </summary>
+        /// <remarks>
+        /// 必須フィールドは値の有無によらず <see cref="ValidateRequiredFieldsAreInPrintRanges"/> で
+        /// 先に検証している。ここでは、値を渡したのに出力されない残りの経路を塞ぐ。
+        /// </remarks>
+        private static void ValidateSubstitutedCellsAreInPrintRanges(
+            ReportModel report, IReadOnlyList<CellRange> printRanges, PrintTitles titles)
+        {
+            foreach (var cell in report.SubstitutedCells.OrderBy(c => c.Row).ThenBy(c => c.Column))
+            {
+                if (printRanges.Any(range => IsRenderedByRange(cell, range, titles)))
+                {
+                    continue;
+                }
+
+                throw new LayoutComputationException(
+                    $"値を差し込んだセル {cell} が印刷範囲の外にあるため、PDFに出力されません。"
+                    + "帳票定義の印刷範囲またはセル番地を見直してください。",
+                    report.Definition.ReportCode,
+                    report.Sheet.Name,
+                    cell);
             }
         }
 

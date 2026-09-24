@@ -38,6 +38,7 @@ namespace Utsushi.Rendering
         private readonly ConcurrentDictionary<FontKey, ResolvedTypeface> _cache = new();
         private readonly List<SKTypeface> _owned = new();
         private readonly object _registrationLock = new();
+        private readonly object _resolveLock = new();
         private bool _disposed;
 
         public FontResolver(FontResolverOptions? options = null)
@@ -71,7 +72,20 @@ namespace Utsushi.Rendering
                 return cached;
             }
 
-            return _cache.GetOrAdd(key, ResolveCore(font));
+            // 複数スレッドから同時に変換した場合でも、同じ書体を二重に生成して一方を
+            // 破棄し損ねることがないよう、生成はロックの内側で1回だけ行う。
+            lock (_resolveLock)
+            {
+                ThrowIfDisposed();
+                if (_cache.TryGetValue(key, out cached))
+                {
+                    return cached;
+                }
+
+                var resolved = ResolveCore(font);
+                _cache[key] = resolved;
+                return resolved;
+            }
         }
 
         private ResolvedTypeface ResolveCore(FontStyle font)
@@ -317,20 +331,26 @@ namespace Utsushi.Rendering
                 return;
             }
 
-            _disposed = true;
-
-            lock (_registrationLock)
+            lock (_resolveLock)
             {
-                foreach (var typeface in _owned)
+                _disposed = true;
+
+                lock (_registrationLock)
                 {
-                    typeface.Dispose();
+                    // インストール済みフォントから解決した書体は解放しない。SkiaSharp は同じネイティブ書体に
+                    // 対してプロセス全体で同一のマネージドオブジェクトを返すため、ここで解放すると
+                    // 同じプロセス内の別の FontResolver(別のコンバータ)が使っている書体まで壊してしまう。
+                    foreach (var typeface in _owned)
+                    {
+                        typeface.Dispose();
+                    }
+
+                    _owned.Clear();
+                    _registered.Clear();
                 }
 
-                _owned.Clear();
-                _registered.Clear();
+                _cache.Clear();
             }
-
-            _cache.Clear();
         }
 
         private void ThrowIfDisposed()

@@ -54,7 +54,9 @@ namespace Utsushi.Golden.Tests
                 new ReportModelBuilder(),
                 new CellSubstitutor(),
                 new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => FixedTimestamp),
-                new SkiaPdfRenderer(skiaMetrics),
+                // CIには日本語フォントが無いため、字形欠落の検出(要件5.5)は無効にする。
+                // ゴールデンテストの比較対象はレイアウト結果であり、PDFの字形ではない。
+                new SkiaPdfRenderer(skiaMetrics, PdfRenderOptions.Default with { MissingGlyphs = MissingGlyphPolicy.Render }),
                 fontResolver);
         }
 
@@ -422,6 +424,69 @@ namespace Utsushi.Golden.Tests
                     Directory.Delete(directory, recursive: true);
                 }
             }
+        }
+
+        private static Dictionary<string, string> InvoiceValues(string? remarks = null)
+        {
+            var values = new Dictionary<string, string>
+            {
+                ["CustomerName"] = "株式会社テスト製作所 御中",
+                ["InvoiceNo"] = "INV-2026-0417",
+                ["TotalAmount"] = "¥2,153,800",
+            };
+
+            if (remarks is not null)
+            {
+                values["Remarks"] = remarks;
+            }
+
+            return values;
+        }
+
+        private static PagedLayout ComputeInvoice(IReadOnlyDictionary<string, string> values)
+        {
+            using var converter = CreateDeterministicConverter(out _);
+            using var input = File.OpenRead(TestPaths.SampleTemplate("invoice"));
+            return converter.ComputeLayout("invoice", input, values);
+        }
+
+        [Fact]
+        public void 差し込み値の制御文字はファサード経由でもSubstitution段階のエラーになる()
+        {
+            var values = InvoiceValues();
+            values["InvoiceNo"] = "INV\t0001";
+
+            var ex = Assert.Throws<InvalidSubstitutionValueException>(() => ComputeInvoice(values));
+
+            Assert.Equal(ProcessingStage.Substitution, ex.Stage);
+            Assert.Equal("invoice", ex.ReportCode);
+            Assert.Equal(CellAddress.Parse("F3"), ex.CellAddress);
+        }
+
+        [Fact]
+        public void 備考欄のCRLF区切りの住所はLF区切りと同じレイアウトになる()
+        {
+            static IEnumerable<string> RemarkLines(PagedLayout layout) =>
+                layout.Pages.SelectMany(p => p.Commands.OfType<TextCommand>())
+                    .Where(t => t.Text.Contains("丸の内") || t.Text.Contains("東京都") || t.Text.Contains("担当"))
+                    .Select(t => t.Text);
+
+            var lf = ComputeInvoice(InvoiceValues("東京都千代田区丸の内1-1-1\n丸の内ビル10F\n担当: 山田"));
+            var crlf = ComputeInvoice(InvoiceValues("東京都千代田区丸の内1-1-1\r\n丸の内ビル10F\r\n担当: 山田"));
+
+            Assert.Equal(new[] { "東京都千代田区丸の内1-1-1", "丸の内ビル10F", "担当: 山田" }, RemarkLines(lf));
+            Assert.Equal(RemarkLines(lf), RemarkLines(crlf));
+        }
+
+        [Fact]
+        public void 備考欄に収まらない行数を差し込むとレイアウト段階のエラーになる()
+        {
+            var remarks = string.Join("\n", Enumerable.Range(1, 20).Select(i => $"{i}行目の備考"));
+
+            var ex = Assert.Throws<LayoutComputationException>(() => ComputeInvoice(InvoiceValues(remarks)));
+
+            Assert.Equal(ProcessingStage.Layout, ex.Stage);
+            Assert.Equal(CellAddress.Parse("A29"), ex.CellAddress);
         }
 
         [Fact]

@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text;
 using Utsushi.Core;
+using Utsushi.Core.Exceptions;
 using Utsushi.Layout.Model;
 using Utsushi.Layout.Text;
 using Utsushi.Parsing.Model;
@@ -97,7 +100,13 @@ namespace Utsushi.Layout
                         var anchorCell = _sheet.GetCell(merged.Anchor);
                         var borders = ResolveMergedBorders(
                             merged.Range, anchorCell?.Style.Borders ?? BorderSet.None, rowIndex, columnIndex);
-                        EmitCell(merged.Anchor, anchorCell, mergedRect.Value, borders);
+                        // 改ページで結合範囲の一部だけが見えているページでは、セルの本来の高さが
+                        // 分からないため、折り返し行の欠落検出(要件2.14)を行わない。
+                        var fullyVisible = rowIndex.ContainsKey(merged.Range.FirstRow)
+                            && rowIndex.ContainsKey(merged.Range.LastRow)
+                            && columnIndex.ContainsKey(merged.Range.FirstColumn)
+                            && columnIndex.ContainsKey(merged.Range.LastColumn);
+                        EmitCell(merged.Anchor, anchorCell, mergedRect.Value, borders, fullyVisible);
                         continue;
                     }
 
@@ -574,7 +583,8 @@ namespace Utsushi.Layout
         /// <summary>印刷範囲によらない、シート上の実際の行高(pt)。非表示行は0。</summary>
         private double RawRowHeightPt(int row) => _sheet.IsRowHidden(row) ? 0.0 : _sheet.GetRowHeight(row);
 
-        private void EmitCell(CellAddress address, CellModel? cell, RectPt rect, BorderSet? bordersOverride = null)
+        private void EmitCell(
+            CellAddress address, CellModel? cell, RectPt rect, BorderSet? bordersOverride = null, bool fullyVisible = true)
         {
             if (rect.IsEmpty)
             {
@@ -593,7 +603,7 @@ namespace Utsushi.Layout
             var text = cell?.DisplayValue;
             if (!string.IsNullOrEmpty(text))
             {
-                EmitText(address, cell!, style, rect, text!);
+                EmitText(address, cell!, style, rect, text!, fullyVisible);
             }
         }
 
@@ -756,7 +766,7 @@ namespace Utsushi.Layout
         // テキスト(要件4.1, 4.4, 2.5)
         // ---------------------------------------------------------------------
 
-        private void EmitText(CellAddress address, CellModel cell, CellStyle style, RectPt rect, string text)
+        private void EmitText(CellAddress address, CellModel cell, CellStyle style, RectPt rect, string text, bool fullyVisible)
         {
             var maxDigitWidthPx = _report.Definition.MaxDigitWidthPx;
             var paddingPt = ExcelUnitConverter.CellPaddingPoints * _scale;
@@ -779,9 +789,11 @@ namespace Utsushi.Layout
             // 拡大縮小率はフォントサイズにも適用する(座標だけを縮めると文字が収まらなくなるため)。
             var scaledFont = style.Font with { SizePt = style.Font.SizePt * _scale };
 
+            // 折り返し表示でないセルでは、Excelは改行を表示せず1行につなげて表示する(要件4.7)。
+            // 改行文字をそのまま描画すると、フォントによって豆腐や空白になる。
             var lines = overflow == OverflowBehavior.Wrap
                 ? WrapLines(scaledFont, text, contentRect.Width)
-                : new List<string> { text };
+                : new List<string> { RemoveLineBreaks(text) };
 
             if (overflow == OverflowBehavior.Shrink && lines.Count == 1)
             {
@@ -791,6 +803,11 @@ namespace Utsushi.Layout
             var metrics = _fontMetrics.GetMetrics(scaledFont);
             var totalHeight = metrics.LineSpacingPt * lines.Count;
             var firstBaselineY = ResolveFirstBaselineY(style.VAlign, rect, metrics, totalHeight);
+
+            if (overflow == OverflowBehavior.Wrap && fullyVisible && _report.SubstitutedCells.Contains(address))
+            {
+                EnsureWrappedLinesVisible(address, rect, metrics, firstBaselineY, lines.Count);
+            }
 
             RectPt? clipRect = overflow is OverflowBehavior.Clip or OverflowBehavior.Wrap or OverflowBehavior.Shrink
                 ? rect
@@ -803,6 +820,47 @@ namespace Utsushi.Layout
                 _texts.Add(new TextCommand(new PointPt(x, baselineY), lines[i], scaledFont, anchor, clipRect));
             }
         }
+
+        /// <summary>
+        /// 差し込み値を折り返した各行が、セルの矩形内に表示されることを確かめる(要件2.14)。
+        /// </summary>
+        /// <remarks>
+        /// 行の上下方向の中心がセルの外にある行を「表示されない」とみなす。フォントの行間
+        /// (<see cref="FontMetrics.LineSpacingPt"/>)はExcelの行高より僅かに大きいことが多く、
+        /// 行全体が収まることを条件にすると、Excel上では収まっている2行の住所まで誤検出するため。
+        /// </remarks>
+        private void EnsureWrappedLinesVisible(
+            CellAddress address, RectPt rect, FontMetrics metrics, double firstBaselineY, int lineCount)
+        {
+            for (var i = 0; i < lineCount; i++)
+            {
+                var lineTop = firstBaselineY - metrics.AscentPt + (metrics.LineSpacingPt * i);
+                var lineCenter = lineTop + (metrics.LineSpacingPt / 2.0);
+                if (lineCenter >= rect.Top && lineCenter <= rect.Bottom)
+                {
+                    continue;
+                }
+
+                throw new LayoutComputationException(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "セル {0} に差し込んだ値は折り返すと {1} 行になり、セルの高さ({2:0.#}pt)に収まらないため、"
+                            + "一部の行がPDFに出力されません。テンプレートの行の高さを広げるか、"
+                            + "差し込む文字数・行数を減らしてください。",
+                        address,
+                        lineCount,
+                        rect.Height / _scale),
+                    _report.Definition.ReportCode,
+                    _sheet.Name,
+                    address);
+            }
+        }
+
+        /// <summary>折り返し表示でないセルのために改行文字を取り除く(要件4.7)。</summary>
+        private static string RemoveLineBreaks(string text) =>
+            text.IndexOf('\n') < 0 && text.IndexOf('\r') < 0
+                ? text
+                : text.Replace("\r", string.Empty).Replace("\n", string.Empty);
 
         /// <summary>
         /// 水平配置を決定する。<see cref="HorizontalAlignment.General"/> は値の型で既定が変わる。
@@ -880,34 +938,41 @@ namespace Utsushi.Layout
         }
 
         /// <summary>セル幅に合わせてテキストを折り返す。</summary>
+        /// <remarks>
+        /// 改行は LF・CRLF・CR 単独のいずれも段落区切りとして扱う。折り返し位置は書記素クラスタ
+        /// (サロゲートペア・結合文字・異体字セレクタを含む、利用者が1文字と認識する単位)の境界に限る
+        /// (要件4.6)。UTF-16 の1単位ごとに区切ると、「𠮷」のようなサロゲートペアの途中で改行され、
+        /// 両側が文字化けする。
+        /// </remarks>
         private List<string> WrapLines(FontStyle font, string text, double availableWidthPt)
         {
             var lines = new List<string>();
+            var unified = text.IndexOf('\r') < 0 ? text : text.Replace("\r\n", "\n").Replace('\r', '\n');
 
-            foreach (var paragraph in text.Split('\n'))
+            foreach (var paragraph in unified.Split('\n'))
             {
-                var normalized = paragraph.TrimEnd('\r');
-                if (normalized.Length == 0)
+                if (paragraph.Length == 0)
                 {
                     lines.Add(string.Empty);
                     continue;
                 }
 
-                var current = string.Empty;
-                foreach (var c in normalized)
+                var current = new StringBuilder();
+                var elements = StringInfo.GetTextElementEnumerator(paragraph);
+                while (elements.MoveNext())
                 {
-                    var candidate = current + c;
-                    if (current.Length > 0 && _fontMetrics.MeasureTextWidth(font, candidate) > availableWidthPt)
+                    var element = elements.GetTextElement();
+                    if (current.Length > 0
+                        && _fontMetrics.MeasureTextWidth(font, current.ToString() + element) > availableWidthPt)
                     {
-                        lines.Add(current);
-                        current = c.ToString();
-                        continue;
+                        lines.Add(current.ToString());
+                        current.Clear();
                     }
 
-                    current = candidate;
+                    current.Append(element);
                 }
 
-                lines.Add(current);
+                lines.Add(current.ToString());
             }
 
             return lines.Count == 0 ? new List<string> { string.Empty } : lines;

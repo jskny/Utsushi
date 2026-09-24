@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using SkiaSharp;
 using Utsushi.Core;
 using Utsushi.Core.Exceptions;
@@ -177,7 +178,7 @@ namespace Utsushi.Rendering
                     break;
 
                 case TextCommand text:
-                    DrawText(canvas, text);
+                    DrawText(canvas, text, reportCode, sheetName);
                     break;
 
                 case ImageCommand image:
@@ -185,7 +186,7 @@ namespace Utsushi.Rendering
                     break;
 
                 case ShapeCommand shape:
-                    DrawShape(canvas, shape);
+                    DrawShape(canvas, shape, reportCode, sheetName);
                     break;
 
                 case ConnectorCommand connector:
@@ -267,7 +268,7 @@ namespace Utsushi.Rendering
         }
 
         /// <summary>図形を描画する(要件10)。他のセル内容より最前面に描画される。</summary>
-        private void DrawShape(SKCanvas canvas, ShapeCommand shape)
+        private void DrawShape(SKCanvas canvas, ShapeCommand shape, string reportCode, string sheetName)
         {
             var skRect = ToSkRect(shape.Rect);
             var hasRotation = Math.Abs(shape.RotationDegrees) > double.Epsilon;
@@ -310,7 +311,11 @@ namespace Utsushi.Rendering
                 // TextCommandへの変換ではClipRectをnullにする。
                 foreach (var line in shape.TextLines)
                 {
-                    DrawText(canvas, new TextCommand(line.Origin, line.Text, line.Font, line.Anchor, ClipRect: null));
+                    DrawText(
+                        canvas,
+                        new TextCommand(line.Origin, line.Text, line.Font, line.Anchor, ClipRect: null),
+                        reportCode,
+                        sheetName);
                 }
             }
             finally
@@ -495,9 +500,14 @@ namespace Utsushi.Rendering
                 paint);
         }
 
-        private void DrawText(SKCanvas canvas, TextCommand text)
+        private void DrawText(SKCanvas canvas, TextCommand text, string reportCode, string sheetName)
         {
             using var font = _fontMetrics.CreateFont(text.Font, out var synthesizeBold);
+            if (_options.MissingGlyphs == MissingGlyphPolicy.Error)
+            {
+                EnsureGlyphsAvailable(font, text.Text, reportCode, sheetName);
+            }
+
             using var paint = new SKPaint
             {
                 Color = ToSkColor(text.Font.Color),
@@ -547,6 +557,35 @@ namespace Utsushi.Rendering
                 {
                     canvas.Restore();
                 }
+            }
+        }
+
+        /// <summary>
+        /// 描画する各文字の字形がフォントに存在することを確かめる(要件5.5)。
+        /// </summary>
+        /// <remarks>
+        /// 字形が無い文字は glyph 0(.notdef)に変換され、豆腐(□)または空白として描画される。
+        /// 制御文字はもともと字形を描かない前提のため判定しない。
+        /// </remarks>
+        private static void EnsureGlyphsAvailable(SKFont font, string text, string reportCode, string sheetName)
+        {
+            foreach (var rune in text.EnumerateRunes())
+            {
+                if (Rune.IsControl(rune) || font.GetGlyph(rune.Value) != 0)
+                {
+                    continue;
+                }
+
+                var fontName = font.Typeface?.FamilyName ?? string.Empty;
+                throw new MissingGlyphException(
+                    fontName,
+                    rune.Value,
+                    text,
+                    $"文字 '{rune}'(U+{rune.Value:X4})の字形がフォント '{fontName}' にありません"
+                        + $"(描画しようとした文字列: \"{text}\")。そのまま出力すると豆腐(□)や空白になるため中止しました。"
+                        + "字形を持つフォントを使うか、別の文字に置き換えてください。",
+                    reportCode,
+                    sheetName);
             }
         }
 
@@ -733,5 +772,24 @@ namespace Utsushi.Rendering
 
         /// <summary>フォントを埋め込まず、文字をアウトラインとして出力する設定。</summary>
         public static PdfRenderOptions OutlineText { get; } = Default with { TextRendering = PdfTextRendering.Outline };
+
+        /// <summary>
+        /// フォントに字形が無い文字を描画しようとしたときの扱い(要件5.5)。既定は
+        /// <see cref="MissingGlyphPolicy.Error"/>(豆腐のままPDFを出力しない)。
+        /// </summary>
+        public MissingGlyphPolicy MissingGlyphs { get; init; } = MissingGlyphPolicy.Error;
+    }
+
+    /// <summary>フォントに字形が無い文字を描画しようとしたときの扱い(要件5.5)。</summary>
+    public enum MissingGlyphPolicy
+    {
+        /// <summary><see cref="Utsushi.Core.Exceptions.MissingGlyphException"/> を送出して変換を中止する(既定)。</summary>
+        Error = 0,
+
+        /// <summary>
+        /// 字形の有無を確かめずに描画する。字形の無い文字は豆腐(□)または空白になる。
+        /// 代替フォントで見た目を確認するだけの開発用途を想定する。
+        /// </summary>
+        Render,
     }
 }

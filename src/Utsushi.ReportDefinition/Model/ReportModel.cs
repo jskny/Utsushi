@@ -26,6 +26,16 @@ namespace Utsushi.ReportDefinitions.Model
         public static ReportModel Create(ReportDefinition definition, SheetModel sheet, FontStyle? defaultFont = null) =>
             new(definition, sheet, new Dictionary<CellAddress, OverflowBehavior>(), defaultFont ?? FontStyle.Default);
 
+        /// <summary>
+        /// 呼び出し元から空でない置換値が差し込まれたセル(置換キー経由・セル番地直接指定の両方)。
+        /// </summary>
+        /// <remarks>
+        /// テンプレート自身の文字列と違い、差し込み値はExcel上で人が目視確認していない。
+        /// Layout レイヤーはこの集合に含まれるセルに限り、印刷範囲外(要件2.13)・
+        /// 折り返し行の欠落(要件2.14)をエラーとして検出する。
+        /// </remarks>
+        public IReadOnlySet<CellAddress> SubstitutedCells { get; init; } = new HashSet<CellAddress>();
+
         /// <summary>指定セルのはみ出し挙動を返す。置換対象でない場合は null。</summary>
         public OverflowBehavior? GetOverflowBehavior(CellAddress address) =>
             OverflowByCell.TryGetValue(address, out var behavior) ? behavior : null;

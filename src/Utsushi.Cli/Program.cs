@@ -42,6 +42,10 @@ namespace Utsushi.Cli
                     : FontResolverOptions.Strict;
 
                 var renderOptions = options.OutlineText ? PdfRenderOptions.OutlineText : PdfRenderOptions.Default;
+                if (options.AllowMissingGlyphs)
+                {
+                    renderOptions = renderOptions with { MissingGlyphs = MissingGlyphPolicy.Render };
+                }
 
                 using var converter = ReportPdfConverter.CreateDefault(
                     options.DefinitionRoot, fontOptions, renderOptions);
@@ -78,7 +82,7 @@ namespace Utsushi.Cli
             Console.Error.WriteLine("  utsushi --report <帳票コード> --input <xlsxパス> --output <pdfパス>");
             Console.Error.WriteLine("          [--definitions <帳票定義ルート>] [--set <キー>=<値> ...]");
             Console.Error.WriteLine("          [--override <セル番地>=<値> ...]");
-            Console.Error.WriteLine("          [--allow-font-fallback [<代替フォント名>]] [--outline-text]");
+            Console.Error.WriteLine("          [--allow-font-fallback [<代替フォント名>]] [--allow-missing-glyphs] [--outline-text]");
             Console.Error.WriteLine();
             Console.Error.WriteLine("オプション:");
             Console.Error.WriteLine("  --report, -r        帳票コード(帳票定義のディレクトリ名)");
@@ -91,6 +95,9 @@ namespace Utsushi.Cli
             Console.Error.WriteLine("                      先頭(アンカー)セルの番地を指定すること");
             Console.Error.WriteLine("  --allow-font-fallback");
             Console.Error.WriteLine("                      フォント未検出時に代替フォントを使う(見た目が崩れる可能性あり)");
+            Console.Error.WriteLine("  --allow-missing-glyphs");
+            Console.Error.WriteLine("                      フォントに字形が無い文字があってもエラーにせず出力する");
+            Console.Error.WriteLine("                      (その文字は豆腐(□)や空白になる。動作確認用)");
             Console.Error.WriteLine("  --outline-text      文字をアウトライン化して出力する。ファイルサイズは大幅に小さくなるが");
             Console.Error.WriteLine("                      PDF内の文字列検索・コピーができなくなる");
             Console.Error.WriteLine("  --help, -h          このヘルプを表示する");
@@ -108,6 +115,7 @@ namespace Utsushi.Cli
                 IReadOnlyDictionary<string, string> cellOverrides,
                 bool allowFontFallback,
                 string? fallbackFont,
+                bool allowMissingGlyphs,
                 bool outlineText)
             {
                 ReportCode = reportCode;
@@ -118,6 +126,7 @@ namespace Utsushi.Cli
                 CellOverrides = cellOverrides;
                 AllowFontFallback = allowFontFallback;
                 FallbackFont = fallbackFont;
+                AllowMissingGlyphs = allowMissingGlyphs;
                 OutlineText = outlineText;
             }
 
@@ -137,6 +146,8 @@ namespace Utsushi.Cli
 
             public string? FallbackFont { get; }
 
+            public bool AllowMissingGlyphs { get; }
+
             public bool OutlineText { get; }
 
             /// <summary>引数を解釈する。ヘルプ要求時は options=null, error=null を返す。</summary>
@@ -150,6 +161,7 @@ namespace Utsushi.Cli
                 var cellOverrides = new Dictionary<string, string>(StringComparer.Ordinal);
                 var allowFallback = false;
                 string? fallbackFont = null;
+                var allowMissingGlyphs = false;
                 var outlineText = false;
 
                 if (args.Length == 0)
@@ -206,6 +218,10 @@ namespace Utsushi.Cli
 
                             break;
 
+                        case "--allow-missing-glyphs":
+                            allowMissingGlyphs = true;
+                            break;
+
                         case "--outline-text":
                             outlineText = true;
                             break;
@@ -236,7 +252,7 @@ namespace Utsushi.Cli
 
                 return new CommandLineOptions(
                     reportCode!, inputPath!, outputPath!, definitionRoot, values, cellOverrides,
-                    allowFallback, fallbackFont, outlineText);
+                    allowFallback, fallbackFont, allowMissingGlyphs, outlineText);
             }
 
             private static bool TryTakeValue(
