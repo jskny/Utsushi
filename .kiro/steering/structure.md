@@ -93,6 +93,7 @@ Utsushi/
 共通レイヤーのコードは変更しない。以下の3つのデータを足すだけで完結する(要件8.1)。
 
 1. `samples/reports/<帳票コード>/template.xlsx` に対象Excelファイル(個人情報等はマスキング)を追加する。
+   テンプレートの作り方・登録前のチェックリストは `docs/テンプレート作成ガイド.md` を参照。
 2. 同じディレクトリに `definition.json`(帳票定義)を追加する。スキーマは `docs/帳票定義スキーマ.md` を参照。
 3. `tests/Utsushi.Golden.Tests/ReportConversionGoldenTests.RegisteredReports` に帳票コードと置換値を追加し、
    テストを1度実行してゴールデンファイルを生成する。**生成された内容を必ずレビューしてからコミットする**
