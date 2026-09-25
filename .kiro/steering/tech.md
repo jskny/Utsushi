@@ -54,12 +54,15 @@ inclusion: always
 > CFF形式のフォントはサブセット化できず丸ごと埋め込まれる。
 >
 > **同梱フォント**: 日本語フォントの無いサーバー・CIでも日本語を描画できるよう、BIZ UDPゴシック Regular
-> (Morisawa、**SIL Open Font License 1.1**、googlefonts/morisawa-biz-ud-gothic 1.05、4.6MB)を
+> (Morisawa、**SIL Open Font License 1.1**、4.6MB。Debian パッケージ fonts-morisawa-bizud-gothic 1.05-2 版
+> 〈upstream は googlefonts/morisawa-biz-ud-gothic 1.05、Debian はソースから再ビルド〉、
+> sha256 `8d4fd9568ad662d9eb1bc8ca8663dcd76a6336373e3e3f32d634978db4c7388e`)を
 > `Utsushi.Rendering` の埋め込みリソースとして同梱する。OFL は無償で、ソフトウェアへの同梱・再配布と
 > PDFへの埋め込みを認めている。条件として、フォントを配布する際はライセンス全文
-> (`src/Utsushi.Rendering/Fonts/BIZUDPGothic-OFL.txt`)を添える(ビルド出力にもコピーする)。フォント自体を
-> 改変して配布する場合は予約フォント名を使えないが、Utsushi はフォントファイルを改変して配布しない
-> (PDFに埋め込むサブセットは文書への埋め込みであり、OFL の FAQ でも認められている用途)。
+> (`src/Utsushi.Rendering/Fonts/BIZUDPGothic-OFL.txt`。1行目の著作権表記のURLが "-mincho" なのは upstream の原文のまま)を
+> 添える(ビルド出力にもコピーする。NuGet パッケージとして配布する場合は、パッケージにも同梱する設定が別途必要)。
+> 本フォントのOFLは予約フォント名を宣言していない。PDFに埋め込むサブセットは「フォントで作成した文書」であり、
+> OFL の適用対象外(文書への埋め込みは自由)。
 > 人名用の外字を網羅するIPAmj明朝(IPAフォントライセンス v1.0、46MB)は、サイズとライセンス表記の都合で同梱せず、
 > 実行環境にインストールされていれば使う。
 >

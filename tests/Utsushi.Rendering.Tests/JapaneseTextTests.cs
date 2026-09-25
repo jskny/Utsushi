@@ -110,6 +110,32 @@ namespace Utsushi.Rendering.Tests
             Assert.NotEqual(0, resolved.Typeface.GetGlyph('髙'));
         }
 
+        [Fact]
+        public void 書体のデータ自体の装飾を読む()
+        {
+            Assert.Equal((false, false), FontResolver.ReadEmbeddedStyle(BundledFonts.JapaneseGothicTypeface));
+        }
+
+        [Theory]
+        [InlineData("DejaVu Sans")]
+        [InlineData("BIZ UDPGothic")]
+        public void 太字のファイルだけがある書体の太字斜体は斜体を合成する(string family)
+        {
+            // Bold はあるが Bold Italic が無い書体に太字斜体を求めると、fontconfig は Bold に斜体の傾きを付けて返す。
+            // その傾きは書体のデータに含まれず、サブセットで作り直すと失われるため、描画側で合成する必要がある
+            // (layout-fidelity-reviewer指摘の退行)。
+            using var resolver = new FontResolver(FontResolverOptions.AllowFallback());
+            var regular = resolver.Resolve(Font(family));
+            var boldItalic = resolver.Resolve(Font(family, bold: true) with { Italic = true });
+            if (ReferenceEquals(regular.Typeface, boldItalic.Typeface) || FontResolver.ReadEmbeddedStyle(boldItalic.Typeface).Italic)
+            {
+                return; // Bold のファイルが無い(または Bold Italic がある)環境では、この状況を再現できない
+            }
+
+            Assert.True(boldItalic.SynthesizeItalic);
+            Assert.False(boldItalic.SynthesizeBold);
+        }
+
         // -- 要件11.6: 日本語のフォント名 --------------------------------------
 
         [Theory]
@@ -120,6 +146,22 @@ namespace Utsushi.Rendering.Tests
         public void 日本語のフォント名と英語のフォント名を同じフォントとみなす(string left, string right)
         {
             Assert.True(FontFamilyAliases.AreSame(left, right));
+        }
+
+        [Fact]
+        public void 明示登録したフォントも日本語のフォント名で引ける()
+        {
+            // Linuxサーバーで msgothic.ttc を英語名で登録し、日本語版Excelの「ＭＳ Ｐゴシック」で引く運用(code-reviewer指摘)。
+            var options = FontResolverOptions.Strict with
+            {
+                FontFiles = new Dictionary<string, string> { ["MS PGothic"] = CreateLatinOnlyFont() },
+            };
+            using var resolver = new FontResolver(options);
+
+            var resolved = resolver.Resolve(Font("ＭＳ Ｐゴシック"));
+
+            Assert.NotEqual(0, resolved.Typeface.GetGlyph('A'));
+            Assert.Equal(0, resolved.Typeface.GetGlyph('髙')); // 登録したテスト用フォント(英数字のみ)であること
         }
 
         [Fact]
@@ -180,6 +222,19 @@ namespace Utsushi.Rendering.Tests
             // 実字形の太字がインストールされていればそれを、無ければ描画側で合成する。
             var face = shaped.Runs[1].Face;
             Assert.True(face.SynthesizeBold || face.Typeface.FontWeight >= (int)SKFontStyleWeight.SemiBold);
+        }
+
+        [Fact]
+        public void 見つからずに代替したフォントは外字用の代替フォントとして使わない()
+        {
+            // 先に同じ名前のフォントを(代替を許容して)解決していても、外字用の一覧では「見つからない」扱いにする。
+            using var resolver = new FontResolver(FontResolverOptions.AllowFallback() with
+            {
+                GlyphFallbackFamilies = new[] { "存在しない外字フォント-ZZZ" },
+            });
+            resolver.Resolve(Font("存在しない外字フォント-ZZZ"));
+
+            Assert.Empty(resolver.ResolveGlyphFallbacks(bold: false, italic: false));
         }
 
         [Fact]
@@ -333,6 +388,73 @@ namespace Utsushi.Rendering.Tests
                 using var subsetPath = reduced.GetGlyphPath(mapped);
                 Assert.Equal(originalPath.Bounds, subsetPath.Bounds);
             }
+        }
+
+        [Theory]
+        [InlineData(0x0002, false)] // 制限付きライセンスのみ
+        [InlineData(0x0100, false)] // サブセット化禁止
+        [InlineData(0x0200, false)] // ビットマップのみ埋め込み可
+        [InlineData(0x0008, true)] // 編集可能
+        [InlineData(0x000A, true)] // 制限付き + 編集可能(用途ビットは最も緩いものが優先)
+        public void 埋め込み許可がサブセット化を認めない書体はサブセット化しない(int fsType, bool subsettable)
+        {
+            var data = File.ReadAllBytes(CreateLatinOnlyFont());
+            PatchOs2FsType(data, (ushort)fsType);
+            using var skData = SKData.CreateCopy(data);
+            using var typeface = SKTypeface.FromData(skData);
+            var glyph = typeface.GetGlyph('A');
+
+            var subset = TrueTypeSubsetter.TryCreate(typeface, new[] { glyph }, new Dictionary<int, ushort> { ['A'] = glyph });
+
+            Assert.Equal(subsettable, subset is not null);
+        }
+
+        [Fact]
+        public void 複合字形と短形式のlocaを持つ書体もサブセット化できる()
+        {
+            // 同梱フォントは複合字形を持たず loca も長形式のため、DejaVu Sans(アクセント付き文字が複合字形)で確かめる。
+            using var typeface = SKTypeface.FromFamilyName("DejaVu Sans");
+            if (typeface is null || typeface.FamilyName != "DejaVu Sans")
+            {
+                return; // DejaVu Sans の無い環境では確認できない
+            }
+
+            const string text = "ÀÉÎÕÜçñ Ab";
+            var map = text.EnumerateRunes().Distinct().ToDictionary(r => r.Value, r => typeface.GetGlyph(r.Value));
+
+            var subset = TrueTypeSubsetter.TryCreate(typeface, map.Values, map)!;
+            using var data = SKData.CreateCopy(subset.FontData);
+            using var subsetTypeface = SKTypeface.FromData(data);
+            using var original = new SKFont(typeface, 20);
+            using var reduced = new SKFont(subsetTypeface, 20);
+
+            foreach (var glyph in map.Values)
+            {
+                var mapped = subset.MapGlyph(glyph);
+                Assert.Equal(original.MeasureText(new[] { glyph }), reduced.MeasureText(new[] { mapped }), 3);
+                using var originalPath = original.GetGlyphPath(glyph);
+                using var subsetPath = reduced.GetGlyphPath(mapped);
+                Assert.Equal(originalPath.PointCount, subsetPath.PointCount);
+                Assert.Equal(originalPath.Bounds, subsetPath.Bounds);
+            }
+        }
+
+        private static void PatchOs2FsType(byte[] font, ushort fsType)
+        {
+            var numTables = (font[4] << 8) | font[5];
+            for (var i = 0; i < numTables; i++)
+            {
+                var record = 12 + (i * 16);
+                if (font[record] == 'O' && font[record + 1] == 'S' && font[record + 2] == '/' && font[record + 3] == '2')
+                {
+                    var offset = (font[record + 8] << 24) | (font[record + 9] << 16) | (font[record + 10] << 8) | font[record + 11];
+                    font[offset + 8] = (byte)(fsType >> 8);
+                    font[offset + 9] = (byte)fsType;
+                    return;
+                }
+            }
+
+            throw new InvalidOperationException("OS/2 表がありません。");
         }
 
         [Fact]

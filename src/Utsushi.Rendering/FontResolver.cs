@@ -18,6 +18,8 @@ namespace Utsushi.Rendering
     /// 実行時に別フォントへ暗黙フォールバックすると帳票の見た目が崩れるため、
     /// 既定(<see cref="FontResolverOptions.Strict"/>)では解決できないフォントを例外にする
     /// (design.md「Rendering レイヤー」)。
+    /// ただし、フォント自体は解決できたうえで、その書体に字形が無い個々の文字(外字)は、厳格モードでも
+    /// <see cref="FontResolverOptions.GlyphFallbackFamilies"/> の書体で補う(要件11.2)。これを行わない場合は一覧を空にする。
     /// </para>
     /// <para>
     /// 明示的に登録したフォントファイル(<c>.ttf</c>/<c>.otf</c>/<c>.ttc</c>)を最優先で使い、
@@ -42,6 +44,7 @@ namespace Utsushi.Rendering
         private readonly List<SKTypeface> _owned = new();
         private readonly object _registrationLock = new();
         private readonly object _resolveLock = new();
+        private readonly HashSet<FontKey> _substituted = new();
         private bool _disposed;
 
         public FontResolver(FontResolverOptions? options = null)
@@ -105,7 +108,9 @@ namespace Utsushi.Rendering
             var key = new FontKey(font.Name, font.Bold, font.Italic);
             if (_cache.TryGetValue(key, out var cached))
             {
-                return cached;
+                // 見つからずに代替フォントで解決した結果は、外字用の代替フォントとしては使わない
+                // (「IPAmjMincho」の名前で別の書体を拾い、処理の順序で結果が変わるのを防ぐ)。
+                return optional && IsSubstituted(key) ? null : cached;
             }
 
             lock (_resolveLock)
@@ -113,7 +118,7 @@ namespace Utsushi.Rendering
                 ThrowIfDisposed();
                 if (_cache.TryGetValue(key, out cached))
                 {
-                    return cached;
+                    return optional && _substituted.Contains(key) ? null : cached;
                 }
 
                 var resolved = ResolveCore(font);
@@ -125,10 +130,19 @@ namespace Utsushi.Rendering
                     }
 
                     resolved = HandleMissingFont(font);
+                    _substituted.Add(key);
                 }
 
                 _cache[key] = resolved;
                 return resolved;
+            }
+        }
+
+        private bool IsSubstituted(FontKey key)
+        {
+            lock (_resolveLock)
+            {
+                return _substituted.Contains(key);
             }
         }
 
@@ -163,15 +177,60 @@ namespace Utsushi.Rendering
             // 太字/斜体が要求された場合、実字形を持つ別ファイルがあるかを確認する。
             // SKTypeface.FromFamilyName は字形が無くても合成した書体を返すため、
             // 通常字形とフォントデータが同一かどうかで「実字形の有無」を判定する。
+            // インストール済みの書体はプロセス全体で共有されるマネージドオブジェクトのため、使わなかった側も解放しない
+            // (解放すると、キャッシュ済みの通常字形と同じインスタンスを解放しうる)。
             var styled = FindInstalled(font.Name, font.Bold, font.Italic);
             if (styled is not null && !IsSameFontData(regular, styled))
             {
-                regular.Dispose();
-                return new ResolvedTypeface(styled, false, false);
+                // 別ファイルでも、要求した装飾の一部しか持たないことがある(例: Bold はあるが Bold Italic は無く、
+                // fontconfig が Bold に斜体の傾きを付けて返す)。その傾きは書体のデータには含まれず、サブセット化
+                // (要件11.5)で作り直した書体からは失われるため、フォントのデータ自体が持つ装飾を見て、
+                // 足りない装飾だけを描画側で合成する。
+                var (hasBold, hasItalic) = ReadEmbeddedStyle(styled);
+                return new ResolvedTypeface(styled, font.Bold && !hasBold, font.Italic && !hasItalic);
             }
 
-            styled?.Dispose();
             return new ResolvedTypeface(regular, font.Bold, font.Italic);
+        }
+
+        /// <summary>
+        /// フォントのデータ自体が太字・斜体の字形かどうかを、OS/2 表(無ければ head 表)の書体情報から読む。
+        /// </summary>
+        /// <remarks>
+        /// <c>SKTypeface.FontStyle</c> は fontconfig が合成した装飾(斜体の傾きなど)も含めた要求どおりの値を返すため使わない。
+        /// </remarks>
+        internal static (bool Bold, bool Italic) ReadEmbeddedStyle(SKTypeface typeface)
+        {
+            const uint Os2Tag = 0x4F532F32;
+            const uint HeadTag = 0x68656164;
+            try
+            {
+                // SkiaSharp の GetTableData は、表を読めない場合に基底の Exception を投げるため TryGetTableData を使う。
+                if (typeface.TryGetTableData(Os2Tag, out var os2) && os2 is not null)
+                {
+                    if (os2.Length >= 64)
+                    {
+                        var weightClass = (os2[4] << 8) | os2[5];
+                        var fsSelection = (os2[62] << 8) | os2[63];
+                        return (weightClass >= 600 || (fsSelection & 0x0020) != 0, (fsSelection & 0x0201) != 0);
+                    }
+                }
+
+                if (typeface.TryGetTableData(HeadTag, out var head) && head is not null)
+                {
+                    if (head.Length >= 46)
+                    {
+                        var macStyle = (head[44] << 8) | head[45];
+                        return ((macStyle & 0x1) != 0, (macStyle & 0x2) != 0);
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
+            {
+                // 読めない場合は下の既定値(要求どおりの実字形とみなす。従来の判定と同じ)に倒す。
+            }
+
+            return (true, true);
         }
 
         private ResolvedTypeface HandleMissingFont(FontStyle font)
@@ -377,7 +436,18 @@ namespace Utsushi.Rendering
         {
             lock (_registrationLock)
             {
-                return _registered.TryGetValue(new FontKey(familyName, bold, italic), out typeface!);
+                // 日本語名 ↔ 英語名の別名でも探す(要件11.6。例: 「MS PGothic」で登録した msgothic.ttc を
+                // 日本語版Excelの「ＭＳ Ｐゴシック」で引く)。
+                foreach (var candidate in FontFamilyAliases.Candidates(familyName))
+                {
+                    if (_registered.TryGetValue(new FontKey(candidate, bold, italic), out typeface!))
+                    {
+                        return true;
+                    }
+                }
+
+                typeface = null!;
+                return false;
             }
         }
 
@@ -407,6 +477,8 @@ namespace Utsushi.Rendering
                 }
 
                 _cache.Clear();
+                _glyphFallbacks.Clear();
+                _substituted.Clear();
             }
         }
 

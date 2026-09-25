@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using SkiaSharp;
 using Utsushi.Layout.Model;
 using Utsushi.Parsing.Model;
@@ -160,15 +161,19 @@ namespace Utsushi.Rendering
 
             foreach (var (typeface, entry) in usage)
             {
-                var created = new List<(SKTypeface, TrueTypeSubset)>();
-                foreach (var (glyphs, characterMap) in entry.Buckets)
+                // 表の読み出し(IPAmj明朝の glyf は45MB)はバケット間で共有する。
+                var built = TrueTypeSubsetter.TryCreateMany(
+                    typeface,
+                    entry.Buckets.Select(b => ((IEnumerable<ushort>)b.Glyphs, (IReadOnlyDictionary<int, ushort>)b.CharacterMap)).ToList());
+                if (built is null)
                 {
-                    var subset = TrueTypeSubsetter.TryCreate(typeface, glyphs, characterMap);
-                    if (subset is null)
-                    {
-                        break;
-                    }
+                    // サブセットを作れない書体(CFF形式・埋め込み許可の制限など)は元の書体を埋め込む。
+                    continue;
+                }
 
+                var created = new List<(SKTypeface, TrueTypeSubset)>();
+                foreach (var subset in built)
+                {
                     using var data = SKData.CreateCopy(subset.FontData);
                     var subsetTypeface = SKTypeface.FromData(data);
                     if (subsetTypeface is null)

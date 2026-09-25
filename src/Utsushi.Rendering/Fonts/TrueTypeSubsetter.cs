@@ -27,8 +27,13 @@ namespace Utsushi.Rendering.Fonts
     /// </remarks>
     internal static class TrueTypeSubsetter
     {
+        private const ushort FsTypeUsagePermissionsMask = 0x000F;
         private const ushort FsTypeRestrictedLicense = 0x0002;
         private const ushort FsTypeNoSubsetting = 0x0100;
+        private const ushort FsTypeBitmapEmbeddingOnly = 0x0200;
+
+        /// <summary>format 4 の <c>cmap</c> に載せられる文字数の上限(表の長さが16ビットに収まる範囲)。</summary>
+        private const int MaxFormat4Characters = 8000;
 
         /// <summary>サブセットへ写すテーブル(字形の描画・PDF埋め込みに必要なもの)。<c>cmap</c>/<c>post</c> は作り直す。</summary>
         private static readonly string[] CopiedTables = { "OS/2", "name", "cvt ", "fpgm", "prep", "gasp" };
@@ -40,13 +45,41 @@ namespace Utsushi.Rendering.Fonts
         /// <param name="glyphs">使った字形番号。</param>
         /// <param name="unicodeToGlyph">使った文字 → 元の字形番号(新しい <c>cmap</c> に載せる)。</param>
         public static TrueTypeSubset? TryCreate(
-            SKTypeface typeface, IEnumerable<ushort> glyphs, IReadOnlyDictionary<int, ushort> unicodeToGlyph)
+            SKTypeface typeface, IEnumerable<ushort> glyphs, IReadOnlyDictionary<int, ushort> unicodeToGlyph) =>
+            TryCreateMany(typeface, new[] { (glyphs, unicodeToGlyph) })?[0];
+
+        /// <summary>
+        /// 同じ書体から複数のサブセットを作る(異体字のためのバケット。RenderContext 参照)。表の読み出しは1回だけ行う。
+        /// 1つでも作れなければ null を返す。
+        /// </summary>
+        public static IReadOnlyList<TrueTypeSubset>? TryCreateMany(
+            SKTypeface typeface,
+            IReadOnlyList<(IEnumerable<ushort> Glyphs, IReadOnlyDictionary<int, ushort> UnicodeToGlyph)> buckets)
         {
             try
             {
-                return Create(typeface, glyphs, unicodeToGlyph);
+                var tables = ReadTables(typeface);
+                if (tables is null)
+                {
+                    return null;
+                }
+
+                var subsets = new List<TrueTypeSubset>(buckets.Count);
+                foreach (var (glyphs, unicodeToGlyph) in buckets)
+                {
+                    var subset = Create(tables, glyphs, unicodeToGlyph);
+                    if (subset is null)
+                    {
+                        return null;
+                    }
+
+                    subsets.Add(subset);
+                }
+
+                return subsets;
             }
-            catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentException or InvalidDataException)
+            catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentException or InvalidDataException
+                or IOException or OverflowException)
             {
                 // テーブルが想定外の形をしている場合は、サブセット化をあきらめて元のフォントを埋め込む
                 // (PDFが大きくなるだけで、描画結果は変わらない)。
@@ -54,27 +87,68 @@ namespace Utsushi.Rendering.Fonts
             }
         }
 
-        private static TrueTypeSubset? Create(
-            SKTypeface typeface, IEnumerable<ushort> glyphs, IReadOnlyDictionary<int, ushort> unicodeToGlyph)
+        /// <summary>
+        /// サブセット化に必要な表を読む。サブセット化できない書体なら null。
+        /// </summary>
+        /// <remarks>
+        /// 埋め込み許可(OS/2 <c>fsType</c>)の用途ビット(下位4ビット)が「制限付きライセンス」のみの書体、
+        /// 「サブセット化禁止」「ビットマップのみ埋め込み可」の書体はサブセット化しない。これらの書体を
+        /// SkiaSharp は、フォント全体の埋め込み(サブセット化禁止)または Type 3(字形の輪郭を直接収める。
+        /// 制限付き・ビットマップのみ)として出力する(security-reviewerの実測)。いずれも本サブセット化を
+        /// 導入する前と同じ挙動である。
+        /// 表の読み出しに失敗した場合(SkiaSharp の <c>GetTableData</c> は基底の <see cref="Exception"/> を
+        /// 投げることがある)も null とする。
+        /// </remarks>
+        private static Dictionary<string, byte[]>? ReadTables(SKTypeface typeface)
         {
-            var tables = typeface.GetTableTags().ToDictionary(TagName, tag => tag);
-            if (!tables.ContainsKey("glyf") || !tables.ContainsKey("loca") || !tables.ContainsKey("head")
-                || !tables.ContainsKey("hhea") || !tables.ContainsKey("hmtx") || !tables.ContainsKey("maxp"))
+            if (!typeface.TryGetTableTags(out var tags) || tags is null)
             {
                 return null;
             }
 
-            byte[] Table(string name) => typeface.GetTableData(tables[name]);
-
-            if (tables.ContainsKey("OS/2"))
+            var tables = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            foreach (var tag in tags)
             {
-                var os2 = Table("OS/2");
+                var name = TagName(tag);
+                if (!RequiredTables.Contains(name) && Array.IndexOf(CopiedTables, name) < 0 && name != "post")
+                {
+                    continue;
+                }
+
+                if (!typeface.TryGetTableData(tag, out var data) || data is null)
+                {
+                    return null;
+                }
+
+                tables[name] = data;
+            }
+
+            // 可変フォント(fvar)は、表が既定のインスタンスのものしか取り出せず、太さ等を指定した書体を
+            // サブセット化すると字形・送り幅が変わってしまうため、サブセット化しない(code-reviewer指摘)。
+            if (!RequiredTables.All(tables.ContainsKey) || Array.IndexOf(tags, 0x66766172u) >= 0)
+            {
+                return null;
+            }
+
+            if (tables.TryGetValue("OS/2", out var os2))
+            {
                 var fsType = ReadUInt16(os2, 8);
-                if ((fsType & (FsTypeRestrictedLicense | FsTypeNoSubsetting)) != 0)
+                if ((fsType & FsTypeUsagePermissionsMask) == FsTypeRestrictedLicense
+                    || (fsType & (FsTypeNoSubsetting | FsTypeBitmapEmbeddingOnly)) != 0)
                 {
                     return null;
                 }
             }
+
+            return tables;
+        }
+
+        private static readonly string[] RequiredTables = { "glyf", "loca", "head", "hhea", "hmtx", "maxp" };
+
+        private static TrueTypeSubset? Create(
+            Dictionary<string, byte[]> tables, IEnumerable<ushort> glyphs, IReadOnlyDictionary<int, ushort> unicodeToGlyph)
+        {
+            byte[] Table(string name) => tables[name];
 
             var head = Table("head");
             var hhea = Table("hhea");
@@ -105,12 +179,14 @@ namespace Utsushi.Rendering.Fonts
             }
 
             // 使った字形 + .notdef + 複合字形が参照する部品を集める。
-            var kept = new SortedSet<ushort> { 0 };
+            // .notdef(0番)も他の字形と同じく部品をたどる(.notdef が複合字形の場合に部品が欠けないように)。
+            var kept = new SortedSet<ushort>();
             var pending = new Stack<ushort>(glyphs.Where(g => g < numGlyphs));
+            pending.Push(0);
             while (pending.Count > 0)
             {
                 var glyph = pending.Pop();
-                if (!kept.Add(glyph) && glyph != 0)
+                if (!kept.Add(glyph))
                 {
                     continue;
                 }
@@ -157,6 +233,11 @@ namespace Utsushi.Rendering.Fonts
                     }
 
                     newGlyf.Write(data, 0, data.Length);
+                    if (newGlyf.Length > glyf.Length + (order.Count * 4L))
+                    {
+                        return null; // 上と同じ理由(書き終える前に打ち切る)
+                    }
+
                     while (newGlyf.Length % 4 != 0)
                     {
                         newGlyf.WriteByte(0);
@@ -165,6 +246,12 @@ namespace Utsushi.Rendering.Fonts
             }
 
             WriteUInt32(newLoca, order.Count * 4, (uint)newGlyf.Length);
+            if (newGlyf.Length > glyf.Length + (order.Count * 4L))
+            {
+                // loca の範囲が重なっている(複数の字形が同じデータを指す)不正なフォントで、出力が元より大きくなる。
+                // サブセット化の意味が無く、極端な場合はメモリを使い果たすため諦める。
+                return null;
+            }
 
             // hmtx: 全字形ぶんの (送り幅, 左側ベアリング) を持たせる。
             var newHmtx = new byte[order.Count * 4];
@@ -212,14 +299,14 @@ namespace Utsushi.Rendering.Fonts
                 ["loca"] = newLoca,
                 ["glyf"] = newGlyf.ToArray(),
                 ["cmap"] = BuildCmap(mappedUnicode),
-                ["post"] = BuildPost(tables.ContainsKey("post") ? Table("post") : null),
+                ["post"] = BuildPost(tables.TryGetValue("post", out var post) ? post : null),
             };
 
             foreach (var name in CopiedTables)
             {
-                if (tables.ContainsKey(name))
+                if (tables.TryGetValue(name, out var table))
                 {
-                    output[name] = Table(name);
+                    output[name] = table;
                 }
             }
 
@@ -272,7 +359,13 @@ namespace Utsushi.Rendering.Fonts
             var sorted = unicodeToGlyph.OrderBy(pair => pair.Key).ToList();
 
             // format 4: BMP の文字を1文字1セグメントで持つ(帳票1枚ぶんの文字数なら十分小さい)。
+            // 表の長さは16ビットのため、文字数が多すぎる場合は format 12 だけにする(FreeType は format 12 を優先する)。
             var bmp = sorted.Where(pair => pair.Key <= 0xFFFF && pair.Key != 0xFFFF).ToList();
+            if (bmp.Count > MaxFormat4Characters)
+            {
+                return BuildCmapHeader(format4: null, BuildFormat12(sorted));
+            }
+
             var segCount = bmp.Count + 1; // 末尾の 0xFFFF 番兵
             var format4 = new byte[16 + (segCount * 8)];
             WriteUInt16(format4, 0, 4);
@@ -295,6 +388,11 @@ namespace Utsushi.Rendering.Fonts
                 // idRangeOffset はすべて 0(idDelta で直接対応させる)
             }
 
+            return BuildCmapHeader(format4, BuildFormat12(sorted));
+        }
+
+        private static byte[] BuildFormat12(List<KeyValuePair<int, ushort>> sorted)
+        {
             var format12 = new byte[16 + (sorted.Count * 12)];
             WriteUInt16(format12, 0, 12);
             WriteUInt32(format12, 4, (uint)format12.Length);
@@ -307,16 +405,28 @@ namespace Utsushi.Rendering.Fonts
                 WriteUInt32(format12, o + 8, sorted[i].Value);
             }
 
-            var header = new byte[4 + (2 * 8)];
-            WriteUInt16(header, 2, 2);
-            WriteUInt16(header, 4, 3); // Windows
-            WriteUInt16(header, 6, 1); // Unicode BMP
-            WriteUInt32(header, 8, (uint)header.Length);
-            WriteUInt16(header, 12, 3); // Windows
-            WriteUInt16(header, 14, 10); // Unicode full
-            WriteUInt32(header, 16, (uint)(header.Length + format4.Length));
+            return format12;
+        }
 
-            return header.Concat(format4).Concat(format12).ToArray();
+        private static byte[] BuildCmapHeader(byte[]? format4, byte[] format12)
+        {
+            var records = format4 is null ? 1 : 2;
+            var header = new byte[4 + (records * 8)];
+            WriteUInt16(header, 2, (ushort)records);
+            var record = 4;
+            if (format4 is not null)
+            {
+                WriteUInt16(header, record, 3); // Windows
+                WriteUInt16(header, record + 2, 1); // Unicode BMP
+                WriteUInt32(header, record + 4, (uint)header.Length);
+                record += 8;
+            }
+
+            WriteUInt16(header, record, 3); // Windows
+            WriteUInt16(header, record + 2, 10); // Unicode full
+            WriteUInt32(header, record + 4, (uint)(header.Length + (format4?.Length ?? 0)));
+
+            return format4 is null ? header.Concat(format12).ToArray() : header.Concat(format4).Concat(format12).ToArray();
         }
 
         /// <summary>字形名を持たない <c>post</c>(format 3)を作る。元の斜体角・下線位置などは引き継ぐ。</summary>

@@ -18,7 +18,8 @@ namespace Utsushi.Rendering.Fonts
 
         private const string ResourceName = "Utsushi.Rendering.Fonts.BIZUDPGothic-Regular.ttf";
 
-        private static readonly Lazy<SKTypeface> JapaneseGothic = new(LoadJapaneseGothic);
+        // 読み込みに失敗した場合に例外をキャッシュし続けないよう、PublicationOnly にする(次の呼び出しで再試行する)。
+        private static readonly Lazy<SKTypeface> JapaneseGothic = new(LoadJapaneseGothic, System.Threading.LazyThreadSafetyMode.PublicationOnly);
 
         /// <summary>同梱フォントのうち、指定のファミリ名(日本語名を含む)に一致するものを返す。</summary>
         internal static SKTypeface? Find(string familyName)
