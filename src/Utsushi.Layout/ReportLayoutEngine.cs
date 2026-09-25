@@ -281,6 +281,16 @@ namespace Utsushi.Layout
         {
             foreach (var cell in report.SubstitutedCells.OrderBy(c => c.Row).ThenBy(c => c.Column))
             {
+                if (IsHidden(report.Sheet, cell))
+                {
+                    throw new LayoutComputationException(
+                        $"値を差し込んだセル {cell} が非表示の行または列にあるため、PDFに出力されません。"
+                        + "テンプレートの非表示設定またはセル番地を見直してください。",
+                        report.Definition.ReportCode,
+                        report.Sheet.Name,
+                        cell);
+                }
+
                 if (printRanges.Any(range => IsRenderedByRange(cell, range, titles)))
                 {
                     continue;
@@ -293,6 +303,20 @@ namespace Utsushi.Layout
                     report.Sheet.Name,
                     cell);
             }
+        }
+
+        /// <summary>
+        /// セル(結合範囲のアンカーなら範囲全体)のすべての行、またはすべての列が非表示かどうか。
+        /// </summary>
+        private static bool IsHidden(SheetModel sheet, CellAddress cell)
+        {
+            var range = sheet.FindMergedRange(cell)?.Range ?? new CellRange(cell, cell);
+            var lastRow = Math.Min(range.LastRow, range.FirstRow + 4096);
+            var lastColumn = Math.Min(range.LastColumn, range.FirstColumn + 4096);
+
+            var allRowsHidden = Enumerable.Range(range.FirstRow, lastRow - range.FirstRow + 1).All(sheet.IsRowHidden);
+            var allColumnsHidden = Enumerable.Range(range.FirstColumn, lastColumn - range.FirstColumn + 1).All(sheet.IsColumnHidden);
+            return allRowsHidden || allColumnsHidden;
         }
 
         /// <summary>

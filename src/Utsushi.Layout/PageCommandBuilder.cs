@@ -100,13 +100,7 @@ namespace Utsushi.Layout
                         var anchorCell = _sheet.GetCell(merged.Anchor);
                         var borders = ResolveMergedBorders(
                             merged.Range, anchorCell?.Style.Borders ?? BorderSet.None, rowIndex, columnIndex);
-                        // 改ページで結合範囲の一部だけが見えているページでは、セルの本来の高さが
-                        // 分からないため、折り返し行の欠落検出(要件2.14)を行わない。
-                        var fullyVisible = rowIndex.ContainsKey(merged.Range.FirstRow)
-                            && rowIndex.ContainsKey(merged.Range.LastRow)
-                            && columnIndex.ContainsKey(merged.Range.FirstColumn)
-                            && columnIndex.ContainsKey(merged.Range.LastColumn);
-                        EmitCell(merged.Anchor, anchorCell, mergedRect.Value, borders, fullyVisible);
+                        EmitCell(merged.Anchor, anchorCell, mergedRect.Value, borders, merged.Range);
                         continue;
                     }
 
@@ -584,14 +578,21 @@ namespace Utsushi.Layout
         private double RawRowHeightPt(int row) => _sheet.IsRowHidden(row) ? 0.0 : _sheet.GetRowHeight(row);
 
         private void EmitCell(
-            CellAddress address, CellModel? cell, RectPt rect, BorderSet? bordersOverride = null, bool fullyVisible = true)
+            CellAddress address, CellModel? cell, RectPt rect, BorderSet? bordersOverride = null, CellRange? mergedRange = null)
         {
+            var style = cell?.Style ?? CellStyle.Default;
+            var text = cell?.DisplayValue;
+
+            // 差し込み値は、矩形が空(行高・列幅が0)で何も描かれない場合も含めて検証する(要件2.13, 2.14)。
+            if (!string.IsNullOrEmpty(text) && _report.SubstitutedCells.Contains(address))
+            {
+                EnsureSubstitutedTextFits(address, style, text!, rect, mergedRange);
+            }
+
             if (rect.IsEmpty)
             {
                 return;
             }
-
-            var style = cell?.Style ?? CellStyle.Default;
 
             if (!style.BackgroundColor.IsTransparent)
             {
@@ -600,10 +601,9 @@ namespace Utsushi.Layout
 
             EmitBorders(rect, bordersOverride ?? style.Borders);
 
-            var text = cell?.DisplayValue;
             if (!string.IsNullOrEmpty(text))
             {
-                EmitText(address, cell!, style, rect, text!, fullyVisible);
+                EmitText(address, cell!, style, rect, text!);
             }
         }
 
@@ -766,7 +766,7 @@ namespace Utsushi.Layout
         // テキスト(要件4.1, 4.4, 2.5)
         // ---------------------------------------------------------------------
 
-        private void EmitText(CellAddress address, CellModel cell, CellStyle style, RectPt rect, string text, bool fullyVisible)
+        private void EmitText(CellAddress address, CellModel cell, CellStyle style, RectPt rect, string text)
         {
             var maxDigitWidthPx = _report.Definition.MaxDigitWidthPx;
             var paddingPt = ExcelUnitConverter.CellPaddingPoints * _scale;
@@ -804,11 +804,6 @@ namespace Utsushi.Layout
             var totalHeight = metrics.LineSpacingPt * lines.Count;
             var firstBaselineY = ResolveFirstBaselineY(style.VAlign, rect, metrics, totalHeight);
 
-            if (overflow == OverflowBehavior.Wrap && fullyVisible && _report.SubstitutedCells.Contains(address))
-            {
-                EnsureWrappedLinesVisible(address, rect, metrics, firstBaselineY, lines.Count);
-            }
-
             RectPt? clipRect = overflow is OverflowBehavior.Clip or OverflowBehavior.Wrap or OverflowBehavior.Shrink
                 ? rect
                 : null;
@@ -822,21 +817,59 @@ namespace Utsushi.Layout
         }
 
         /// <summary>
-        /// 差し込み値を折り返した各行が、セルの矩形内に表示されることを確かめる(要件2.14)。
+        /// 差し込み値がセル内に表示されることを確かめる(要件2.13, 2.14)。
         /// </summary>
         /// <remarks>
-        /// 行の上下方向の中心がセルの外にある行を「表示されない」とみなす。フォントの行間
-        /// (<see cref="FontMetrics.LineSpacingPt"/>)はExcelの行高より僅かに大きいことが多く、
-        /// 行全体が収まることを条件にすると、Excel上では収まっている2行の住所まで誤検出するため。
+        /// <para>
+        /// 判定はページ上に見えている矩形ではなく、セル(結合範囲なら範囲全体)のシート上の本来の大きさで行う。
+        /// 結合範囲が改ページ・印刷範囲の端・非表示行にかかって一部しか見えないページでも、判定を省かずに済むようにするため。
+        /// </para>
+        /// <para>
+        /// 折り返し表示では、各行の字面(アセント+ディセント)の4分の1を超えてセルの外に出る行を
+        /// 「表示されない」とみなす。フォントの行送りはExcelの行高よりわずかに大きいことが多く、
+        /// 字面全体が収まることを条件にすると、Excel上で収まっている住所まで誤検出するため。
+        /// </para>
         /// </remarks>
-        private void EnsureWrappedLinesVisible(
-            CellAddress address, RectPt rect, FontMetrics metrics, double firstBaselineY, int lineCount)
+        private void EnsureSubstitutedTextFits(
+            CellAddress address, CellStyle style, string text, RectPt visibleRect, CellRange? mergedRange)
         {
+            var (widthPt, heightPt) = mergedRange is { } range
+                ? (SumBounded(range.FirstColumn, range.LastColumn, RawColumnWidthPt) * _scale,
+                   SumBounded(range.FirstRow, range.LastRow, RawRowHeightPt) * _scale)
+                : (visibleRect.Width, visibleRect.Height);
+
+            var paddingPt = ExcelUnitConverter.CellPaddingPoints * _scale;
+            var indentPt = ExcelUnitConverter.IndentWidthToPoints(style.Indent, _report.Definition.MaxDigitWidthPx) * _scale;
+            var contentWidthPt = widthPt - (paddingPt * 2) - indentPt;
+
+            if (contentWidthPt <= 0 || heightPt <= 0)
+            {
+                throw new LayoutComputationException(
+                    $"セル {address} に値を差し込みましたが、セルの幅または高さが無いため、PDFに出力されません。"
+                    + "テンプレートの列幅・行の高さを見直してください。",
+                    _report.Definition.ReportCode,
+                    _sheet.Name,
+                    address);
+            }
+
+            if (ResolveOverflow(address, style) != OverflowBehavior.Wrap)
+            {
+                return;
+            }
+
+            var font = style.Font with { SizePt = style.Font.SizePt * _scale };
+            var lineCount = WrapLines(font, text, contentWidthPt).Count;
+            var metrics = _fontMetrics.GetMetrics(font);
+            var cellRect = new RectPt(0, 0, widthPt, heightPt);
+            var firstBaselineY = ResolveFirstBaselineY(style.VAlign, cellRect, metrics, metrics.LineSpacingPt * lineCount);
+            var tolerancePt = (metrics.AscentPt + metrics.DescentPt) / 4.0;
+
             for (var i = 0; i < lineCount; i++)
             {
-                var lineTop = firstBaselineY - metrics.AscentPt + (metrics.LineSpacingPt * i);
-                var lineCenter = lineTop + (metrics.LineSpacingPt / 2.0);
-                if (lineCenter >= rect.Top && lineCenter <= rect.Bottom)
+                var baselineY = firstBaselineY + (metrics.LineSpacingPt * i);
+                var glyphTop = baselineY - metrics.AscentPt;
+                var glyphBottom = baselineY + metrics.DescentPt;
+                if (glyphTop >= cellRect.Top - tolerancePt && glyphBottom <= cellRect.Bottom + tolerancePt)
                 {
                     continue;
                 }
@@ -849,11 +882,24 @@ namespace Utsushi.Layout
                             + "差し込む文字数・行数を減らしてください。",
                         address,
                         lineCount,
-                        rect.Height / _scale),
+                        heightPt / _scale),
                     _report.Definition.ReportCode,
                     _sheet.Name,
                     address);
             }
+        }
+
+        /// <summary>行/列番号の範囲の大きさを合計する。走査数には<see cref="MaxSpanCells"/>の上限を設ける。</summary>
+        private static double SumBounded(int first, int last, Func<int, double> sizeOf)
+        {
+            var total = 0.0;
+            var boundedLast = Math.Min(last, first + MaxSpanCells);
+            for (var i = first; i <= boundedLast; i++)
+            {
+                total += sizeOf(i);
+            }
+
+            return total;
         }
 
         /// <summary>折り返し表示でないセルのために改行文字を取り除く(要件4.7)。</summary>

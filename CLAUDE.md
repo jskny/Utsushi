@@ -75,3 +75,5 @@ dotnet run --project src/Utsushi.Cli -- \
 
 > 開発環境に対象フォント(MS PGothic等)が無い場合、既定の厳格モードでは `FontNotAvailableException` になる。
 > 動作確認だけなら `--allow-font-fallback IPAGothic` のように代替フォントを指定する(見た目は崩れる)。
+> 日本語フォント自体が無い環境では字形欠落の検出で `MissingGlyphException` になるため、`--allow-missing-glyphs` も付ける
+> (日本語は豆腐になる。IPAフォントの入れ方は `docs/開発環境メモ.md`「2. 日本語フォント」)。

@@ -348,15 +348,17 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
 - 必須キー未指定・未知キー指定はここで例外(要件2.3, 2.4)。必須キーに空文字・空白のみの値が渡された場合も
   `RequiredSubstitutionValueMissingException` とする(要件2.12)。
 - **差し込み値の検証・正規化(要件2.10, 2.11)**: `Apply`・`ApplyCellOverrides`の両経路で、書き換えの前に
-  全値を`NormalizeValue`に通す。`null`、改行(LF/CR)以外の制御文字(`char.IsControl`。タブ・NUL・DEL・C1を含む)、
+  全値を`NormalizeValue`に通す。`null`、改行以外の制御文字(`char.IsControl`。タブ・NUL・DEL・C1を含む)、
+  不可視の書式文字(`UnicodeCategory.Format`。ゼロ幅スペース・BOM・ソフトハイフン等)、
   対になっていないサロゲートは`InvalidSubstitutionValueException`(Stage=Substitution。`Target`に置換キー
-  またはセル番地の文字列、`CellAddress`に対象セル)とする。CRLF・CR単独はLFへ統一する。
+  またはセル番地の文字列、`CellAddress`に対象セル)とする。CRLF・CR単独・U+2028・U+2029はLFへ統一する。
+  `ApplyCellOverrides`でも、必須キーのセルを空文字・空白のみにする指定は`RequiredSubstitutionValueMissingException`とする(要件2.12)。
   値の「内容」の正規化のみで、書式には触れない(要件2.2)。
 - **差し込み済みセルの記録(要件2.13, 2.14)**: 空でない値を差し込んだセルを`ReportModel.SubstitutedCells`に
   記録する(空文字で値を消したセルは外す)。Layoutレイヤーは、テンプレート自身の文字列とは区別して、
   この集合のセルに限り欠落の検出を行う。`ReportModel`の位置パラメータには加えず`init`プロパティとし、
   既存の`ReportModel.Create`/`with`式の呼び出し側を変えずに済むようにした。
-- はみ出し時の挙動(`overflow: shrink|clip|wrap`)は帳票定義の値をそのままLayoutレイヤーに引き渡すためのフラグとして `ReportModel` に保持する(実際の折り返し/縮小計算はLayoutレイヤーの責務)。
+- はみ出し時の挙動(`overflow: overflow|shrink|clip|wrap`)は帳票定義の値をそのままLayoutレイヤーに引き渡すためのフラグとして `ReportModel` に保持する(実際の折り返し/縮小計算はLayoutレイヤーの責務)。
 - `ApplyCellOverrides` は、帳票定義の置換キー(`SubstitutionFields`)を経由せず、セル番地(A1形式の文字列。キーは `CellAddress.TryParse` で解釈する)を直接指定して値を書き換える第二の経路(要件2.7, 2.8)。
   - `Apply` と同じく `CellModel.WithText` で値のみを差し替え、書式には触れない。対象セルが未存在(空セル)の場合は既定スタイルの新規セルを作る点も `Apply` と同一。
   - `Apply` と同様、全入力を検証してから一括で書き換える二段階構成(`ParseAndValidateAddresses` → 書き換え)を取る。
@@ -386,10 +388,17 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     図形内テキストも同じ`WrapLines`を使う。折り返し表示でないセル(はみ出し・切り取り・縮小)では、
     Excelと同様に改行文字を取り除いて1行として配置する(`RemoveLineBreaks`)。
   - **折り返した差し込み値の欠落検出(要件2.14)**: 折り返し表示で、かつ`SubstitutedCells`に含まれるセルは、
-    各行の上下方向の中心がセルの矩形内にあることを確かめ(`EnsureWrappedLinesVisible`)、外れる行があれば
-    `LayoutComputationException`(`CellAddress`に対象セル)とする。行全体が収まることを条件にしないのは、
-    フォントの行間がExcelの行高よりわずかに大きいことが多く、Excel上で収まっている2行の住所まで誤検出するため。
-    結合範囲が改ページをまたいで一部だけが見えているページでは、本来の高さが分からないため判定しない。
+    各行の字面(アセント+ディセント)が、字面の高さの4分の1の許容量を超えてセルの外に出ないことを確かめ
+    (`EnsureSubstitutedTextFits`)、出る行があれば`LayoutComputationException`(`CellAddress`に対象セル)とする。
+    字面全体が収まることを条件にしないのは、フォントの行送りがExcelの行高よりわずかに大きいことが多く、
+    Excel上で収まっている住所まで誤検出するため。判定はページ上に見えている矩形ではなく、セル(結合範囲なら
+    範囲全体。非表示の行・列は0として合計する)のシート上の本来の大きさで行う。結合範囲が改ページ・印刷範囲の端・
+    非表示行にかかって一部しか見えないページでも判定を省かないため(layout-fidelity-reviewer指摘)。
+    同じ関数で、差し込みセルの幅(余白・インデントを除く)または高さが0以下で何も描画できない場合もエラーにする(要件2.13)。
+    非表示の行・列にある差し込みセルは、ページ上に行・列自体が現れないため、`ValidateSubstitutedCellsAreInPrintRanges`で
+    印刷範囲外と同様にエラーにする。
+  - **ヘッダー/フッターの改行**: 複数行のヘッダー/フッターは未対応のため、改行を取り除いて1行に配置する
+    (`HeaderFooterCommandBuilder.ScaleRuns`。以前は改行文字がそのまま描画され豆腐や空白になっていた)。
   - ページヘッダー/フッターの書式コード展開と配置(要件3.7〜3.9)
   - 結合セルの矩形統合
   - セル内テキストのフォントメトリクスに基づく配置(左右/上下揃え、インデント、縮小表示)
@@ -670,7 +679,8 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
 - **字形の欠落検出(要件5.5)**: `DrawText`(セル・ヘッダー/フッター・図形内テキストの共通経路)で、
   描画前に各文字(`string.EnumerateRunes`)を`SKFont.GetGlyph`で字形IDに変換し、0(.notdef)になる文字が
   あれば`MissingGlyphException`(`FontName`・`CodePoint`・`Text`、帳票コード・シート名)を送出する。
-  制御文字は判定しない。`PdfRenderOptions.MissingGlyphs`(`MissingGlyphPolicy.Error`が既定、
+  制御文字は判定しない。例外メッセージには宛名・住所などの個人情報がログへ丸ごと流れないよう描画文字列の
+  先頭10文字だけを載せ、全文は`Text`プロパティで参照させる。`PdfRenderOptions.MissingGlyphs`(`MissingGlyphPolicy.Error`が既定、
   `Render`で従来どおり描画)で切り替えられる。`PdfRenderOptions`の位置パラメータには加えず`init`
   プロパティとし、既存の`with`式や`Default`/`OutlineText`の利用側を変えずに済むようにした。
   セル番地は`TextCommand`が持たないため例外に含まれない(`Text`で該当セルを特定する)。
@@ -678,7 +688,8 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   1回だけ行う(以前は`ConcurrentDictionary.GetOrAdd`の引数で生成済みの値を渡していたため、同時実行時に
   書体が重複して生成されていた)。インストール済みフォントから解決した書体は`Dispose`でも解放しない。
   SkiaSharp は同じネイティブ書体に対してプロセス全体で同一のマネージドオブジェクトを返す(実測で確認)ため、
-  解放すると同じプロセス内の別の`FontResolver`が使っている書体まで壊すことになる。
+  解放は同じプロセス内の別の`FontResolver`が使っている書体への操作になる(2.88.8では解放後も書体が使え続ける
+  ことを実測したが、その内部挙動に依存しないよう解放しない)。
 - **フォント埋め込み方針(決定済み)**: PDF内の文字列検索・コピーを維持するため、
   **フォントを埋め込む `PdfTextRendering.EmbedFont` を既定とする**。
   SkiaSharp の PDF バックエンド(NuGetで配布されるネイティブビルド)は
@@ -960,7 +971,7 @@ public sealed record GroupCommand(
   - `ReportDefinitionSchemaException`(要件6.3。問題のあったプロパティパスを保持する)
   - `LayoutComputationException`(要件2.6, 2.13, 2.14 を含む) / `PdfRenderingException` / `FontNotAvailableException`
   - `MissingGlyphException`(要件5.5。描画する文字の字形がフォントに無い)
-- すべての例外は、帳票コード・シート名・セル番地・処理段階(Parsing/Substitution/Layout/Rendering)を構造化プロパティとして保持し、ログ出力時に特定できるようにする(要件6.4)。
+- すべての例外は、帳票コード・シート名・セル番地・処理段階(Parsing/Substitution/Layout/Rendering)を構造化プロパティとして保持し、ログ出力時に特定できるようにする(要件6.4)。ただし`MissingGlyphException`は描画命令(`TextCommand`)がセル番地を持たないためセル番地を含まず、代わりに該当文字列(`Text`)で特定する。
 - Renderingレイヤーは一時ファイル/一時ストリームに書き込み、正常終了時のみ最終出力先へ確定させる(要件5.4: 不完全PDFを残さない)。
 
 ### 信頼できない入力に対する安全弁 一覧
@@ -1035,13 +1046,19 @@ public sealed record GroupCommand(
   - 横位置「均等割り付け」「両端揃え」「繰り返し」は左揃え、「選択範囲内で中央」は自セル内の中央揃え、
     縦位置「均等割り付け」「両端揃え」は中央揃えとして扱う。インデントは常に左側に加算される。
   - はみ出し表示(`overflow`)は、Excelと違い隣のセルに値があっても止まらず重なって描画される。
-  - 禁則処理・英単語単位の折り返しは行わない(書記素クラスタ単位の単純な幅基準)。
+  - 禁則処理・英単語単位の折り返しは行わない(書記素クラスタ単位の単純な幅基準)。Excelとは行数が
+    1行ずれることがあり、要件2.14の判定もこの行数に基づく。
+  - 横方向の欠落は検出しない。`clip`のセルでは長い氏名・住所が右側で切り詰められ、`overflow`のセルでは
+    印刷範囲の右端・ページの外にはみ出した部分が欠ける。要件2.14は縦方向(折り返し行)のみを対象とする。
+  - 複数行のヘッダー/フッターは未対応(改行を取り除いて1行に配置する)。
   - 文字の合成(シェーピング)を行わないため、異体字セレクタ(IVS)で指定した字形や、合成用濁点との
-    合成は再現されない。字形の無い文字はエラー(要件5.5)になるが、異体字セレクタ自体の字形がフォントに
-    ある場合は基底文字と並べて描画される。
+    合成は再現されない。`SKFont.GetGlyph`はIVSの対応表(cmap format 14)を参照しないため、IVS対応フォントで
+    あってもIVS付きの文字は字形欠落(要件5.5)のエラーになる。合成用濁点(U+3099)は、フォントに字形があれば
+    基底文字と別の字形として並べて描画される。対応するにはシェーピング(MITライセンスのSkiaSharp.HarfBuzz等)が要る。
 - **大量発行時の性能**: 変換のたびに`definition.json`と`.xlsx`全体を解析し直す(キャッシュ無し)。
   折り返しは1文字追加するたびに行頭からの幅を測り直すため、処理量は1段落の文字数の2乗に比例する。
-  開発環境の実測では請求書サンプル1件あたり約0.3秒(フォント埋め込み、4.3MB)。
+  開発環境の実測では、同一プロセス内で1つのコンバータを使い回して請求書サンプルを20件連続変換した場合に
+  1件あたり約0.3秒(初回のフォント解決を除く。フォント埋め込み、4.3MB)。
   発行件数が問題になった時点で、テンプレート解析結果のキャッシュ(`WorkbookModel`は不変モデルのため
   使い回せる)を検討する。
 

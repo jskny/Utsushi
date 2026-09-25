@@ -165,6 +165,57 @@ namespace Utsushi.Layout.Tests
             Assert.Equal(2, texts.Count);
         }
 
+        [Fact]
+        public void 一行目の字面が大きく切れる場合はエラーになる()
+        {
+            // 1行用の高さ(20pt)に2行を差し込むと、下揃えでは1行目の字面の半分以上がセルの上に出る。
+            var sheet = SingleCellSheet("東京都千代田区\n丸の内1-1-1", wrap: true, columnWidth: 20.0, rowHeightPt: 20.0);
+
+            Assert.Throws<LayoutComputationException>(() => Compute(sheet, A1));
+        }
+
+        [Fact]
+        public void 改ページをまたぐ結合セルでも本来の高さで判定する()
+        {
+            var text = string.Concat(Enumerable.Repeat("あ", 60));
+            var cells = new Dictionary<CellAddress, CellModel>
+            {
+                [A1] = new(text, CellValueKind.Text, CellStyle.Default with { WrapText = true }, text),
+            };
+            var sheet = UniformSheet(
+                rows: 4, columns: 1, columnWidth: 6.0, rowHeightPt: 20.0,
+                pageSetup: NoMarginA4(rowBreaks: new[] { 1 }),
+                mergedRanges: new[] { CellRange.Parse("A1:A3") }) with
+            { Cells = cells };
+
+            var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet, A1));
+
+            Assert.Equal(A1, ex.CellAddress);
+        }
+
+        [Fact]
+        public void 非表示の行にある差し込みセルはエラーになる()
+        {
+            var sheet = UniformSheet(rows: 3, columns: 1, pageSetup: NoMarginA4()) with
+            {
+                HiddenRows = new HashSet<int> { 2 },
+            };
+            var hidden = CellAddress.Parse("A2");
+
+            var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet, hidden));
+
+            Assert.Equal(hidden, ex.CellAddress);
+            Assert.Contains("非表示", ex.Message);
+        }
+
+        [Fact]
+        public void 幅が無い列にある差し込みセルはエラーになる()
+        {
+            var sheet = SingleCellSheet("山田 太郎", wrap: false, columnWidth: 0.1, rowHeightPt: 20.0);
+
+            Assert.Throws<LayoutComputationException>(() => Compute(sheet, A1));
+        }
+
         // -- 要件2.13: 差し込み値のセルが印刷範囲外 -----------------------------
 
         [Fact]

@@ -582,11 +582,24 @@ namespace Utsushi.Rendering
                     rune.Value,
                     text,
                     $"文字 '{rune}'(U+{rune.Value:X4})の字形がフォント '{fontName}' にありません"
-                        + $"(描画しようとした文字列: \"{text}\")。そのまま出力すると豆腐(□)や空白になるため中止しました。"
+                        + $"(描画しようとした文字列の先頭: \"{Excerpt(text)}\")。そのまま出力すると豆腐(□)や空白になるため中止しました。"
                         + "字形を持つフォントを使うか、別の文字に置き換えてください。",
                     reportCode,
                     sheetName);
             }
+        }
+
+        /// <summary>
+        /// 例外メッセージに載せる文字列の抜粋。宛名・住所などの個人情報がログへ丸ごと流れないよう、先頭の数文字に留める
+        /// (全文は <see cref="MissingGlyphException.Text"/> で参照できる)。
+        /// </summary>
+        private static string Excerpt(string text)
+        {
+            const int MaxTextElements = 10;
+            var info = new System.Globalization.StringInfo(text);
+            return info.LengthInTextElements <= MaxTextElements
+                ? text
+                : info.SubstringByTextElements(0, MaxTextElements) + "…";
         }
 
         /// <summary>

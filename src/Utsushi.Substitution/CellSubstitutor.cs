@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.Parsing.Model;
@@ -149,7 +151,7 @@ namespace Utsushi.Substitution
         /// 置換値を検証し、改行コードを LF に統一して返す(要件2.10, 2.11)。
         /// </summary>
         /// <remarks>
-        /// 改行(LF/CR)以外の制御文字(タブを含む)はフォントに字形が無く、PDF上で豆腐や空白になる。
+        /// 改行(LF/CR)以外の制御文字(タブを含む)・不可視の書式文字(Unicodeの Cf)はフォントに字形が無く、PDF上で豆腐や空白になる。
         /// 対になっていないサロゲートも同様に文字として描画できない。いずれも呼び出し元の
         /// データ不備であるため、描画を試みずにエラーとする。
         /// </remarks>
@@ -174,7 +176,7 @@ namespace Utsushi.Substitution
             for (var i = 0; i < value.Length; i++)
             {
                 var c = value[i];
-                if (c == '\n' || c == '\r')
+                if (c == '\n' || c == '\r' || c == '\u2028' || c == '\u2029')
                 {
                     continue;
                 }
@@ -194,6 +196,12 @@ namespace Utsushi.Substitution
                 {
                     problem = $"対になっていないサロゲート U+{(int)c:X4}";
                 }
+                else if (char.GetUnicodeCategory(c) == UnicodeCategory.Format)
+                {
+                    // ゼロ幅スペース(U+200B)・BOM(U+FEFF)など、Webや他システムからの貼り付けで
+                    // 混入しやすい不可視の書式文字。字形を持たず豆腐として描画される。
+                    problem = $"不可視の書式文字 U+{(int)c:X4}";
+                }
 
                 if (problem is not null)
                 {
@@ -207,9 +215,10 @@ namespace Utsushi.Substitution
                 }
             }
 
-            return value.IndexOf('\r') < 0
+            // CRLF・CR単独、およびUnicodeの行区切り(U+2028)・段落区切り(U+2029)をLFに統一する。
+            return value.IndexOf('\r') < 0 && value.IndexOf('\u2028') < 0 && value.IndexOf('\u2029') < 0
                 ? value
-                : value.Replace("\r\n", "\n").Replace('\r', '\n');
+                : value.Replace("\r\n", "\n").Replace('\r', '\n').Replace('\u2028', '\n').Replace('\u2029', '\n');
         }
 
         /// <summary>
@@ -242,8 +251,22 @@ namespace Utsushi.Substitution
                         sheet.Name);
                 }
 
-                parsed.Add((address, NormalizeValue(
-                    replacement, $"セル {address} の直接指定", addressText, definition, sheet.Name, address)));
+                var normalized = NormalizeValue(
+                    replacement, $"セル {address} の直接指定", addressText, definition, sheet.Name, address);
+
+                // 必須キーのセルを直接指定で空にすると、要件2.12の検証をすり抜けてしまう。
+                var requiredField = definition.RequiredFields.FirstOrDefault(f => f.Cell == address);
+                if (requiredField is not null && string.IsNullOrWhiteSpace(normalized))
+                {
+                    throw new RequiredSubstitutionValueMissingException(
+                        requiredField.Key,
+                        $"必須の置換キー '{requiredField.Key}'(セル {address})を、セル番地の直接指定で空にすることはできません。",
+                        definition.ReportCode,
+                        sheet.Name,
+                        address);
+                }
+
+                parsed.Add((address, normalized));
             }
 
             return parsed;

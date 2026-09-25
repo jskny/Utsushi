@@ -18,7 +18,9 @@ namespace Utsushi.Substitution.Tests
         [InlineData("株式会社\u0000サンプル", "U+0000")]
         [InlineData("縦タブ\u000Bあり", "U+000B")]
         [InlineData("DEL\u007F", "U+007F")]
-        public void 改行以外の制御文字を含む値はエラーになる(string value, string expectedCodePoint)
+        [InlineData("山田\u200B太郎", "U+200B")] // ゼロ幅スペース
+        [InlineData("\uFEFF株式会社", "U+FEFF")] // BOM
+        public void 改行以外の制御文字や不可視の書式文字を含む値はエラーになる(string value, string expectedCodePoint)
         {
             var report = Report(Definition(Field("InvoiceNo", "C3")), Sheet(("C3", "x", null)));
 
@@ -151,6 +153,31 @@ namespace Utsushi.Substitution.Tests
             var result = _substitutor.ApplyCellOverrides(applied, new Dictionary<string, string> { ["A1"] = string.Empty });
 
             Assert.DoesNotContain(CellAddress.Parse("A1"), result.SubstitutedCells);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("  ")]
+        public void 必須キーのセルをセル番地直接指定で空にするとエラーになる(string value)
+        {
+            var report = Report(Definition(Field("CustomerName", "A3", required: true)), Sheet(("A3", "x", null)));
+
+            var ex = Assert.Throws<RequiredSubstitutionValueMissingException>(
+                () => _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A3"] = value }));
+
+            Assert.Equal("CustomerName", ex.Key);
+        }
+
+        [Theory]
+        [InlineData("東京都\u2028丸の内")] // 行区切り
+        [InlineData("東京都\u2029丸の内")] // 段落区切り
+        public void Unicodeの行区切りと段落区切りもLFに統一される(string value)
+        {
+            var report = Report(Definition(Field("Address", "A1")), Sheet(("A1", "x", null)));
+
+            var result = _substitutor.Apply(report, new Dictionary<string, string> { ["Address"] = value });
+
+            Assert.Equal("東京都\n丸の内", result.Sheet.GetCell(CellAddress.Parse("A1"))!.DisplayValue);
         }
 
         [Fact]
