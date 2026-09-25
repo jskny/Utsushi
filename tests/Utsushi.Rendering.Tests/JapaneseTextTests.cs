@@ -165,6 +165,25 @@ namespace Utsushi.Rendering.Tests
         }
 
         [Fact]
+        public void フォントコレクションを登録するとファミリ名が一致する書体を使う()
+        {
+            // msgothic.ttc の先頭は MS Gothic のため、「MS PGothic」として登録した場合に先頭の書体を使うと
+            // 等幅の字形幅で配置されてしまう。この環境では Noto Sans CJK の .ttc で確かめる(先頭は JP、2番目は KR)。
+            const string collection = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc";
+            if (!File.Exists(collection))
+            {
+                return; // Noto Sans CJK の無い環境(CIなど)では確認できない
+            }
+
+            using var resolver = new FontResolver(FontResolverOptions.Strict with
+            {
+                FontFiles = new Dictionary<string, string> { ["Noto Sans CJK KR"] = collection },
+            });
+
+            Assert.Equal("Noto Sans CJK KR", resolver.Resolve(Font("Noto Sans CJK KR")).Typeface.FamilyName);
+        }
+
+        [Fact]
         public void 別のフォントは同じとみなさない()
         {
             Assert.False(FontFamilyAliases.AreSame("ＭＳ Ｐゴシック", "MS Gothic"));

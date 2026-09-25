@@ -320,7 +320,8 @@
 > 上限で拒否する(design.md「Parsing レイヤー」参照)。
 >
 > 補足(要件10.9): 接続線(`xdr:cxnSp`)の対応済みプリセットは
-> `straightConnector1`(直線)、`bentConnector2`/`bentConnector3`(カギ線。折れ数1/2)、
+> `straightConnector1`(直線)、`line`(直線。Excelの「図形 → 線 → 直線」はこのプリセットで保存される。
+> `straightConnector1`と同じ形のため同じ直線として扱う)、`bentConnector2`/`bentConnector3`(カギ線。折れ数1/2)、
 > `curvedConnector2`/`curvedConnector3`(曲線。曲がり数1/2)に限定する。
 > Excelは接続線を2つの図形の接続点(コネクションサイト)に紐付けて自動的に経路を
 > 引き直すことができる。要件10.11により参照先が解決できた場合はその接続点を使うが、

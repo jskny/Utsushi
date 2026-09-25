@@ -533,6 +533,10 @@ namespace Utsushi.Parsing.OpenXml
         private static readonly Dictionary<Dr.ShapeTypeValues, ConnectorPresetType> SupportedConnectorPresets = new()
         {
             [Dr.ShapeTypeValues.StraightConnector1] = ConnectorPresetType.Straight,
+
+            // Excelの「図形 → 線 → 直線」は prst="line" の接続線として保存される。形は straightConnector1 と同じ
+            // (アンカー矩形の対角を結ぶ直線。反転で向きが決まる)ため、同じ直線として扱う。
+            [Dr.ShapeTypeValues.Line] = ConnectorPresetType.Straight,
             [Dr.ShapeTypeValues.BentConnector2] = ConnectorPresetType.Bent2Segment,
             [Dr.ShapeTypeValues.BentConnector3] = ConnectorPresetType.Bent3Segment,
             [Dr.ShapeTypeValues.CurvedConnector2] = ConnectorPresetType.Curved2Segment,

@@ -51,7 +51,7 @@ inclusion: always
 > そのままでは日本語帳票1ページで4MB前後、外字用のIPAmj明朝(46MB)を使うと数十MBになるため、
 > **Utsushi 自身が描画前に使った字形だけのTrueTypeフォント(サブセット)を作って埋め込ませる**
 > (`Utsushi.Rendering.Fonts.TrueTypeSubsetter`。請求書サンプルで約54KB)。PDF内の文字列検索は維持される。
-> CFF形式のフォントはサブセット化できず丸ごと埋め込まれる。
+> CFF形式のフォントはサブセット化できず、SkiaSharp が Type 3 として出力する(Noto Sans CJK で実測)。
 >
 > **同梱フォント**: 日本語フォントの無いサーバー・CIでも日本語を描画できるよう、BIZ UDPゴシック Regular
 > (Morisawa、**SIL Open Font License 1.1**、4.6MB。Debian パッケージ fonts-morisawa-bizud-gothic 1.05-2 版

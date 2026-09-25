@@ -368,7 +368,7 @@ namespace Utsushi.Rendering
                     key.Name, $"登録しようとしたフォントファイルが存在しません: {path}");
             }
 
-            var typeface = SKTypeface.FromFile(path)
+            var typeface = LoadFace(path, key.Name)
                 ?? throw new FontNotAvailableException(
                     key.Name, $"フォントファイルを読み込めません(対応していない形式の可能性があります): {path}");
 
@@ -399,19 +399,65 @@ namespace Utsushi.Rendering
                     continue;
                 }
 
-                var typeface = SKTypeface.FromFile(path);
-                if (typeface is null)
+                // .ttc(フォントコレクション)は中の書体をすべて登録する(msgothic.ttc の MS Gothic / MS UI Gothic / MS PGothic 等)。
+                foreach (var typeface in LoadAllFaces(path))
                 {
-                    continue;
+                    // ファイル自身が申告するスタイルで登録する。太字ファイルは太字キーに入る。
+                    var key = new FontKey(typeface.FamilyName, typeface.IsBold, typeface.IsItalic);
+
+                    lock (_registrationLock)
+                    {
+                        _owned.Add(typeface);
+                        _registered[key] = typeface;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// フォントファイルから、指定のファミリ名(日本語名の別名を含む)の書体を読む。
+        /// </summary>
+        /// <remarks>
+        /// .ttc(フォントコレクション)は複数の書体を含み、<c>SKTypeface.FromFile(path)</c> は先頭の書体しか返さない。
+        /// 例えば msgothic.ttc の先頭は MS Gothic(等幅)であり、「MS PGothic」として登録したつもりが等幅の字形幅で
+        /// 配置され、エラーにもならずにレイアウトがずれる(doc-reviewer指摘)。このため中の書体を順に調べ、
+        /// ファミリ名が一致するものを使う。一致する書体が無い場合は、従来どおり先頭の書体を使う
+        /// (社内外字フォントのように、登録キーと内部のファミリ名が異なる .ttf を登録する用途のため)。
+        /// </remarks>
+        private static SKTypeface? LoadFace(string path, string familyName)
+        {
+            SKTypeface? first = null;
+            foreach (var face in LoadAllFaces(path))
+            {
+                if (FontFamilyAliases.AreSame(familyName, face.FamilyName))
+                {
+                    return face;
                 }
 
-                // ファイル自身が申告するスタイルで登録する。太字ファイルは太字キーに入る。
-                var key = new FontKey(typeface.FamilyName, typeface.IsBold, typeface.IsItalic);
+                // 使わなかった書体は解放しない(ネイティブ書体が共有される場合に備える。登録時の一度きりで量も小さい)。
+                first ??= face;
+            }
 
-                lock (_registrationLock)
+            return first;
+        }
+
+        /// <summary>フォントファイル内のすべての書体を読む(.ttc 以外は1つ)。</summary>
+        private static IEnumerable<SKTypeface> LoadAllFaces(string path)
+        {
+            // フォントコレクションの書体数に上限を設ける(壊れたファイルで延々と読み続けないため。実在の .ttc は数個)。
+            const int MaxFacesPerFile = 64;
+            for (var index = 0; index < MaxFacesPerFile; index++)
+            {
+                var face = SKTypeface.FromFile(path, index);
+                if (face is null)
                 {
-                    _owned.Add(typeface);
-                    _registered[key] = typeface;
+                    yield break;
+                }
+
+                yield return face;
+                if (!Path.GetExtension(path).Equals(".ttc", StringComparison.OrdinalIgnoreCase))
+                {
+                    yield break;
                 }
             }
         }

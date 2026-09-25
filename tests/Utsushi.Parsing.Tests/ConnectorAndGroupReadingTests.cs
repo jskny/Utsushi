@@ -22,6 +22,7 @@ namespace Utsushi.Parsing.Tests
         public static IEnumerable<object[]> SupportedConnectorPresetCases()
         {
             yield return new object[] { A.ShapeTypeValues.StraightConnector1, ConnectorPresetType.Straight };
+            yield return new object[] { A.ShapeTypeValues.Line, ConnectorPresetType.Straight }; // Excelの「直線」
             yield return new object[] { A.ShapeTypeValues.BentConnector2, ConnectorPresetType.Bent2Segment };
             yield return new object[] { A.ShapeTypeValues.BentConnector3, ConnectorPresetType.Bent3Segment };
             yield return new object[] { A.ShapeTypeValues.CurvedConnector2, ConnectorPresetType.Curved2Segment };
