@@ -314,6 +314,26 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
+        public void ヘッダーの改行は描画せず1行に配置する()
+        {
+            // 複数行のヘッダーは未対応。改行文字をそのまま描画すると豆腐や空白になるため取り除く(要件4.7と同じ扱い)。
+            var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => Timestamp);
+            var pageSetup = NoMarginA4() with
+            {
+                Margins = new PageMargins(20, 20, 40, 40, 10, 10),
+                HeaderFooter = new HeaderFooterModel(
+                    "&C株式会社サンプル\n経理部", null, null, null, null, null, false, false, true),
+            };
+            var sheet = UniformSheet(rows: 1, columns: 1, pageSetup: pageSetup);
+
+            var page = Assert.Single(engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+
+            var texts = page.Commands.OfType<TextCommand>().Select(t => t.Text).ToList();
+            Assert.Contains("株式会社サンプル経理部", texts);
+            Assert.DoesNotContain(texts, t => t.Contains('\n'));
+        }
+
+        [Fact]
         public void ヘッダーフッターが未設定なら描画命令を追加しない()
         {
             var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => Timestamp);

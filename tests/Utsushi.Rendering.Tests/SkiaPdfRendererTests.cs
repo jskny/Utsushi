@@ -20,7 +20,8 @@ namespace Utsushi.Rendering.Tests
 
         public SkiaPdfRendererTests()
         {
-            // CI/開発環境に特定フォントがあるとは限らないため、描画テストではフォールバックを許容する。
+            // CI/開発環境に特定フォントがあるとは限らないため、描画テストではフォールバックを許容する
+            // (代替フォント名を省略すると同梱の日本語フォントになるため、日本語も字形欠落なく描画できる。要件11.1)。
             _fontResolver = new FontResolver(FontResolverOptions.AllowFallback());
             _metrics = new SkiaFontMetricsProvider(_fontResolver);
         }
@@ -123,7 +124,7 @@ namespace Utsushi.Rendering.Tests
             using var embedded = new MemoryStream();
             using var outlined = new MemoryStream();
 
-            new SkiaPdfRenderer(_metrics, PdfRenderOptions.Default).Render(Layout(), embedded);
+            new SkiaPdfRenderer(_metrics).Render(Layout(), embedded);
             new SkiaPdfRenderer(_metrics, PdfRenderOptions.OutlineText).Render(Layout(), outlined);
 
             // フォントを埋め込まないぶん、アウトライン出力のほうが小さくなる。
@@ -472,9 +473,21 @@ namespace Utsushi.Rendering.Tests
 
             renderer.Render(layout, output);
 
+            // 文字を描いた場合だけ、PDFにフォント(FontFile2)が埋め込まれる。以前は生のバイト列に "OK" が
+            // 含まれるかを見ていたが、これは埋め込まれたフォント全体のデータに偶然含まれていただけで、
+            // フォントをサブセット化(要件11.5)すると成り立たない。
             Assert.True(output.Length > 0);
             var content = Encoding.Latin1.GetString(output.ToArray());
-            Assert.Contains("OK", content);
+            Assert.Contains("/FontFile2", content);
+
+            using var withoutText = new MemoryStream();
+            renderer.Render(Layout(commands: new DrawCommand[]
+            {
+                new ShapeCommand(
+                    new RectPt(10, 10, 80, 30), ShapePresetType.Rect, Array.Empty<double>(), RotationDegrees: 0,
+                    Fill: null, Outline: null, TextLines: Array.Empty<ShapeTextLine>()),
+            }), withoutText);
+            Assert.DoesNotContain("/FontFile2", Encoding.Latin1.GetString(withoutText.ToArray()));
         }
 
         [Fact]

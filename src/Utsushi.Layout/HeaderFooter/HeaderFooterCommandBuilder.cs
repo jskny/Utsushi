@@ -127,8 +127,14 @@ namespace Utsushi.Layout.HeaderFooter
         private static List<HeaderFooterRun> ScaleRuns(IReadOnlyList<HeaderFooterRun> runs, double fontScale)
         {
             var scaled = new List<HeaderFooterRun>(runs.Count);
-            foreach (var run in runs)
+            foreach (var original in runs)
             {
+                // 複数行のヘッダー/フッターは未対応のため、改行は取り除いて1行に配置する。
+                // 改行文字をそのまま描画すると豆腐や空白になる(セルの要件4.7と同じ扱い)。
+                var run = original.Text.IndexOf('\n') < 0 && original.Text.IndexOf('\r') < 0
+                    ? original
+                    : original with { Text = original.Text.Replace("\r", string.Empty).Replace("\n", string.Empty) };
+
                 if (run.Text.Length == 0)
                 {
                     continue;

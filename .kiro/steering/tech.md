@@ -48,10 +48,23 @@ inclusion: always
 
 > **既知の制約(SkiaSharp / PDFのフォント)**: NuGetで配布される SkiaSharp のネイティブビルドは、
 > PDF出力時に**フォントのサブセット化を行わず、使用フォントを丸ごと埋め込む**(2.88系・3.x系とも実測確認)。
-> 日本語フォントは数MBあるため、1ページの帳票でも出力PDFが4MB前後になる。
-> **PDF内の文字列検索を維持するため、フォント埋め込みを既定とし、このサイズは許容する方針**。
-> サイズを優先する場合は `PdfTextRendering.Outline`(文字のアウトライン化。同帳票で91KB、
-> 見た目は同一だがPDF内検索は不可)を選べる。
+> そのままでは日本語帳票1ページで4MB前後、外字用のIPAmj明朝(46MB)を使うと数十MBになるため、
+> **Utsushi 自身が描画前に使った字形だけのTrueTypeフォント(サブセット)を作って埋め込ませる**
+> (`Utsushi.Rendering.Fonts.TrueTypeSubsetter`。請求書サンプルで約54KB)。PDF内の文字列検索は維持される。
+> CFF形式のフォントはサブセット化できず、SkiaSharp が Type 3 として出力する(Noto Sans CJK で実測)。
+>
+> **同梱フォント**: 日本語フォントの無いサーバー・CIでも日本語を描画できるよう、BIZ UDPゴシック Regular
+> (Morisawa、**SIL Open Font License 1.1**、4.6MB。Debian パッケージ fonts-morisawa-bizud-gothic 1.05-2 版
+> 〈upstream は googlefonts/morisawa-biz-ud-gothic 1.05、Debian はソースから再ビルド〉、
+> sha256 `8d4fd9568ad662d9eb1bc8ca8663dcd76a6336373e3e3f32d634978db4c7388e`)を
+> `Utsushi.Rendering` の埋め込みリソースとして同梱する。OFL は無償で、ソフトウェアへの同梱・再配布と
+> PDFへの埋め込みを認めている。条件として、フォントを配布する際はライセンス全文
+> (`src/Utsushi.Rendering/Fonts/BIZUDPGothic-OFL.txt`。1行目の著作権表記のURLが "-mincho" なのは upstream の原文のまま)を
+> 添える(ビルド出力にもコピーする。NuGet パッケージとして配布する場合は、パッケージにも同梱する設定が別途必要)。
+> 本フォントのOFLは予約フォント名を宣言していない。PDFに埋め込むサブセットは「フォントで作成した文書」であり、
+> OFL の適用対象外(文書への埋め込みは自由)。
+> 人名用の外字を網羅するIPAmj明朝(IPAフォントライセンス v1.0、46MB)は、サイズとライセンス表記の都合で同梱せず、
+> 実行環境にインストールされていれば使う。
 >
 > **太字/斜体の注意**: SkiaSharp に書体レベルで太字/斜体を合成させると、PDFが Type 3 フォントになり
 > 文字列検索ができなくなる。Utsushi は通常字形を埋め込んで描画時に装飾を合成することで回避している。

@@ -36,6 +36,30 @@ namespace Utsushi.Core.Exceptions
     }
 
     /// <summary>
+    /// 置換値そのものが不正(<c>null</c>、改行以外の制御文字、対になっていないサロゲートを含む)。要件2.10。
+    /// </summary>
+    /// <remarks>
+    /// 制御文字はフォントに字形が無く、PDF上で豆腐(□)や空白として描画される。
+    /// 呼び出し元のデータ不備を黙って描画せず、どの値が原因かを返すためにエラーとする。
+    /// </remarks>
+    public sealed class InvalidSubstitutionValueException : UtsushiException
+    {
+        public InvalidSubstitutionValueException(
+            string target,
+            string message,
+            string? reportCode = null,
+            string? sheetName = null,
+            CellAddress? cellAddress = null)
+            : base(message, ProcessingStage.Substitution, reportCode, sheetName, cellAddress)
+        {
+            Target = target;
+        }
+
+        /// <summary>不正な値が渡された置換キー、またはセル番地直接指定のセル番地の文字列。</summary>
+        public string Target { get; }
+    }
+
+    /// <summary>
     /// セル番地を直接指定した上書き(帳票定義の置換キーを経由しない経路)で、
     /// 指定された文字列がA1形式のセル番地として解釈できない。要件2.8。
     /// </summary>

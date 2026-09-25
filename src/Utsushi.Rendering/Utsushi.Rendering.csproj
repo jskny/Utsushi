@@ -11,6 +11,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      同梱の日本語フォント BIZ UDPゴシック(SIL Open Font License 1.1。Debian fonts-morisawa-bizud-gothic 1.05-2、
+      upstream は googlefonts/morisawa-biz-ud-gothic 1.05。sha256 は .kiro/steering/tech.md に記載)。
+      実行環境に日本語フォントが無くても日本語を描画できるようにする(要件11.1)。ライセンス全文は同じディレクトリの
+      BIZUDPGothic-OFL.txt。OFL の条件により、ライセンス全文を一緒に配布する(出力ディレクトリにもコピーする)。
+    -->
+    <EmbeddedResource Include="Fonts\BIZUDPGothic-Regular.ttf" LogicalName="Utsushi.Rendering.Fonts.BIZUDPGothic-Regular.ttf" />
+    <None Include="Fonts\BIZUDPGothic-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Utsushi.Layout\Utsushi.Layout.csproj" />
   </ItemGroup>
 
