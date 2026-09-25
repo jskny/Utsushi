@@ -74,6 +74,6 @@ dotnet run --project src/Utsushi.Cli -- \
 ```
 
 > 開発環境に対象フォント(MS PGothic等)が無い場合、既定の厳格モードでは `FontNotAvailableException` になる。
-> 動作確認だけなら `--allow-font-fallback IPAGothic` のように代替フォントを指定する(見た目は崩れる)。
-> 日本語フォント自体が無い環境では字形欠落の検出で `MissingGlyphException` になるため、`--allow-missing-glyphs` も付ける
-> (日本語は豆腐になる。IPAフォントの入れ方は `docs/開発環境メモ.md`「2. 日本語フォント」)。
+> 動作確認だけなら `--allow-font-fallback` を付ける(代替フォント名を省略すると同梱のBIZ UDPゴシックで代替する。
+> 日本語フォントの無い環境でも日本語を描画できるが、見た目は実帳票と一致しない)。
+> 「𠮷」のようなJIS第4水準外の外字を試す場合はIPAmj明朝をインストールする(`docs/開発環境メモ.md`「2. 日本語フォント」)。

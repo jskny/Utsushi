@@ -1,5 +1,6 @@
 using System;
 using SkiaSharp;
+using Utsushi.Rendering.Fonts;
 using Utsushi.Layout.Text;
 using Utsushi.Parsing.Model;
 
@@ -22,6 +23,7 @@ namespace Utsushi.Rendering
         public SkiaFontMetricsProvider(FontResolver fontResolver)
         {
             _fontResolver = fontResolver ?? throw new ArgumentNullException(nameof(fontResolver));
+            Shaper = new GlyphShaper(fontResolver);
         }
 
         /// <inheritdoc />
@@ -39,36 +41,34 @@ namespace Utsushi.Rendering
         }
 
         /// <inheritdoc />
-        public double MeasureTextWidth(FontStyle font, string text)
-        {
-            using var skFont = CreateFont(font, out _);
-            return MeasureText(skFont, text);
-        }
-
-        /// <summary>
-        /// 文字列の送り幅(ポイント)を測る。
-        /// </summary>
         /// <remarks>
-        /// SkiaSharp 2.88 の <c>SKFont.MeasureText</c> はグリフ列のみを受け取るため、
-        /// いったん文字列をグリフへ変換してから測る。
-        /// <c>SKCanvas.DrawText(string, ...)</c> も同じ変換を行うため、描画結果と一致する。
+        /// 外字用の代替フォントで描く文字(要件11.2)・異体字(要件11.3)も含め、描画と同じ字形の並び
+        /// (<see cref="GlyphShaper"/>)で送り幅を合計する。
         /// </remarks>
-        internal static double MeasureText(SKFont font, string text)
+        public double MeasureTextWidth(FontStyle font, string text)
         {
             if (string.IsNullOrEmpty(text))
             {
                 return 0.0;
             }
 
-            var glyphCount = font.CountGlyphs(text);
-            if (glyphCount <= 0)
+            return MeasureShaped(Shaper.Shape(font, text), font.SizePt);
+        }
+
+        /// <summary>計測と描画で共有する、文字列 → 字形の並びの変換。</summary>
+        internal GlyphShaper Shaper { get; }
+
+        /// <summary>字形の並びの送り幅(ポイント)を合計する。</summary>
+        internal static double MeasureShaped(ShapedText shaped, double sizePt)
+        {
+            var width = 0.0;
+            foreach (var run in shaped.Runs)
             {
-                return 0.0;
+                using var skFont = GlyphShaper.CreateFont(run.Face, sizePt);
+                width += skFont.MeasureText(run.Glyphs);
             }
 
-            var glyphs = new ushort[glyphCount];
-            font.GetGlyphs(text, glyphs);
-            return font.MeasureText(glyphs);
+            return width;
         }
 
         /// <summary>

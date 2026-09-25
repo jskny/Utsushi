@@ -2,8 +2,10 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using SkiaSharp;
 using Utsushi.Core.Exceptions;
+using Utsushi.Rendering.Fonts;
 using Utsushi.Parsing.Model;
 
 namespace Utsushi.Rendering
@@ -36,6 +38,7 @@ namespace Utsushi.Rendering
         private readonly FontResolverOptions _options;
         private readonly Dictionary<FontKey, SKTypeface> _registered = new();
         private readonly ConcurrentDictionary<FontKey, ResolvedTypeface> _cache = new();
+        private readonly ConcurrentDictionary<(bool Bold, bool Italic), IReadOnlyList<ResolvedTypeface>> _glyphFallbacks = new();
         private readonly List<SKTypeface> _owned = new();
         private readonly object _registrationLock = new();
         private readonly object _resolveLock = new();
@@ -66,14 +69,45 @@ namespace Utsushi.Rendering
         {
             ThrowIfDisposed();
 
+            // 複数スレッドから同時に変換した場合でも、同じ書体を二重に生成しないよう、生成はロックの内側で1回だけ行う。
+            return Resolve(font, optional: false)!;
+        }
+
+        /// <summary>
+        /// セルのフォントに字形が無い文字を描画するための、外字用の代替書体を優先順に返す(要件11.2)。
+        /// </summary>
+        /// <remarks>
+        /// <see cref="FontResolverOptions.GlyphFallbackFamilies"/> の各フォントを、明示登録 → インストール済み →
+        /// 同梱の順に探す。見つからないフォントは飛ばす(IPAmj明朝のように、入っていれば使うフォントを既定に含めるため)。
+        /// 太字・斜体は、代替書体に実字形が無ければセルのフォントと同様に描画側で合成する。
+        /// </remarks>
+        public IReadOnlyList<ResolvedTypeface> ResolveGlyphFallbacks(bool bold, bool italic)
+        {
+            ThrowIfDisposed();
+            return _glyphFallbacks.GetOrAdd((bold, italic), key =>
+            {
+                var list = new List<ResolvedTypeface>();
+                foreach (var family in _options.GlyphFallbackFamilies)
+                {
+                    var resolved = Resolve(FontStyle.Default with { Name = family, Bold = key.Bold, Italic = key.Italic }, optional: true);
+                    if (resolved is not null && !list.Exists(r => ReferenceEquals(r.Typeface, resolved.Typeface)))
+                    {
+                        list.Add(resolved);
+                    }
+                }
+
+                return list;
+            });
+        }
+
+        private ResolvedTypeface? Resolve(FontStyle font, bool optional)
+        {
             var key = new FontKey(font.Name, font.Bold, font.Italic);
             if (_cache.TryGetValue(key, out var cached))
             {
                 return cached;
             }
 
-            // 複数スレッドから同時に変換した場合でも、同じ書体を二重に生成して一方を
-            // 破棄し損ねることがないよう、生成はロックの内側で1回だけ行う。
             lock (_resolveLock)
             {
                 ThrowIfDisposed();
@@ -83,12 +117,22 @@ namespace Utsushi.Rendering
                 }
 
                 var resolved = ResolveCore(font);
+                if (resolved is null)
+                {
+                    if (optional)
+                    {
+                        return null;
+                    }
+
+                    resolved = HandleMissingFont(font);
+                }
+
                 _cache[key] = resolved;
                 return resolved;
             }
         }
 
-        private ResolvedTypeface ResolveCore(FontStyle font)
+        private ResolvedTypeface? ResolveCore(FontStyle font)
         {
             // 1. 明示登録されたフォントファイル(スタイル指定つき)を最優先で使う。
             if (TryGetRegistered(font.Name, font.Bold, font.Italic, out var registeredExact))
@@ -102,11 +146,13 @@ namespace Utsushi.Rendering
                 return new ResolvedTypeface(registeredRegular, font.Bold, font.Italic);
             }
 
-            // 3. 実行環境にインストールされたフォントを探す。
+            // 3. 実行環境にインストールされたフォントを探す。無ければ同梱フォント(要件11.1)を探す。
             var regular = FindInstalled(font.Name, bold: false, italic: false);
             if (regular is null)
             {
-                return HandleMissingFont(font);
+                return BundledFonts.Find(font.Name) is { } bundled
+                    ? new ResolvedTypeface(bundled, font.Bold, font.Italic)
+                    : null;
             }
 
             if (!font.Bold && !font.Italic)
@@ -141,14 +187,16 @@ namespace Utsushi.Rendering
 
             if (_options.FallbackFamilyName is { } fallbackName)
             {
-                var fallback = FindInstalled(fallbackName, bold: false, italic: false);
+                var fallback = FindInstalled(fallbackName, bold: false, italic: false) ?? BundledFonts.Find(fallbackName);
                 if (fallback is not null)
                 {
                     return new ResolvedTypeface(fallback, font.Bold, font.Italic);
                 }
             }
 
-            return new ResolvedTypeface(SKTypeface.Default, font.Bold, font.Italic);
+            // 代替フォント名の指定が無い(または見つからない)場合は、実行環境の既定書体(Linuxでは多くの場合
+            // 日本語の字形を持たない DejaVu Sans)ではなく、同梱の日本語フォントを使う(要件11.1)。
+            return new ResolvedTypeface(BundledFonts.JapaneseGothicTypeface, font.Bold, font.Italic);
         }
 
         /// <summary>
@@ -171,12 +219,21 @@ namespace Utsushi.Rendering
                 return null;
             }
 
-            if (string.Equals(typeface.FamilyName, familyName, StringComparison.OrdinalIgnoreCase))
+            if (FontFamilyAliases.AreSame(familyName, typeface.FamilyName))
             {
                 return typeface;
             }
 
-            typeface.Dispose();
+            // 日本語名(「ＭＳ Ｐゴシック」等)で見つからない場合は英語名でも探す(要件11.6)。逆も同様。
+            foreach (var alias in FontFamilyAliases.Candidates(familyName).Skip(1))
+            {
+                var aliased = SKTypeface.FromFamilyName(alias, style);
+                if (aliased is not null && FontFamilyAliases.AreSame(alias, aliased.FamilyName))
+                {
+                    return aliased;
+                }
+            }
+
             return null;
         }
 
@@ -439,7 +496,8 @@ namespace Utsushi.Rendering
     /// </param>
     /// <param name="FontDirectories">フォントファイルを一括登録するディレクトリ。</param>
     /// <param name="FallbackFamilyName">
-    /// <see cref="FontResolutionMode.AllowFallback"/> のときに使う代替フォント名。
+    /// <see cref="FontResolutionMode.AllowFallback"/> のときに使う代替フォント名。null(または見つからない)の場合は
+    /// 同梱の日本語フォント(<see cref="BundledFonts.JapaneseGothicFamily"/>)を使う(要件11.1)。
     /// </param>
     public sealed record FontResolverOptions(
         FontResolutionMode Mode,
@@ -447,6 +505,23 @@ namespace Utsushi.Rendering
         IReadOnlyList<string> FontDirectories,
         string? FallbackFamilyName)
     {
+        /// <summary>
+        /// 外字用の代替フォントの既定の一覧(要件11.2)。同梱のBIZ UDPゴシック(JIS第1〜第4水準)→
+        /// IPAmj明朝(文字情報基盤のMJ文字。インストールされている場合のみ)の順。
+        /// </summary>
+        public static IReadOnlyList<string> DefaultGlyphFallbackFamilies { get; } =
+            new[] { BundledFonts.JapaneseGothicFamily, "IPAmjMincho" };
+
+        /// <summary>
+        /// セルのフォントに字形が無い文字を描画する外字用の代替フォント名を、優先順に並べたもの(要件11.2)。
+        /// </summary>
+        /// <remarks>
+        /// 既定は <see cref="DefaultGlyphFallbackFamilies"/>。社内の外字フォントを使う場合は、そのファイルを
+        /// <see cref="FontFiles"/> に登録し、ここにそのフォントキーを加える。空にすると文字単位の代替を行わない
+        /// (セルのフォントに字形が無い文字は要件5.5のエラーになる)。
+        /// </remarks>
+        public IReadOnlyList<string> GlyphFallbackFamilies { get; init; } = DefaultGlyphFallbackFamilies;
+
         /// <summary>厳格モード(既定)。</summary>
         public static FontResolverOptions Strict { get; } = new(
             FontResolutionMode.Strict,

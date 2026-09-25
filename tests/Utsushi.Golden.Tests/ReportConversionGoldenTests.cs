@@ -54,9 +54,9 @@ namespace Utsushi.Golden.Tests
                 new ReportModelBuilder(),
                 new CellSubstitutor(),
                 new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => FixedTimestamp),
-                // CIには日本語フォントが無いため、字形欠落の検出(要件5.5)は無効にする。
-                // ゴールデンテストの比較対象はレイアウト結果であり、PDFの字形ではない。
-                new SkiaPdfRenderer(skiaMetrics, PdfRenderOptions.Default with { MissingGlyphs = MissingGlyphPolicy.Render }),
+                // 代替フォント名を省略すると同梱の日本語フォントになるため、CIでも字形欠落の検出(要件5.5)を
+                // 有効にしたまま日本語の帳票を描画できる(要件11.1)。
+                new SkiaPdfRenderer(skiaMetrics),
                 fontResolver);
         }
 

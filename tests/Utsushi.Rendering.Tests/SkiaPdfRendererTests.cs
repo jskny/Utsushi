@@ -15,20 +15,13 @@ namespace Utsushi.Rendering.Tests
     /// </summary>
     public sealed class SkiaPdfRendererTests : IDisposable
     {
-        /// <summary>
-        /// 描画構造(ページ数・フォント形式など)を検証するテスト用の設定。CIには日本語フォントが無く、
-        /// 代替フォントでは日本語の字形が欠けるため、字形欠落の検出(要件5.5)を明示的に無効にする。
-        /// 字形欠落の検出自体は専用のテストで検証する。
-        /// </summary>
-        private static readonly PdfRenderOptions StructureOnly =
-            PdfRenderOptions.Default with { MissingGlyphs = MissingGlyphPolicy.Render };
-
         private readonly FontResolver _fontResolver;
         private readonly SkiaFontMetricsProvider _metrics;
 
         public SkiaPdfRendererTests()
         {
-            // CI/開発環境に特定フォントがあるとは限らないため、描画テストではフォールバックを許容する。
+            // CI/開発環境に特定フォントがあるとは限らないため、描画テストではフォールバックを許容する
+            // (代替フォント名を省略すると同梱の日本語フォントになるため、日本語も字形欠落なく描画できる。要件11.1)。
             _fontResolver = new FontResolver(FontResolverOptions.AllowFallback());
             _metrics = new SkiaFontMetricsProvider(_fontResolver);
         }
@@ -65,7 +58,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void 単一のPDFファイルとして出力される()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             renderer.Render(Layout(pageCount: 3), output);
@@ -82,7 +75,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void ページサイズは用紙と向きに対応する()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var landscape = new PagedLayout(
@@ -115,7 +108,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void ページが無ければエラーになる()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var ex = Assert.Throws<PdfRenderingException>(
@@ -131,8 +124,8 @@ namespace Utsushi.Rendering.Tests
             using var embedded = new MemoryStream();
             using var outlined = new MemoryStream();
 
-            new SkiaPdfRenderer(_metrics, StructureOnly).Render(Layout(), embedded);
-            new SkiaPdfRenderer(_metrics, PdfRenderOptions.OutlineText with { MissingGlyphs = MissingGlyphPolicy.Render }).Render(Layout(), outlined);
+            new SkiaPdfRenderer(_metrics).Render(Layout(), embedded);
+            new SkiaPdfRenderer(_metrics, PdfRenderOptions.OutlineText).Render(Layout(), outlined);
 
             // フォントを埋め込まないぶん、アウトライン出力のほうが小さくなる。
             Assert.True(
@@ -146,7 +139,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void ファイル出力は一時ファイル経由で確定する()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             var directory = Path.Combine(Path.GetTempPath(), "utsushi-test-" + Guid.NewGuid().ToString("N"));
             var path = Path.Combine(directory, "out.pdf");
 
@@ -170,7 +163,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void 描画に失敗しても出力先には何も書き込まない()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             // 未知の描画命令を1つ混ぜて途中で失敗させる。
@@ -189,7 +182,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void 既存ファイルがあっても失敗時は上書きされない()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             var directory = Path.Combine(Path.GetTempPath(), "utsushi-test-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
             var path = Path.Combine(directory, "existing.pdf");
@@ -215,7 +208,7 @@ namespace Utsushi.Rendering.Tests
             // 太字の字形を持たないフォントで太字を描くと、SkiaSharp に合成させた場合は
             // PDF が Type 3 フォントになり文字列検索ができなくなる。
             // Utsushi は通常字形を埋め込んで描画時に輪郭を太らせるため、Type 3 にならない。
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var bold = FontStyle.Default with { Bold = true };
@@ -235,7 +228,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void 斜体を含むPDFでもType3フォントにならない()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var italic = FontStyle.Default with { Italic = true };
@@ -253,7 +246,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void 画像はPDFに描画される()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var layout = Layout(commands: new DrawCommand[]
@@ -273,7 +266,7 @@ namespace Utsushi.Rendering.Tests
         {
             // 図形の回転と同様、画像の回転もcanvas.Save/RotateDegrees/Restoreで実装しており、
             // Restore漏れがあると後続の描画命令の座標系がずれてしまう回帰テスト(要件9.7)。
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var layout = Layout(commands: new DrawCommand[]
@@ -290,7 +283,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void デコードできない画像は帳票コードとシート名を含む例外になる()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var layout = Layout(commands: new DrawCommand[]
@@ -313,7 +306,7 @@ namespace Utsushi.Rendering.Tests
             // 無い/不正な状態でも、IHDRの宣言サイズだけで数百バイトのファイルが
             // 数億ピクセル相当を要求できてしまうため、SKBitmap.Decodeで実際に展開する前に
             // SKBitmap.DecodeBoundsで寸法を確認し拒否する。
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var hugePng = BuildPngWithDeclaredSize(20000, 20000);
@@ -330,7 +323,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void 図形はPDFに描画される()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var layout = Layout(commands: new DrawCommand[]
@@ -366,7 +359,7 @@ namespace Utsushi.Rendering.Tests
         [InlineData(ShapePresetType.WedgeEllipseCallout)]
         public void 全プリセットが例外なく描画できる(ShapePresetType preset)
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var layout = Layout(commands: new DrawCommand[]
@@ -391,7 +384,7 @@ namespace Utsushi.Rendering.Tests
         {
             // 図形の回転はcanvas.Save/RotateDegrees/Restoreで実装しており、
             // Restore漏れがあると後続の描画命令の座標系がずれてしまう回帰テスト。
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var layout = Layout(commands: new DrawCommand[]
@@ -415,7 +408,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void グラデーション塗りの図形はPDFに描画される()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var layout = Layout(commands: new DrawCommand[]
@@ -439,7 +432,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void 塗りつぶし無しの図形は枠線のみ描画される()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var layout = Layout(commands: new DrawCommand[]
@@ -462,7 +455,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void 図形内テキストはPDFに描画される()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var font = new FontStyle("Calibri", 10.0, false, false, UnderlineStyle.None, false, ArgbColor.Black);
@@ -480,15 +473,27 @@ namespace Utsushi.Rendering.Tests
 
             renderer.Render(layout, output);
 
+            // 文字を描いた場合だけ、PDFにフォント(FontFile2)が埋め込まれる。以前は生のバイト列に "OK" が
+            // 含まれるかを見ていたが、これは埋め込まれたフォント全体のデータに偶然含まれていただけで、
+            // フォントをサブセット化(要件11.5)すると成り立たない。
             Assert.True(output.Length > 0);
             var content = Encoding.Latin1.GetString(output.ToArray());
-            Assert.Contains("OK", content);
+            Assert.Contains("/FontFile2", content);
+
+            using var withoutText = new MemoryStream();
+            renderer.Render(Layout(commands: new DrawCommand[]
+            {
+                new ShapeCommand(
+                    new RectPt(10, 10, 80, 30), ShapePresetType.Rect, Array.Empty<double>(), RotationDegrees: 0,
+                    Fill: null, Outline: null, TextLines: Array.Empty<ShapeTextLine>()),
+            }), withoutText);
+            Assert.DoesNotContain("/FontFile2", Encoding.Latin1.GetString(withoutText.ToArray()));
         }
 
         [Fact]
         public void 接続線はPDFに描画される()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var layout = Layout(commands: new DrawCommand[]
@@ -514,7 +519,7 @@ namespace Utsushi.Rendering.Tests
         {
             // ConnectorCommand.Outlineがnullの場合、DrawConnectorのDefaultConnectorOutlineに
             // フォールバックする経路(design.md参照)が例外にならないことの回帰テスト。
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var layout = Layout(commands: new DrawCommand[]
@@ -544,7 +549,7 @@ namespace Utsushi.Rendering.Tests
         [InlineData(ConnectorPresetType.Curved3Segment)]
         public void 全接続線プリセットが例外なく描画できる(ConnectorPresetType preset)
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var layout = Layout(commands: new DrawCommand[]
@@ -572,7 +577,7 @@ namespace Utsushi.Rendering.Tests
             // 追加のcanvas回転を適用しない(絶対座標に対する回転はかえって位置をずらすため)。
             // ピクセル単位の見た目比較はゴールデンテストで行うため、ここでは回転角の大小に
             // かかわらず妥当なPDFが生成されることを確認する。
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var layout = Layout(commands: new DrawCommand[]
@@ -601,7 +606,7 @@ namespace Utsushi.Rendering.Tests
             // isResolvedがtrueの場合、DrawConnectorはRotationDegreesの値そのものを無視する
             // (hasRotationが常にfalseになる)ため、回転角だけを変えても出力サイズは変わらないはず
             // (要件10.11の回帰確認。ピクセル同一性の厳密な検証はゴールデンテストに委ねる)。
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
 
             DrawCommand[] CommandsWithRotation(double rotationDegrees) => new DrawCommand[]
             {
@@ -630,7 +635,7 @@ namespace Utsushi.Rendering.Tests
         {
             // DrawGroupが未配線/誤配線だった場合に検出できる回帰テスト
             // (DrawSingleCommandへのリファクタ・GroupCommandの再帰描画の検証)。
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var childShape = new ShapeCommand(
@@ -671,7 +676,7 @@ namespace Utsushi.Rendering.Tests
             // グループの回転と子要素個別の回転はcanvasの変換行列スタックで合成される
             // (design.md参照)。ピクセル単位の合成の正しさは自動テストでは検証しづらいため、
             // ここでは「例外にならず妥当なサイズのPDFが生成される」ことのみを確認する。
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var rotatedChild = new ShapeCommand(
@@ -712,7 +717,7 @@ namespace Utsushi.Rendering.Tests
         [Fact]
         public void 入れ子のグループも例外なく描画される()
         {
-            var renderer = new SkiaPdfRenderer(_metrics, StructureOnly);
+            var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
 
             var innermost = new ShapeCommand(

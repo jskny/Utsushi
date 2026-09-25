@@ -29,4 +29,9 @@ dotnet format
 
 ## ライセンス
 
-[MIT License](LICENSE)。使用しているOSSライブラリのライセンス方針は [`.kiro/steering/tech.md`](.kiro/steering/tech.md) を参照(商用ライブラリ・Office Interopは不使用)。
+[MIT License](LICENSE)。
+
+同梱の日本語フォント BIZ UDPゴシック(`src/Utsushi.Rendering/Fonts/BIZUDPGothic-Regular.ttf`)は
+[SIL Open Font License 1.1](src/Utsushi.Rendering/Fonts/BIZUDPGothic-OFL.txt) に従う(MIT License の対象外)。
+
+使用しているOSSライブラリのライセンス方針は [`.kiro/steering/tech.md`](.kiro/steering/tech.md) を参照(商用ライブラリ・Office Interopは不使用)。

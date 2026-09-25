@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using SkiaSharp;
 using Utsushi.Core;
+using Utsushi.Rendering.Fonts;
 using Utsushi.Core.Exceptions;
 using Utsushi.Layout.Model;
 using Utsushi.Parsing.Model;
@@ -118,6 +119,10 @@ namespace Utsushi.Rendering
 
         private void RenderToStream(PagedLayout layout, Stream target)
         {
+            // 描画前に全文字列の字形をそろえ(字形の欠落はここで検出する。要件5.5)、埋め込むフォントを
+            // 使った字形だけのサブセットにする(要件11.5)。サブセット書体は文書を閉じるまで生かしておく。
+            using var context = RenderContext.Prepare(layout, _fontMetrics.Shaper, _options);
+
             using var skStream = new SKManagedWStream(target, disposeManagedStream: false);
 
             var metadata = new SKDocumentPdfMetadata
@@ -139,7 +144,7 @@ namespace Utsushi.Rendering
                 var canvas = document.BeginPage((float)page.WidthPt, (float)page.HeightPt);
                 try
                 {
-                    DrawPage(canvas, page, layout.ReportCode, layout.SheetName);
+                    DrawPage(canvas, page, context);
                 }
                 finally
                 {
@@ -151,11 +156,11 @@ namespace Utsushi.Rendering
             skStream.Flush();
         }
 
-        private void DrawPage(SKCanvas canvas, PageLayout page, string reportCode, string sheetName)
+        private void DrawPage(SKCanvas canvas, PageLayout page, RenderContext context)
         {
             foreach (var command in page.Commands)
             {
-                DrawSingleCommand(canvas, command, reportCode, sheetName);
+                DrawSingleCommand(canvas, command, context);
             }
         }
 
@@ -165,7 +170,7 @@ namespace Utsushi.Rendering
         /// (design.md「Rendering レイヤー」参照)。抽象レコード型<see cref="DrawCommand"/>と
         /// 紛らわしくなるため、メソッド名は型名とは別の<c>DrawSingleCommand</c>とする。
         /// </summary>
-        private void DrawSingleCommand(SKCanvas canvas, DrawCommand command, string reportCode, string sheetName)
+        private void DrawSingleCommand(SKCanvas canvas, DrawCommand command, RenderContext context)
         {
             switch (command)
             {
@@ -178,15 +183,15 @@ namespace Utsushi.Rendering
                     break;
 
                 case TextCommand text:
-                    DrawText(canvas, text, reportCode, sheetName);
+                    DrawText(canvas, text, context);
                     break;
 
                 case ImageCommand image:
-                    DrawImage(canvas, image, reportCode, sheetName);
+                    DrawImage(canvas, image, context.ReportCode, context.SheetName);
                     break;
 
                 case ShapeCommand shape:
-                    DrawShape(canvas, shape, reportCode, sheetName);
+                    DrawShape(canvas, shape, context);
                     break;
 
                 case ConnectorCommand connector:
@@ -194,12 +199,12 @@ namespace Utsushi.Rendering
                     break;
 
                 case GroupCommand group:
-                    DrawGroup(canvas, group, reportCode, sheetName);
+                    DrawGroup(canvas, group, context);
                     break;
 
                 default:
                     throw new PdfRenderingException(
-                        $"未知の描画命令です: {command.GetType().Name}", reportCode, sheetName);
+                        $"未知の描画命令です: {command.GetType().Name}", context.ReportCode, context.SheetName);
             }
         }
 
@@ -268,7 +273,7 @@ namespace Utsushi.Rendering
         }
 
         /// <summary>図形を描画する(要件10)。他のセル内容より最前面に描画される。</summary>
-        private void DrawShape(SKCanvas canvas, ShapeCommand shape, string reportCode, string sheetName)
+        private void DrawShape(SKCanvas canvas, ShapeCommand shape, RenderContext context)
         {
             var skRect = ToSkRect(shape.Rect);
             var hasRotation = Math.Abs(shape.RotationDegrees) > double.Epsilon;
@@ -314,8 +319,7 @@ namespace Utsushi.Rendering
                     DrawText(
                         canvas,
                         new TextCommand(line.Origin, line.Text, line.Font, line.Anchor, ClipRect: null),
-                        reportCode,
-                        sheetName);
+                        context);
                 }
             }
             finally
@@ -381,7 +385,7 @@ namespace Utsushi.Rendering
         /// 子要素個別の回転が<c>canvas</c>の変換行列のスタックにより正しく合成される
         /// (design.md「Rendering レイヤー」参照)。
         /// </summary>
-        private void DrawGroup(SKCanvas canvas, GroupCommand group, string reportCode, string sheetName)
+        private void DrawGroup(SKCanvas canvas, GroupCommand group, RenderContext context)
         {
             var hasRotation = Math.Abs(group.RotationDegrees) > double.Epsilon;
 
@@ -395,7 +399,7 @@ namespace Utsushi.Rendering
             {
                 foreach (var child in group.Children)
                 {
-                    DrawSingleCommand(canvas, child, reportCode, sheetName);
+                    DrawSingleCommand(canvas, child, context);
                 }
             }
             finally
@@ -500,30 +504,17 @@ namespace Utsushi.Rendering
                 paint);
         }
 
-        private void DrawText(SKCanvas canvas, TextCommand text, string reportCode, string sheetName)
+        private void DrawText(SKCanvas canvas, TextCommand text, RenderContext context)
         {
-            using var font = _fontMetrics.CreateFont(text.Font, out var synthesizeBold);
-            if (_options.MissingGlyphs == MissingGlyphPolicy.Error)
-            {
-                EnsureGlyphsAvailable(font, text.Text, reportCode, sheetName);
-            }
-
+            var shaped = context.GetShaped(text.Font, text.Text);
+            using var primaryFont = GlyphShaper.CreateFont(shaped.Primary, text.Font.SizePt);
             using var paint = new SKPaint
             {
                 Color = ToSkColor(text.Font.Color),
                 IsAntialias = true,
             };
 
-            if (synthesizeBold)
-            {
-                // 実フォントが太字の字形を持たない場合、輪郭を塗りと一緒に描いて太字を再現する。
-                // SkiaSharp に太字を合成させると PDF が Type 3 フォントになり、
-                // 文字列検索ができなくなるため、この方式で CID TrueType 埋め込みを保つ。
-                paint.Style = SKPaintStyle.StrokeAndFill;
-                paint.StrokeWidth = (float)(text.Font.SizePt * BoldStrokeRatio);
-            }
-
-            var width = SkiaFontMetricsProvider.MeasureText(font, text.Text);
+            var width = SkiaFontMetricsProvider.MeasureShaped(shaped, text.Font.SizePt);
             var x = text.Anchor switch
             {
                 TextAnchor.Right => text.Origin.X - width,
@@ -540,16 +531,20 @@ namespace Utsushi.Rendering
 
             try
             {
-                if (_options.TextRendering == PdfTextRendering.Outline)
+                var runX = x;
+                foreach (var run in shaped.Runs)
                 {
-                    DrawTextAsOutline(canvas, text.Text, font, paint, x, text.Origin.Y, synthesizeBold);
-                }
-                else
-                {
-                    canvas.DrawText(text.Text, (float)x, (float)text.Origin.Y, font, paint);
+                    runX += DrawGlyphRun(canvas, run, text, runX, context);
                 }
 
-                DrawTextDecorations(canvas, text, x, width, font, paint);
+                // 太字を合成している場合は、下線・取消線も同じだけ太くする(DrawTextDecorations)。
+                if (shaped.Primary.SynthesizeBold)
+                {
+                    paint.Style = SKPaintStyle.StrokeAndFill;
+                    paint.StrokeWidth = (float)(text.Font.SizePt * BoldStrokeRatio);
+                }
+
+                DrawTextDecorations(canvas, text, x, width, primaryFont, paint);
             }
             finally
             {
@@ -561,32 +556,76 @@ namespace Utsushi.Rendering
         }
 
         /// <summary>
-        /// 描画する各文字の字形がフォントに存在することを確かめる(要件5.5)。
+        /// 同じ書体で続く字形の並びを1つ描き、その送り幅を返す。
         /// </summary>
         /// <remarks>
-        /// 字形が無い文字は glyph 0(.notdef)に変換され、豆腐(□)または空白として描画される。
-        /// 制御文字はもともと字形を描かない前提のため判定しない。
+        /// 字形番号で直接描く(外字用の代替フォント・異体字の字形は、文字列からは引けないため)。
+        /// フォント埋め込みの場合は、元の書体の代わりにサブセット書体と振り直した字形番号を使う(要件11.5)。
+        /// 送り幅はサブセットでも元の書体と同じ値になる(hmtx をそのまま写すため)。
         /// </remarks>
-        private static void EnsureGlyphsAvailable(SKFont font, string text, string reportCode, string sheetName)
+        private double DrawGlyphRun(SKCanvas canvas, GlyphRun run, TextCommand text, double x, RenderContext context)
         {
-            foreach (var rune in text.EnumerateRunes())
+            using var paint = new SKPaint
             {
-                if (Rune.IsControl(rune) || font.GetGlyph(rune.Value) != 0)
+                Color = ToSkColor(text.Font.Color),
+                IsAntialias = true,
+            };
+
+            if (run.Face.SynthesizeBold)
+            {
+                // 実フォントが太字の字形を持たない場合、輪郭を塗りと一緒に描いて太字を再現する。
+                // SkiaSharp に太字を合成させると PDF が Type 3 フォントになり、
+                // 文字列検索ができなくなるため、この方式で CID TrueType 埋め込みを保つ。
+                paint.Style = SKPaintStyle.StrokeAndFill;
+                paint.StrokeWidth = (float)(text.Font.SizePt * BoldStrokeRatio);
+            }
+
+            using var originalFont = GlyphShaper.CreateFont(run.Face, text.Font.SizePt);
+            var advance = originalFont.MeasureText(run.Glyphs);
+
+            if (_options.TextRendering == PdfTextRendering.Outline)
+            {
+                DrawGlyphsAsOutline(canvas, run.Glyphs, originalFont, paint, x, text.Origin.Y, run.Face.SynthesizeBold);
+                return advance;
+            }
+
+            var segmentX = x;
+            foreach (var (typeface, glyphs) in context.MapForEmbedding(run))
+            {
+                using var font = GlyphShaper.CreateFont(run.Face, text.Font.SizePt, typeface);
+                using var builder = new SKTextBlobBuilder();
+                var buffer = builder.AllocateRun(font, glyphs.Length, (float)segmentX, (float)text.Origin.Y);
+                glyphs.AsSpan().CopyTo(buffer.GetGlyphSpan());
+                using var blob = builder.Build();
+                if (blob is not null)
                 {
-                    continue;
+                    canvas.DrawText(blob, 0, 0, paint);
                 }
 
-                var fontName = font.Typeface?.FamilyName ?? string.Empty;
-                throw new MissingGlyphException(
-                    fontName,
-                    rune.Value,
-                    text,
-                    $"文字 '{rune}'(U+{rune.Value:X4})の字形がフォント '{fontName}' にありません"
-                        + $"(描画しようとした文字列の先頭: \"{Excerpt(text)}\")。そのまま出力すると豆腐(□)や空白になるため中止しました。"
-                        + "字形を持つフォントを使うか、別の文字に置き換えてください。",
-                    reportCode,
-                    sheetName);
+                segmentX += font.MeasureText(glyphs);
             }
+
+            return advance;
+        }
+
+        /// <summary>字形が見つからなかったことを表す例外を作る(要件5.5)。</summary>
+        internal static MissingGlyphException CreateMissingGlyphException(
+            ShapedText shaped, string text, string reportCode, string sheetName)
+        {
+            var missing = shaped.Missing!;
+            var fontName = shaped.Primary.Typeface.FamilyName ?? string.Empty;
+            var character = missing.BaseCodePoint is { } baseCodePoint
+                ? $"異体字 '{char.ConvertFromUtf32(baseCodePoint)}' + 異体字セレクタ U+{missing.CodePoint:X4}"
+                : $"文字 '{char.ConvertFromUtf32(missing.CodePoint)}'(U+{missing.CodePoint:X4})";
+            return new MissingGlyphException(
+                fontName,
+                missing.CodePoint,
+                text,
+                $"{character}の字形が、フォント '{fontName}' にも外字用の代替フォントにもありません"
+                    + $"(描画しようとした文字列の先頭: \"{Excerpt(text)}\")。そのまま出力すると豆腐(□)や別の字形になるため中止しました。"
+                    + "字形を持つフォント(IPAmj明朝など)を外字用の代替フォントに加えるか、別の文字に置き換えてください。",
+                reportCode,
+                sheetName);
         }
 
         /// <summary>
@@ -603,25 +642,21 @@ namespace Utsushi.Rendering
         }
 
         /// <summary>
-        /// 文字をグリフのアウトライン(ベクタパス)として描画する。
+        /// 字形をアウトライン(ベクタパス)として描画する。
         /// </summary>
         /// <remarks>
-        /// 位置と字形は <see cref="SKCanvas.DrawText(string, float, float, SKFont, SKPaint)"/> と同じ
-        /// フォント・グリフ送り幅から求めるため、見た目は一致する。
+        /// 位置と字形はフォント埋め込み時と同じ書体・送り幅から求めるため、見た目は一致する。
         /// PDFにフォントを埋め込まないぶんファイルサイズが小さくなる代わりに、
         /// PDF内の文字列検索・コピーはできなくなる(<see cref="PdfTextRendering"/> を参照)。
         /// </remarks>
-        private static void DrawTextAsOutline(
-            SKCanvas canvas, string text, SKFont font, SKPaint paint, double x, double baselineY, bool synthesizeBold)
+        private static void DrawGlyphsAsOutline(
+            SKCanvas canvas, ushort[] glyphs, SKFont font, SKPaint paint, double x, double baselineY, bool synthesizeBold)
         {
-            var glyphCount = font.CountGlyphs(text);
+            var glyphCount = glyphs.Length;
             if (glyphCount <= 0)
             {
                 return;
             }
-
-            var glyphs = new ushort[glyphCount];
-            font.GetGlyphs(text, glyphs);
 
             var positions = new SKPoint[glyphCount];
             font.GetGlyphPositions(glyphs, positions, new SKPoint((float)x, (float)baselineY));
