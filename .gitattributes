@@ -1,0 +1,2 @@
+# Visual Studio 2019 が書き出す改行コード(CRLF)に合わせ、IDEで保存したときに改行だけの差分が出ないようにする
+*.sln text eol=crlf

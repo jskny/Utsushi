@@ -66,18 +66,18 @@ Utsushi/
 │   └── specs/                      # 機能ごとの要件定義書・設計書・タスクリスト
 ├── .claude/
 │   └── agents/                     # コードレビュー・テスト作成・セキュリティレビュー等のサブエージェント定義
-├── vs2019/
-│   └── Utsushi.sln                 # Visual Studio 2019 用(classic形式。.slnxを認識できないため)
-├── Directory.Build.props           # 全プロジェクト共通のビルド設定(TFM/LangVersion/Nullable)
+├── Directory.Build.props           # 全プロジェクト共通のビルド設定(TFM/LangVersion/Nullable、VS2019コンパイラでの検証スイッチ)
 ├── Directory.Build.targets         # テストプロジェクト共通設定(RollForward/テストパッケージ)
-└── Utsushi.slnx
+└── Utsushi.sln                     # classic形式。Visual Studio 2019でもそのまま開ける
 ```
 
-> ソリューションファイルは `Utsushi.slnx`(新しいXML形式、ルート直下)と `vs2019/Utsushi.sln`(classic形式)を並行して維持する。
-> 呼び出し元プロダクトの開発環境である Visual Studio 2019 は `.slnx` を認識できないため、VS2019での開発には `vs2019/Utsushi.sln` を使う(`.kiro/steering/tech.md`「Visual Studio 2019 対応」参照)。
-> `Utsushi.sln` をルート直下に置かないのは、`.sln` と `.slnx` が同じフォルダに共存すると `dotnet build`/`dotnet test`/`dotnet format` の引数なし実行が「複数のプロジェクト/ソリューションファイルがある」エラーになり、本ドキュメント記載の標準コマンドが壊れるため(実機確認済み)。
-> プロジェクトを追加・削除した場合は両方のソリューションファイルを更新すること。`dotnet sln <SLN> add/remove <PATH>` の `<PATH>` はslnファイルの場所ではなく実行時のカレントディレクトリからの相対パスとして解決されるため、リポジトリルートで実行する場合はどちらも同じ相対パスで指定できる(例: `dotnet sln Utsushi.slnx add src/<Project>/<Project>.csproj` と `dotnet sln vs2019/Utsushi.sln add src/<Project>/<Project>.csproj`)。
-> `dotnet build` / `dotnet test` / `dotnet format` はいずれもルートで引数なしに実行できる(既定で `Utsushi.slnx` が使われる)。
+> ソリューションファイルはルート直下の `Utsushi.sln`(classic形式)1つだけとする。
+> 呼び出し元プロダクトの開発環境である Visual Studio 2019 は新しいXML形式の `.slnx` を認識できないため、`.slnx` は置かない(`.kiro/steering/tech.md`「Visual Studio 2019 対応」参照)。
+> ヘッダーの `# Visual Studio Version 16` はVS2019を示す値であり、VS2022の値(17)に書き換えない。.NET 10 SDKの `dotnet sln add/remove` はこのヘッダーを保持することを確認済み。
+> ルートに `.sln` と `.slnx` が共存すると `dotnet build`/`dotnet test`/`dotnet format` の引数なし実行が「複数のプロジェクト/ソリューションファイルがある」エラーになるため、`.slnx` を追加しないこと。
+> プロジェクトを追加・削除した場合は `dotnet sln Utsushi.sln add/remove src/<Project>/<Project>.csproj` で更新する(`<PATH>` はslnファイルの場所ではなく実行時のカレントディレクトリからの相対パス)。
+> `dotnet build` / `dotnet test` / `dotnet format` はいずれもルートで引数なしに実行できる(既定で `Utsushi.sln` が使われる)。
+> テストはリポジトリのルートを `Utsushi.sln` の有無で探す(`tests/Utsushi.TestSupport/TestPaths.cs`)ため、ソリューションファイルの名前・場所を変える場合はそちらも合わせて直す。
 
 ## 命名規則
 

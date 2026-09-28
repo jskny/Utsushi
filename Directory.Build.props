@@ -19,6 +19,22 @@
   </PropertyGroup>
 
   <!--
+    VS2019(16.11)同梱のC#コンパイラ(Roslyn 3.11)に差し替えてビルドする検証用スイッチ。
+    新しいSDKのコンパイラは LangVersion=9.0 でも一部の挙動が新しいため、VS2019でのビルド可否はこれで確認する。
+    使い方: dotnet build -p:UtsushiVs2019Compiler=true(tech.md「Visual Studio 2019 対応」)
+    RoslynCompilerType を明示しないと、新しいSDKが自前のコンパイラのパスで上書きしてしまい差し替えが効かない。
+  -->
+  <PropertyGroup Condition="'$(UtsushiVs2019Compiler)' == 'true'">
+    <RoslynCompilerType>Custom</RoslynCompilerType>
+    <!-- 新しいSDK同梱のアナライザーはRoslyn 3.11に読み込めず警告CS8032が大量に出るため、この検証モードでは止める
+         (アナライザー込みのビルドはCIのWindowsジョブ〔.NET 5 SDK〕が確認する) -->
+    <RunAnalyzers>false</RunAnalyzers>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(UtsushiVs2019Compiler)' == 'true'">
+    <PackageReference Include="Microsoft.Net.Compilers.Toolset" Version="3.11.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
     テストから internal のレイアウト計算ユーティリティ等を直接検証できるようにする。
     公開APIを増やさずにユニットテストの粒度を保つため。
   -->

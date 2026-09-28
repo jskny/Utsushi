@@ -37,3 +37,35 @@ jobs:
 
       - name: Format check
         run: dotnet format --verify-no-changes
+
+      # VS2019 16.11と同じC#コンパイラ(Roslyn 3.11)でビルドし直してテストする。
+      # 新しいコンパイラはLangVersion=9.0でも一部の挙動が新しいため(tech.md「Visual Studio 2019 対応」)。
+      # 詳細は docs/開発環境メモ.md「Visual Studio 2019 でのビルド」。
+      - name: Build with VS2019 compiler (Roslyn 3.11)
+        run: dotnet build --no-incremental --configuration Release -p:UtsushiVs2019Compiler=true
+
+      - name: Test (VS2019 compiler build)
+        run: dotnet test --no-build --configuration Release
+
+  # VS2019 16.11と同じツールチェーン(.NET 5 SDK 5.0.408 = MSBuild 16.11 + Roslyn 3.11)でWindows上のビルドを確認する。
+  # テストはフォント環境の差を未検証のためLinuxジョブに任せ、ここではビルドまでにとどめる。
+  # global.jsonはLinuxジョブ・Claude Code on the webに.NET 5 SDKが無いためコミットしておらず、ここでだけ作る。
+  vs2019-toolchain:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "5.0.408"
+
+      - name: Pin .NET 5 SDK
+        shell: pwsh
+        run: |
+          '{"sdk":{"version":"5.0.408","rollForward":"latestPatch"}}' | Set-Content global.json
+
+      - name: Show SDK
+        run: dotnet --version
+
+      - name: Build
+        run: dotnet build Utsushi.sln --configuration Release

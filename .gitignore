@@ -58,3 +58,6 @@ nunit-*.xml
 
 # Utsushi: ゴールデンテストの実出力(期待値は Fixtures 配下に別途コミットする)
 tests/**/TestOutput/
+
+# VS2019のPCで .NET 5 SDKに固定するためにローカルで作る(docs/開発環境メモ.md「Visual Studio 2019 でのビルド」)
+/global.json

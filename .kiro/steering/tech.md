@@ -11,7 +11,12 @@ inclusion: always
 
 > **.NET 5固定の理由**: 本ライブラリを利用する予定の呼び出し元プロダクトが .NET 5 上で動作しており、そのプロセスに読み込まれる(同一プロセス内でアセンブリとして参照される)ことを前提とするため、`net5.0` をターゲットフレームワークとして固定する。呼び出し元の .NET バージョンが上がらない限り、Utsushi側だけを新しいTFMに上げることはできない。
 
-> **Visual Studio 2019 対応**: 呼び出し元プロダクトの開発環境が Visual Studio 2019 であるため、Utsushi側も VS2019 でビルドできる必要がある。VS2019(最終版16.11)がバンドルするC#コンパイラは **C# 9.0 までしかサポートしない**(C# 10はVS2022以降が必要。これは一般に知られている事実であり、この開発環境〔Claude Code on the web〕にはVisual Studio自体が無いため実機検証はできていない)。TFMが`net5.0`であることとC#の言語バージョンは別軸のため、`net5.0`自体はVS2019で問題なくビルドできても、`LangVersion`を10以上にするとVS2019ではコンパイルエラーになる。このためLangVersionは`9.0`に固定し、file-scoped namespaceやrecord struct等C# 10以降の構文は使用しない。加えてVS2019は新しいXML形式のソリューションファイル(`.slnx`)を認識できないため、`vs2019/Utsushi.sln`(classic形式)を`Utsushi.slnx`と並行して維持する(ルート直下に置くと`.slnx`と衝突し`dotnet build`等の引数なし実行が壊れるため`vs2019/`配下に置く。詳細は`structure.md`「ソリューション構成」参照)。
+> **Visual Studio 2019 対応**: 呼び出し元プロダクトの開発環境が Visual Studio 2019 であるため、Utsushi側も VS2019 でビルドできる必要がある。VS2019(最終版16.11)がバンドルするC#コンパイラは **C# 9.0 までしかサポートしない**(C# 10はVS2022以降が必要。これは一般に知られている事実であり、この開発環境〔Claude Code on the web〕にはVisual Studio自体が無いため実機検証はできていない)。TFMが`net5.0`であることとC#の言語バージョンは別軸のため、`net5.0`自体はVS2019で問題なくビルドできても、`LangVersion`を10以上にするとVS2019ではコンパイルエラーになる。このためLangVersionは`9.0`に固定し、file-scoped namespaceやrecord struct等C# 10以降の構文は使用しない。加えてVS2019は新しいXML形式のソリューションファイル(`.slnx`)を認識できないため、ソリューションファイルはルート直下のclassic形式の`Utsushi.sln`だけとする(詳細は`structure.md`「ソリューション構成」参照)。
+>
+> VS2019でビルドする際のその他の注意点:
+>
+> - **.NET SDKのバージョン**: .NET SDK 6.0.300以降はVisual Studio 16.11以前には読み込まれない(Microsoft Learn「Version requirements for .NET 6 SDK」)。`global.json` が無いと最も新しいSDKが選ばれるため、VS2019のPCに.NET 6以降のSDKも入っていると、ソリューションを開いてもビルドできない。VS2019のPCでは .NET 5 SDK(5.0.4xx。最終版は5.0.408)を使い、新しいSDKも入っている場合はリポジトリのルートに `global.json` を置いて5.0.4xxに固定する(手順は `docs/開発環境メモ.md`「1. .NET SDK」の「Visual Studio 2019 でのビルド」)。この開発環境とCIのLinuxジョブは.NET 5 SDKを持たないため、`global.json` はリポジトリにコミットしない(`.gitignore` で除外している)。
+> - **コンパイラの差**: 新しいSDKのコンパイラは `LangVersion=9.0` でも、言語バージョンで切り替わらない細かな挙動がVS2019のコンパイラ(Roslyn 3.11)と異なりうる。このため `dotnet build -p:UtsushiVs2019Compiler=true` で、VS2019 16.11と同じRoslyn 3.11(NuGetパッケージ `Microsoft.Net.Compilers.Toolset` 3.11.0、MIT)に差し替えてビルドできるようにしてあり、CIでも毎回この構成でビルドとテストを行う。Windows上でも .NET 5 SDK 5.0.408(MSBuild 16.11 + Roslyn 3.11。VS2019 16.11と同じ組み合わせ)でビルドする。
 
 > **注記(既知のリスク)**: .NET 5 は Microsoft のサポートが終了(EOL)しており、セキュリティパッチは提供されない。この点は呼び出し元プロダクトの制約に起因する既知のリスクとして許容し、呼び出し元が .NET 8 以降へ移行した際にはUtsushi側のTFMも追随できるよう、特定バージョンのランタイムAPIに過度に依存しない実装を心掛ける。
 

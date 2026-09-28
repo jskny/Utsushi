@@ -27,6 +27,8 @@
     さらに、呼び出し元プロダクトの開発環境がVisual Studio 2019(C# 9.0まで)であることが判明したため、
     ファイルスコープ名前空間は不採用とし、`LangVersion` を明示的に `9.0` に固定した
     (`.kiro/steering/tech.md`「Visual Studio 2019 対応」参照)。
+    その後、VS2019が `.slnx` を開けないことから、ソリューションファイルはルート直下のclassic形式の `Utsushi.sln` に一本化し、
+    `Utsushi.slnx` は削除した。
 
 - [x] 2. Parsingレイヤー: WorkbookModel の実装
   - [x] 2.1 `DocumentFormat.OpenXml` を依存に追加し、`.xlsx` からセル値・スタイル(フォント/罫線/配置/数値書式/背景色)を読み取る `IWorkbookReader` を実装する(数式セルは評価せずキャッシュ済み計算結果を読む)
