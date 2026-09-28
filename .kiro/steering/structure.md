@@ -66,7 +66,7 @@ Utsushi/
 │   └── specs/                      # 機能ごとの要件定義書・設計書・タスクリスト
 ├── .claude/
 │   └── agents/                     # コードレビュー・テスト作成・セキュリティレビュー等のサブエージェント定義
-├── Directory.Build.props           # 全プロジェクト共通のビルド設定(TFM/LangVersion/Nullable)
+├── Directory.Build.props           # 全プロジェクト共通のビルド設定(TFM/LangVersion/Nullable、VS2019コンパイラでの検証スイッチ)
 ├── Directory.Build.targets         # テストプロジェクト共通設定(RollForward/テストパッケージ)
 └── Utsushi.sln                     # classic形式。Visual Studio 2019でもそのまま開ける
 ```

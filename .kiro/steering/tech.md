@@ -15,7 +15,7 @@ inclusion: always
 >
 > VS2019でビルドする際のその他の注意点:
 >
-> - **.NET SDKのバージョン**: .NET SDK 6.0.300以降はVisual Studio 16.11以前には読み込まれない(Microsoft Learn「Version requirements for .NET 6 SDK」)。`global.json` が無いと最も新しいSDKが選ばれるため、VS2019のPCに.NET 6以降のSDKも入っていると、ソリューションを開いてもビルドできない。VS2019のPCでは .NET 5 SDK(5.0.4xx。最終版は5.0.408)を使い、新しいSDKも入っている場合はリポジトリのルートに `global.json` を置いて5.0.4xxに固定する(手順は `docs/開発環境メモ.md`「1. .NET SDK」の「Visual Studio 2019 でのビルド」)。この開発環境やCIは.NET 10 SDKしか持たないため、`global.json` はリポジトリにコミットしない(`.gitignore` で除外している)。
+> - **.NET SDKのバージョン**: .NET SDK 6.0.300以降はVisual Studio 16.11以前には読み込まれない(Microsoft Learn「Version requirements for .NET 6 SDK」)。`global.json` が無いと最も新しいSDKが選ばれるため、VS2019のPCに.NET 6以降のSDKも入っていると、ソリューションを開いてもビルドできない。VS2019のPCでは .NET 5 SDK(5.0.4xx。最終版は5.0.408)を使い、新しいSDKも入っている場合はリポジトリのルートに `global.json` を置いて5.0.4xxに固定する(手順は `docs/開発環境メモ.md`「1. .NET SDK」の「Visual Studio 2019 でのビルド」)。この開発環境とCIのLinuxジョブは.NET 5 SDKを持たないため、`global.json` はリポジトリにコミットしない(`.gitignore` で除外している)。
 > - **コンパイラの差**: 新しいSDKのコンパイラは `LangVersion=9.0` でも、言語バージョンで切り替わらない細かな挙動がVS2019のコンパイラ(Roslyn 3.11)と異なりうる。このため `dotnet build -p:UtsushiVs2019Compiler=true` で、VS2019 16.11と同じRoslyn 3.11(NuGetパッケージ `Microsoft.Net.Compilers.Toolset` 3.11.0、MIT)に差し替えてビルドできるようにしてあり、CIでも毎回この構成でビルドとテストを行う。Windows上でも .NET 5 SDK 5.0.408(MSBuild 16.11 + Roslyn 3.11。VS2019 16.11と同じ組み合わせ)でビルドする。
 
 > **注記(既知のリスク)**: .NET 5 は Microsoft のサポートが終了(EOL)しており、セキュリティパッチは提供されない。この点は呼び出し元プロダクトの制約に起因する既知のリスクとして許容し、呼び出し元が .NET 8 以降へ移行した際にはUtsushi側のTFMも追随できるよう、特定バージョンのランタイムAPIに過度に依存しない実装を心掛ける。
