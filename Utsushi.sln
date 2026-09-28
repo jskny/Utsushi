@@ -1,41 +1,41 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31903.59
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30114.105
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Cli", "..\src\Utsushi.Cli\Utsushi.Cli.csproj", "{F6DF4660-0916-408F-B961-785F5D0C96D7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Cli", "src\Utsushi.Cli\Utsushi.Cli.csproj", "{F6DF4660-0916-408F-B961-785F5D0C96D7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi", "..\src\Utsushi\Utsushi.csproj", "{494543F7-5FDA-4B6B-891D-76F09FE6F91F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi", "src\Utsushi\Utsushi.csproj", "{494543F7-5FDA-4B6B-891D-76F09FE6F91F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Rendering", "..\src\Utsushi.Rendering\Utsushi.Rendering.csproj", "{CCBCF0F9-1057-4E95-972B-2A8D281452EE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Rendering", "src\Utsushi.Rendering\Utsushi.Rendering.csproj", "{CCBCF0F9-1057-4E95-972B-2A8D281452EE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Layout", "..\src\Utsushi.Layout\Utsushi.Layout.csproj", "{05B2DEF7-B1F7-4B00-BF14-36C6A82CF1D9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Layout", "src\Utsushi.Layout\Utsushi.Layout.csproj", "{05B2DEF7-B1F7-4B00-BF14-36C6A82CF1D9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Substitution", "..\src\Utsushi.Substitution\Utsushi.Substitution.csproj", "{7E079A7D-7965-40E3-8D6D-66E912493373}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Substitution", "src\Utsushi.Substitution\Utsushi.Substitution.csproj", "{7E079A7D-7965-40E3-8D6D-66E912493373}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.ReportDefinition", "..\src\Utsushi.ReportDefinition\Utsushi.ReportDefinition.csproj", "{F128CCC5-5B5B-4DF9-87C9-4E2671F5E8BD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.ReportDefinition", "src\Utsushi.ReportDefinition\Utsushi.ReportDefinition.csproj", "{F128CCC5-5B5B-4DF9-87C9-4E2671F5E8BD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Core", "..\src\Utsushi.Core\Utsushi.Core.csproj", "{941F3E3F-B90B-47FB-A3C7-8872524B9609}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Core", "src\Utsushi.Core\Utsushi.Core.csproj", "{941F3E3F-B90B-47FB-A3C7-8872524B9609}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Parsing", "..\src\Utsushi.Parsing\Utsushi.Parsing.csproj", "{653D44DB-8791-4AAC-8D63-9388BFB9CCC0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Parsing", "src\Utsushi.Parsing\Utsushi.Parsing.csproj", "{653D44DB-8791-4AAC-8D63-9388BFB9CCC0}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Golden.Tests", "..\tests\Utsushi.Golden.Tests\Utsushi.Golden.Tests.csproj", "{F08C167C-AFB4-4B13-B106-880F365ABF64}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Golden.Tests", "tests\Utsushi.Golden.Tests\Utsushi.Golden.Tests.csproj", "{F08C167C-AFB4-4B13-B106-880F365ABF64}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Layout.Tests", "..\tests\Utsushi.Layout.Tests\Utsushi.Layout.Tests.csproj", "{B4803C8C-3812-4CFB-94E9-DE98EA812BF4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Layout.Tests", "tests\Utsushi.Layout.Tests\Utsushi.Layout.Tests.csproj", "{B4803C8C-3812-4CFB-94E9-DE98EA812BF4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Parsing.Tests", "..\tests\Utsushi.Parsing.Tests\Utsushi.Parsing.Tests.csproj", "{B002480B-92F9-4D62-9055-BBA283BDC570}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Parsing.Tests", "tests\Utsushi.Parsing.Tests\Utsushi.Parsing.Tests.csproj", "{B002480B-92F9-4D62-9055-BBA283BDC570}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Rendering.Tests", "..\tests\Utsushi.Rendering.Tests\Utsushi.Rendering.Tests.csproj", "{5B776332-529C-47F9-A45D-A1981DDDBEAE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Rendering.Tests", "tests\Utsushi.Rendering.Tests\Utsushi.Rendering.Tests.csproj", "{5B776332-529C-47F9-A45D-A1981DDDBEAE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.ReportDefinition.Tests", "..\tests\Utsushi.ReportDefinition.Tests\Utsushi.ReportDefinition.Tests.csproj", "{8499AC34-723F-4FA5-AAA2-5AE1B44B0055}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.ReportDefinition.Tests", "tests\Utsushi.ReportDefinition.Tests\Utsushi.ReportDefinition.Tests.csproj", "{8499AC34-723F-4FA5-AAA2-5AE1B44B0055}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Substitution.Tests", "..\tests\Utsushi.Substitution.Tests\Utsushi.Substitution.Tests.csproj", "{41E6E5D6-C94B-47D2-87D5-8C0D4D07F27B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.Substitution.Tests", "tests\Utsushi.Substitution.Tests\Utsushi.Substitution.Tests.csproj", "{41E6E5D6-C94B-47D2-87D5-8C0D4D07F27B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.TestSupport", "..\tests\Utsushi.TestSupport\Utsushi.TestSupport.csproj", "{15D76EC3-3950-4993-B55A-F8D3A8E38ED0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utsushi.TestSupport", "tests\Utsushi.TestSupport\Utsushi.TestSupport.csproj", "{15D76EC3-3950-4993-B55A-F8D3A8E38ED0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

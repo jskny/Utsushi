@@ -44,7 +44,9 @@ dotnet format
 - `samples/reports/` — 帳票定義とテンプレートの合成サンプル(実運用の帳票テンプレートは社内データのため含まれない)
 - `docs/` — テンプレート作成ガイド・スキーマ・利用方法・開発環境固有の注意点・過去の失敗事例集
 
-呼び出し元プロダクトの開発環境がVisual Studio 2019(.NET 5、C# 9.0まで)であるため、その制約に合わせている(このプロジェクト自体の開発にVisual Studioは必須ではない)。詳細は [`.kiro/steering/tech.md`](.kiro/steering/tech.md) を参照。
+呼び出し元プロダクトの開発環境がVisual Studio 2019(.NET 5、C# 9.0まで)であるため、その制約に合わせている(このプロジェクト自体の開発にVisual Studioは必須ではない)。
+Visual Studio 2019ではルートの `Utsushi.sln` を開く。.NET 6以降のSDKも入っているPCでは、`global.json` で .NET 5 SDKに固定する必要がある(手順は [`docs/開発環境メモ.md`](docs/開発環境メモ.md)「1. .NET SDK」の「Visual Studio 2019 でのビルド」)。
+詳細は [`.kiro/steering/tech.md`](.kiro/steering/tech.md) を参照。
 
 ## ライセンス
 

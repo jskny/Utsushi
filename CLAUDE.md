@@ -61,6 +61,9 @@ dotnet build
 dotnet test
 dotnet format
 
+# 呼び出し元の開発環境(Visual Studio 2019)と同じC#コンパイラ(Roslyn 3.11)でビルドできるか確かめる
+DOTNET_ROLL_FORWARD=Major dotnet build --no-incremental -p:UtsushiVs2019Compiler=true
+
 # 帳票サンプル(.xlsx)を再生成する
 dotnet run --project tools/Utsushi.SampleGenerator -- samples/reports
 
