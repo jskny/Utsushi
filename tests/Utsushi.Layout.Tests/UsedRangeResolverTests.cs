@@ -467,5 +467,36 @@ namespace Utsushi.Layout.Tests
             Assert.Equal((1, 1), page.RowRange);
             Assert.Equal((1, 1), page.ColumnRange);
         }
+
+        [Fact]
+        public void 二セルアンカーの終端は始点から4096セルまでに抑える()
+        {
+            // 回帰テスト(code-reviewer指摘): 描画時の走査の上限と揃え、XFD1048576 まで伸びる図形1つで
+            // 印刷範囲のセル数の上限(要件6.9)を超えて変換できなくなることを防ぐ。
+            var sheet = LayoutFixtures.UniformSheet(rows: 1, columns: 1);
+            var image = new ImageModel(
+                1u, Array.Empty<byte>(), "image/png", 0,
+                CellAddress.Parse("A1"), default,
+                new CellSpanAnchorExtent(new CellAddress(CellAddress.MaxRow, CellAddress.MaxColumn), new PointPt(1, 1)));
+
+            var range = UsedRangeResolver.GetOccupiedRange(sheet, image, 7.0);
+
+            Assert.Equal(1 + 4096, range.LastRow);
+            Assert.Equal(1 + 4096, range.LastColumn);
+        }
+
+        [Fact]
+        public void 固定サイズの寸法は描画時と同じ5000ptまでに抑える()
+        {
+            // 行高 20pt の行を 5000pt 分(250行)たどった位置で止まり、1万pt の図形でも使用範囲は倍にならない。
+            var sheet = LayoutFixtures.UniformSheet(rows: 1, columns: 1, rowHeightPt: 20.0);
+            var image = new ImageModel(
+                1u, Array.Empty<byte>(), "image/png", 0,
+                CellAddress.Parse("A1"), default, new FixedAnchorExtent(1.0, 10000.0));
+
+            var range = UsedRangeResolver.GetOccupiedRange(sheet, image, 7.0);
+
+            Assert.Equal(250, range.LastRow);
+        }
     }
 }

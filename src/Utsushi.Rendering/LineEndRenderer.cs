@@ -62,15 +62,28 @@ namespace Utsushi.Rendering
                 return;
             }
 
+            // 端の点と重なる点は向きを決められないため、重ならない最初の点までさかのぼる。
             if (headEnd is not null)
             {
-                Draw(canvas, points[0], points[0] - points[1], headEnd, color, lineWidth);
+                var next = 1;
+                while (next < points.Length - 1 && points[next] == points[0])
+                {
+                    next++;
+                }
+
+                Draw(canvas, points[0], points[0] - points[next], headEnd, color, lineWidth);
             }
 
             if (tailEnd is not null)
             {
                 var last = points.Length - 1;
-                Draw(canvas, points[last], points[last] - points[last - 1], tailEnd, color, lineWidth);
+                var previous = last - 1;
+                while (previous > 0 && points[previous] == points[last])
+                {
+                    previous--;
+                }
+
+                Draw(canvas, points[last], points[last] - points[previous], tailEnd, color, lineWidth);
             }
         }
 

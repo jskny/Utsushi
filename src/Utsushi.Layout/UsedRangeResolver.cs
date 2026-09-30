@@ -21,6 +21,15 @@ namespace Utsushi.Layout
         /// </summary>
         private const int MaxWalkSteps = 4096;
 
+        /// <summary>
+        /// 描画オブジェクトの寸法の上限(ポイント)。描画時(<c>PageCommandBuilder.MaxDrawingObjectDimensionPt</c>)と同じ値で、
+        /// 描画では切り詰められる寸法のまま使用範囲だけが広がらないようにする。
+        /// </summary>
+        private const double MaxDrawingObjectDimensionPt = 5000.0;
+
+        /// <summary>二セルアンカーの終端のセルを、始点から数えてこの行数・列数までに抑える(描画時の走査の上限と同じ)。</summary>
+        private const int MaxSpanCells = 4096;
+
         /// <summary>セルと描画オブジェクトの両方を含む使用範囲。どちらも無ければ null。</summary>
         public static CellRange? Resolve(SheetModel sheet, double maxDigitWidthPx)
         {
@@ -45,13 +54,14 @@ namespace Utsushi.Layout
             {
                 case CellSpanAnchorExtent span:
                     // 終端がセルの境界ちょうど(オフセット0)なら、そのセルには掛かっていない。
-                    lastColumn = span.ToOffset.X > 0 ? span.ToCell.Column : span.ToCell.Column - 1;
-                    lastRow = span.ToOffset.Y > 0 ? span.ToCell.Row : span.ToCell.Row - 1;
+                    lastColumn = Math.Min(span.ToOffset.X > 0 ? span.ToCell.Column : span.ToCell.Column - 1, from.Column + MaxSpanCells);
+                    lastRow = Math.Min(span.ToOffset.Y > 0 ? span.ToCell.Row : span.ToCell.Row - 1, from.Row + MaxSpanCells);
                     break;
 
                 case FixedAnchorExtent size:
-                    lastColumn = WalkColumns(sheet, from.Column, drawingObject.AnchorOffset.X + size.WidthPt, maxDigitWidthPx);
-                    lastRow = WalkRows(sheet, from.Row, drawingObject.AnchorOffset.Y + size.HeightPt);
+                    lastColumn = WalkColumns(
+                        sheet, from.Column, drawingObject.AnchorOffset.X + Cap(size.WidthPt), maxDigitWidthPx);
+                    lastRow = WalkRows(sheet, from.Row, drawingObject.AnchorOffset.Y + Cap(size.HeightPt));
                     break;
 
                 default:
@@ -73,7 +83,7 @@ namespace Utsushi.Layout
                 // 非表示の列は、描画オブジェクトの配置(PageCommandBuilder)と同じく幅0として扱う。
                 var widthPt = sheet.IsColumnHidden(column)
                     ? 0.0
-                    : ExcelUnitConverter.ColumnWidthToPoints(sheet.GetColumnWidth(column), maxDigitWidthPx);
+                    : ExcelUnitConverter.SheetColumnWidthToPoints(sheet, column, maxDigitWidthPx);
                 if (remaining <= widthPt)
                 {
                     break;
@@ -103,6 +113,8 @@ namespace Utsushi.Layout
 
             return row;
         }
+
+        private static double Cap(double sizePt) => Math.Min(Math.Max(sizePt, 0.0), MaxDrawingObjectDimensionPt);
 
         private static CellRange Union(CellRange a, CellRange b) =>
             new(

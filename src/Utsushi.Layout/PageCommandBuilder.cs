@@ -617,7 +617,7 @@ namespace Utsushi.Layout
         private double RawColumnWidthPt(int column) =>
             _sheet.IsColumnHidden(column)
                 ? 0.0
-                : ExcelUnitConverter.ColumnWidthToPoints(_sheet.GetColumnWidth(column), _report.Definition.MaxDigitWidthPx);
+                : ExcelUnitConverter.SheetColumnWidthToPoints(_sheet, column, _report.Definition.MaxDigitWidthPx);
 
         /// <summary>印刷範囲によらない、シート上の実際の行高(pt)。非表示行は0。</summary>
         private double RawRowHeightPt(int row) => _sheet.IsRowHidden(row) ? 0.0 : _sheet.GetRowHeight(row);

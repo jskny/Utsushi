@@ -343,6 +343,26 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void defaultColWidthが無いシートでは幅の指定が無い列の幅をNaNとして返す()
+        {
+            // 既定列幅は baseColWidth と最大数字幅から Layout が求める(ExcelUnitConverter.DefaultColumnWidthToPixels)。
+            // 以前は保存値 8.43 を返しており、Excel の画面上の既定列幅(64px)より狭い 59px で換算されていた。
+            var path = SafetyLimitWorkbookFixtures.CreateWithColumns(new[] { (2U, 2U) });
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                Assert.True(double.IsNaN(sheet.GetColumnWidth(1)));
+                Assert.Equal(12.0, sheet.GetColumnWidth(2));
+                Assert.True(double.IsNaN(sheet.GetColumnWidth(10)));
+                Assert.Equal(8, sheet.BaseColumnWidth);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void intの範囲を超えるmaxの列定義も最大列に丸めて列幅を反映する()
         {
             // 回帰テスト: 以前は max を int にキャストしてから丸めていたため、4294967295 が負になり定義ごと読み飛ばされていた。

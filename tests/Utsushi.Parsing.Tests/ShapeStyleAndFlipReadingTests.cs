@@ -366,6 +366,19 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 接続線の色の無い線に矢印だけがあれば既定の黒い線に矢印を付ける()
+        {
+            // 回帰テスト(code-reviewer指摘): 以前は null になり、描画時に既定の線は補われるのに矢印だけが消えていた。
+            var connector = ReadConnector(ConnectorAnchor(spPrExtra: "<a:ln w=\"25400\"><a:tailEnd type=\"triangle\"/></a:ln>"));
+
+            Assert.NotNull(connector.Outline);
+            Assert.Equal(ArgbColor.Black, connector.Outline!.Color);
+            Assert.Equal(2.0, connector.Outline.WidthPt, 6);
+            Assert.Null(connector.Outline.HeadEnd);
+            Assert.Equal(LineEndType.Triangle, connector.Outline.TailEnd!.Type);
+        }
+
+        [Fact]
         public void 図形の線のnoFillは透明の線ではなくnullのまま()
         {
             // 図形は Outline が null なら枠線を描かない(既定の線を補うのは接続線だけ)。

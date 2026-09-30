@@ -66,7 +66,7 @@ namespace Utsushi.Layout
                     continue;
                 }
 
-                var widthPt = ExcelUnitConverter.ColumnWidthToPoints(sheet.GetColumnWidth(c), maxDigitWidthPx);
+                var widthPt = ExcelUnitConverter.SheetColumnWidthToPoints(sheet, c, maxDigitWidthPx);
                 if (widthPt <= 0)
                 {
                     // 幅0の列は非表示と同じ扱い。

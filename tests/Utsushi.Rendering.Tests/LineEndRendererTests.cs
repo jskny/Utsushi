@@ -290,6 +290,22 @@ namespace Utsushi.Rendering.Tests
         }
 
         [Fact]
+        public void DrawOnPolylineは端の点と重なる点を飛ばして向きを決める()
+        {
+            // 回帰テスト(code-reviewer指摘): 以前は先頭2点・末尾2点が重なると向きが0になり矢印が描かれなかった。
+            var points = new[]
+            {
+                new SKPoint(20, 100), new SKPoint(20, 100), new SKPoint(100, 100), new SKPoint(100, 180), new SKPoint(100, 180),
+            };
+
+            using var bitmap = Render(c => LineEndRenderer.DrawOnPolyline(
+                c, points, Medium(LineEndType.Triangle), Medium(LineEndType.Triangle), SKColors.Black, 10f));
+
+            Assert.True(InkedRowsInColumn(bitmap, 22) < InkedRowsInColumn(bitmap, 47));
+            Assert.True(Inked(bitmap, 100, 175));
+        }
+
+        [Fact]
         public void 矢印の指定が無ければ何も描かない()
         {
             using var path = new SKPath();

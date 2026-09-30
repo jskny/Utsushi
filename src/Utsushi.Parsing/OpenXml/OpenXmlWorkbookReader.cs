@@ -263,7 +263,8 @@ namespace Utsushi.Parsing.OpenXml
                 hiddenColumns,
                 hiddenRows,
                 pageSetup,
-                drawingObjects);
+                drawingObjects,
+                (int)Math.Min(sheetFormat?.BaseColumnWidth?.Value ?? 8U, 255U));
         }
 
         /// <summary>
@@ -276,10 +277,10 @@ namespace Utsushi.Parsing.OpenXml
                 return explicitWidth;
             }
 
-            var baseWidth = sheetFormat?.BaseColumnWidth?.Value ?? 8U;
-
-            // Excel の既定列幅(8.43文字)は baseColWidth=8 にパディングを加えた値に相当する。
-            return baseWidth + 0.43;
+            // defaultColWidth が無い場合、Excel の既定列幅は baseColWidth と標準フォントの最大数字幅から決まる
+            // (例: Calibri 11 で 64px、ＭＳ Ｐゴシック 11 で 72px)。最大数字幅は帳票定義側の値のため、ここでは
+            // 「暗黙の既定幅」を NaN で表し、Layout レイヤーが求める(ExcelUnitConverter.DefaultColumnWidthToPixels)。
+            return double.NaN;
         }
 
         private static CellModel ReadCell(X.Cell cell, StyleTable styles, IReadOnlyList<string> sharedStrings)
@@ -1882,9 +1883,24 @@ namespace Utsushi.Parsing.OpenXml
                 return outline;
             }
 
-            var explicitNoLine = shapeProperties?.GetFirstChild<Dr.Outline>()?.GetFirstChild<Dr.NoFill>() is not null
-                || style is not null;
-            return explicitNoLine ? new ShapeOutline(ArgbColor.Transparent, 0.0) : null;
+            var line = shapeProperties?.GetFirstChild<Dr.Outline>();
+            var explicitNoLine = line?.GetFirstChild<Dr.NoFill>() is not null || style is not null;
+            if (explicitNoLine)
+            {
+                return new ShapeOutline(ArgbColor.Transparent, 0.0);
+            }
+
+            // 色の無い a:ln に矢印だけがある場合、既定の黒い線(Rendering が null のとき補う線と同じ)に矢印を付けて返す。
+            // null にすると、線は既定値で描かれるのに矢印だけが黙って消えるため(code-reviewer指摘)。
+            var headEnd = ReadLineEnd(line?.GetFirstChild<Dr.HeadEnd>());
+            var tailEnd = ReadLineEnd(line?.GetFirstChild<Dr.TailEnd>());
+            if (headEnd is null && tailEnd is null)
+            {
+                return null;
+            }
+
+            var widthPt = line?.Width?.Value is { } width ? Units.EmusToPoints(width) : 1.0;
+            return new ShapeOutline(ArgbColor.Black, widthPt, headEnd, tailEnd);
         }
 
         /// <summary>線の端の矢印(<c>a:headEnd</c>/<c>a:tailEnd</c>)を読み取る(要件10.18)。<c>none</c>・未指定は null。</summary>
@@ -2648,8 +2664,9 @@ namespace Utsushi.Parsing.OpenXml
                     InvalidExcelFileReason.TooLarge,
                     reportCode);
             }
-            catch (XmlException ex)
+            catch (Exception ex) when (ex is XmlException or InvalidDataException or IOException)
             {
+                // 壊れた圧縮データ(deflate)は InvalidDataException/IOException になる(code-reviewer指摘)。
                 throw new InvalidExcelFileException(
                     $"パート '{partName}' のXMLが壊れているため読み取れません。",
                     InvalidExcelFileReason.Corrupted,
