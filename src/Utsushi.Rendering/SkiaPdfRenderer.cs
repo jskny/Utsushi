@@ -288,6 +288,7 @@ namespace Utsushi.Rendering
 
             // 反転(要件10.17)は形状(塗りつぶし・枠線・矢印)にだけかけ、文字は鏡像にしない。
             var hasFlip = shape.FlipHorizontal || shape.FlipVertical;
+            var hasTextRotation = false;
             if (hasFlip)
             {
                 canvas.Save();
@@ -338,6 +339,15 @@ namespace Utsushi.Rendering
                     hasFlip = false;
                 }
 
+                // 上下反転した図形の文字は、Office と同じく鏡像にせず180°回して描く(左右反転では文字は変えない。
+                // 要件10.17補足)。
+                if (shape.FlipVertical && shape.TextLines.Count > 0)
+                {
+                    canvas.Save();
+                    canvas.RotateDegrees(180f, (skRect.Left + skRect.Right) / 2f, (skRect.Top + skRect.Bottom) / 2f);
+                    hasTextRotation = true;
+                }
+
                 // テキストは図形本体と同じ回転変換の内側で描画することで、回転が正しく反映される
                 // (design.md「Rendering レイヤー」参照)。ShapeTextLineはクリップ矩形を持たないため
                 // TextCommandへの変換ではClipRectをnullにする。
@@ -351,7 +361,7 @@ namespace Utsushi.Rendering
             }
             finally
             {
-                if (hasFlip)
+                if (hasFlip || hasTextRotation)
                 {
                     canvas.Restore();
                 }

@@ -367,6 +367,13 @@ namespace Utsushi.Parsing.OpenXml
                 // Excel は未使用の右端まで Column 要素を伸ばすことがある。使用範囲を超える定義は既定幅と同じなので無視する。
                 max = Math.Min(max, CellAddress.MaxColumn);
 
+                // min が最大列を超える定義は範囲が空になる。そのまま数えると展開回数の合計が負になり、
+                // 上限(MaxColumnExpansionsPerSheet)をすり抜けられるため読み飛ばす(spec-compliance-reviewer指摘)。
+                if (max < min)
+                {
+                    continue;
+                }
+
                 expansions += max - min + 1;
                 EnsureColumnExpansionsWithinLimit(expansions, MaxColumnExpansionsPerSheet, sheetName, reportCode);
 
@@ -1212,7 +1219,7 @@ namespace Utsushi.Parsing.OpenXml
             var rotationDegrees = (transform?.Rotation?.Value ?? 0) / 60000.0;
             var flipHorizontal = transform?.HorizontalFlip?.Value ?? false;
             var flipVertical = transform?.VerticalFlip?.Value ?? false;
-            var outline = ReadShapeOutline(shapeProperties, connector.ShapeStyle, colors);
+            var outline = ReadConnectorOutline(shapeProperties, connector.ShapeStyle, colors);
 
             var connectorShapeDrawingProperties =
                 connector.NonVisualConnectionShapeProperties?.NonVisualConnectorShapeDrawingProperties;
@@ -1527,7 +1534,7 @@ namespace Utsushi.Parsing.OpenXml
             var rotationDegrees = (transform?.Rotation?.Value ?? 0) / 60000.0;
             var flipHorizontal = transform?.HorizontalFlip?.Value ?? false;
             var flipVertical = transform?.VerticalFlip?.Value ?? false;
-            var outline = ReadShapeOutline(shapeProperties, connector.ShapeStyle, colors);
+            var outline = ReadConnectorOutline(shapeProperties, connector.ShapeStyle, colors);
 
             var connectorShapeDrawingProperties =
                 connector.NonVisualConnectionShapeProperties?.NonVisualConnectorShapeDrawingProperties;
@@ -1859,6 +1866,25 @@ namespace Utsushi.Parsing.OpenXml
                 : lineRef is not null ? colors.GetLineStyleWidthPt(lineRef.Index!.Value) : 1.0;
             return new ShapeOutline(
                 color, widthPt, ReadLineEnd(outline?.GetFirstChild<Dr.HeadEnd>()), ReadLineEnd(outline?.GetFirstChild<Dr.TailEnd>()));
+        }
+
+        /// <summary>
+        /// 接続線の線を読み取る。接続線は <see cref="ConnectorModel.Outline"/> が null のとき Rendering が既定の黒い線を補うため、
+        /// 線を明示的に消している場合(<c>a:ln/a:noFill</c>、または図形のスタイルがあり線の色が決まらない場合)は
+        /// 透明の線にして、既定の線と区別する(要件10.16)。
+        /// </summary>
+        private static ShapeOutline? ReadConnectorOutline(
+            Xdr.ShapeProperties? shapeProperties, Xdr.ShapeStyle? style, DrawingColorResolver colors)
+        {
+            var outline = ReadShapeOutline(shapeProperties, style, colors);
+            if (outline is not null)
+            {
+                return outline;
+            }
+
+            var explicitNoLine = shapeProperties?.GetFirstChild<Dr.Outline>()?.GetFirstChild<Dr.NoFill>() is not null
+                || style is not null;
+            return explicitNoLine ? new ShapeOutline(ArgbColor.Transparent, 0.0) : null;
         }
 
         /// <summary>線の端の矢印(<c>a:headEnd</c>/<c>a:tailEnd</c>)を読み取る(要件10.18)。<c>none</c>・未指定は null。</summary>

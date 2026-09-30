@@ -70,7 +70,10 @@ namespace Utsushi.Layout
             var remaining = extentPt;
             for (var step = 0; step < MaxWalkSteps && column < CellAddress.MaxColumn; step++)
             {
-                var widthPt = ExcelUnitConverter.ColumnWidthToPoints(sheet.GetColumnWidth(column), maxDigitWidthPx);
+                // 非表示の列は、描画オブジェクトの配置(PageCommandBuilder)と同じく幅0として扱う。
+                var widthPt = sheet.IsColumnHidden(column)
+                    ? 0.0
+                    : ExcelUnitConverter.ColumnWidthToPoints(sheet.GetColumnWidth(column), maxDigitWidthPx);
                 if (remaining <= widthPt)
                 {
                     break;
@@ -88,7 +91,7 @@ namespace Utsushi.Layout
             var remaining = extentPt;
             for (var step = 0; step < MaxWalkSteps && row < CellAddress.MaxRow; step++)
             {
-                var heightPt = sheet.GetRowHeight(row);
+                var heightPt = sheet.IsRowHidden(row) ? 0.0 : sheet.GetRowHeight(row);
                 if (remaining <= heightPt)
                 {
                     break;

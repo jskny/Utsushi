@@ -52,18 +52,14 @@ namespace Utsushi.Rendering.Tests
 
         // -- 要件10.17: 反転 -------------------------------------------------
 
-        [Theory]
-        [InlineData(true, false)]
-        [InlineData(false, true)]
-        public void 片方向に反転した図形は形状だけが鏡像になり文字は鏡像にならない(bool flipH, bool flipV)
+        [Fact]
+        public void 左右反転した図形は形状だけが鏡像になり文字は変わらない()
         {
             var unflipped = Analyze(ArrowShape(false, false));
-            var flipped = Analyze(ArrowShape(flipH, flipV));
+            var flipped = Analyze(ArrowShape(true, false));
 
             // 形状: 反転していない図形とは行列式の符号が逆になる。
-            var unflippedFill = Assert.Single(unflipped.Fills);
-            var flippedFill = Assert.Single(flipped.Fills);
-            Assert.Equal(-Math.Sign(unflippedFill.Determinant), Math.Sign(flippedFill.Determinant));
+            Assert.Equal(-Math.Sign(Assert.Single(unflipped.Fills).Determinant), Math.Sign(Assert.Single(flipped.Fills).Determinant));
 
             // 文字: 変換行列も文字の命令も反転していない図形と同じ。
             var unflippedText = Assert.Single(unflipped.Texts);
@@ -72,20 +68,30 @@ namespace Utsushi.Rendering.Tests
             Assert.Equal(unflippedText.Body, flippedText.Body);
         }
 
-        [Fact]
-        public void 上下左右に反転した図形は形状が180度回り文字はそのまま()
+        [Theory]
+        [InlineData(false, true)]
+        [InlineData(true, true)]
+        public void 上下反転した図形の文字は鏡像にせず180度回して描く(bool flipH, bool flipV)
         {
+            // Office は上下反転した図形の文字を逆さ(180度回転)にし、鏡像にはしない(要件10.17補足)。
             var unflipped = Analyze(ArrowShape(false, false));
-            var flipped = Analyze(ArrowShape(true, true));
+            var flipped = Analyze(ArrowShape(flipH, flipV));
 
-            // 両方向の反転は行列式の符号を変えないが、行列は異なる(中心で180度回る)。
-            var unflippedFill = Assert.Single(unflipped.Fills);
-            var flippedFill = Assert.Single(flipped.Fills);
-            Assert.Equal(Math.Sign(unflippedFill.Determinant), Math.Sign(flippedFill.Determinant));
-            Assert.NotEqual(unflippedFill.Matrix, flippedFill.Matrix);
+            // 形状: 片方向の反転は行列式の符号が逆、両方向は同じ(180度回転)。
+            var expectedSign = flipH ^ flipV ? -1 : 1;
+            Assert.Equal(
+                expectedSign * Math.Sign(Assert.Single(unflipped.Fills).Determinant),
+                Math.Sign(Assert.Single(flipped.Fills).Determinant));
 
-            Assert.Equal(Assert.Single(unflipped.Texts).Matrix, Assert.Single(flipped.Texts).Matrix);
+            // 文字: 鏡像ではない(行列式の符号が同じ)が、180度回っているため行列は異なる。
+            var unflippedText = Assert.Single(unflipped.Texts);
+            var flippedText = Assert.Single(flipped.Texts);
+            Assert.Equal(Math.Sign(Det(unflippedText.Matrix)), Math.Sign(Det(flippedText.Matrix)));
+            Assert.NotEqual(unflippedText.Matrix, flippedText.Matrix);
+            Assert.Equal(unflippedText.Body, flippedText.Body);
         }
+
+        private static double Det(Matrix m) => (m.A * m.D) - (m.B * m.C);
 
         [Fact]
         public void 回転と反転を併せ持つ図形でも文字は回転だけがかかる()

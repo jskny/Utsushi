@@ -309,7 +309,7 @@
 14. WHEN 線吹き出し(`callout1`〜`3`、`borderCallout1`〜`3`、`accentCallout1`〜`3`、`accentBorderCallout1`〜`3`)が配置されている THEN システムは 調整ガイド値(`adj1`=y1, `adj2`=x1, `adj3`=y2, `adj4`=x2, …。折れ数Nに対して2(N+1)個)が表す頂点を結んだ引き出し線を描画する SHALL(指定が無い頂点はECMA-376の既定値を使う)。本体の枠線は`borderCallout`系・`accentBorderCallout`系のみ描画し、`accentCallout`系・`accentBorderCallout`系は引き出し線の始点のX位置に本体の上端から下端までの縦線(強調線)を描画する SHALL。
 15. WHEN 図形・接続線の塗りつぶし・枠線・文字の色がテーマの色(`a:schemeClr`)・システム色(`a:sysClr`)で指定されている、または色の修飾(`lumMod`/`lumOff`/`shade`/`tint`/`alpha`)を伴う THEN システムは ブックのテーマ(`theme1.xml`の配色)から色を求め、修飾を適用した色で描画する SHALL(プリセット色`a:prstClr`など、それ以外の色の指定は従来どおり色が読めないものとして扱う)。
 16. WHEN 図形・接続線の`spPr`に塗りつぶし・枠線、または文字の`a:rPr`に色の指定が無く、図形のスタイル(`xdr:style`の`fillRef`/`lnRef`/`fontRef`)が指定されている THEN システムは テーマの書式設定(`a:fmtScheme`の`fillStyleLst`/`lnStyleLst`)とスタイルの色から、塗りつぶし・枠線(色・太さ)・文字色を決める SHALL(`fillRef`がグラデーション等の書式を指す場合は、スタイルの色の単色で近似する。文字の`a:rPr`の色が要件10.15で解決できない指定の場合も、`fontRef`の色を使う)。
-17. WHEN 図形またはグループに反転(`a:xfrm/@flipH`・`@flipV`)が指定されている THEN システムは 配置矩形の中心を軸に、図形の形状(線吹き出しの引き出し線を含む)とグループ内の要素の配置を反転して描画する SHALL(図形内の文字は鏡像にしない)。
+17. WHEN 図形またはグループに反転(`a:xfrm/@flipH`・`@flipV`)が指定されている THEN システムは 配置矩形の中心を軸に、図形の形状(線吹き出しの引き出し線を含む)とグループ内の要素の配置を反転して描画する SHALL(図形内の文字は鏡像にしない。上下反転では、Officeと同様に文字を180°回して描く)。
 18. WHEN 接続線・線吹き出しの線の端に矢印(`a:ln/a:headEnd`・`a:tailEnd`の`@type`が`none`以外)が指定されている THEN システムは その種類(`triangle`/`stealth`/`arrow`/`oval`/`diamond`)と大きさ(`@w`/`@len`)に従って、線の端に矢印を描画する SHALL。
 
 
