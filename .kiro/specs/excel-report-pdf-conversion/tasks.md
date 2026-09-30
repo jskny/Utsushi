@@ -849,3 +849,32 @@
     - _Requirements: 10.9, 11.6_
   - [x] 22.7 design.md・tech.md・docs・CLAUDE.md・README・失敗事例集を更新する
     - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6_
+
+- [x] 23. 線吹き出し(`borderCallout`等)への対応
+  - [x] 23.1 requirements.mdに要件10.14を追加し、要件10.1補足の対応済みプリセット一覧に線吹き出し12種を加える
+    - _Requirements: 10.1, 10.14_
+  - [x] 23.2 Parsing: `ShapePresetType` に `BorderCallout1`〜`3`/`AccentCallout1`〜`3`/`AccentBorderCallout1`〜`3` を追加し、
+        線吹き出し12種の調整ガイド(折れ数Nに対して`adj1`〜`adj(2N+2)`)を読み取る
+    - _Requirements: 10.1, 10.14_
+  - [x] 23.3 Rendering: `ShapeGeometryBuilder` の線吹き出しを、調整ガイドの頂点を結ぶ引き出し線・本体枠線の有無・
+        強調線の有無の組み合わせで描く。`callout1`〜`3`(枠なし)は本体の枠線を描かないよう改める
+    - _Requirements: 10.14_
+  - [x] 23.4 Parsing・Renderingのユニットテストを追加・更新する
+    - _Requirements: 10.14_
+
+- [ ] 24. 帳票定義なしでの変換
+  - [x] 24.1 product.md・requirements.md(要件12)・design.mdを更新する
+    - _Requirements: 12.1〜12.7_
+  - [ ] 24.2 Parsing: `WorkbookReadOptions.ActiveSheetOnly` を追加し、アクティブシート(非表示なら表示されている最初のシート)1枚だけを読む
+    - _Requirements: 12.2, 12.6_
+  - [ ] 24.3 ReportDefinition: 既定値の定義を合成する `ReportDefinition.CreateWithoutDefinition` を追加する
+    - _Requirements: 12.1, 12.3, 12.5_
+  - [ ] 24.4 ファサード: `ConvertWithoutDefinition` / `ConvertFileWithoutDefinition` / `ComputeLayoutWithoutDefinition`、
+        帳票定義ルートを取らない `CreateDefault` を追加する
+    - _Requirements: 12.1, 12.4, 12.5_
+  - [ ] 24.5 CLI: `--report` を省略可能にし、省略時は帳票定義なしで変換する。`--set` との併用は使い方エラーにする
+    - _Requirements: 12.7_
+  - [ ] 24.6 テストを追加する(Parsingのシート選択、ファサードの定義なし変換、上書き、文書名)
+    - _Requirements: 12.1〜12.6_
+  - [ ] 24.7 CLAUDE.md・README・docs(ライブラリの使い方・テンプレート作成ガイド)を更新する
+    - _Requirements: 12.1〜12.7_

@@ -99,6 +99,16 @@ namespace Utsushi.Parsing.OpenXml
                 var sharedStrings = ReadSharedStrings(workbookPart, options.ReportCode);
                 var definedNames = ReadDefinedNames(workbookPart);
 
+                var sheetNameFilter = options.SheetNameFilter;
+                if (sheetNameFilter is null && options.ActiveSheetOnly)
+                {
+                    sheetNameFilter = ResolveActiveSheetName(workbookPart.Workbook)
+                        ?? throw new InvalidExcelFileException(
+                            "表示されているワークシートが1つもありません。",
+                            InvalidExcelFileReason.NoWorksheet,
+                            options.ReportCode);
+                }
+
                 var sheets = new List<SheetModel>();
                 var allSheetNames = new List<string>();
                 foreach (var sheet in workbookPart.Workbook.Sheets?.Elements<X.Sheet>() ?? Enumerable.Empty<X.Sheet>())
@@ -111,7 +121,7 @@ namespace Utsushi.Parsing.OpenXml
 
                     allSheetNames.Add(name!);
 
-                    if (options.SheetNameFilter is { } filter && !string.Equals(name, filter, StringComparison.Ordinal))
+                    if (sheetNameFilter is { } filter && !string.Equals(name, filter, StringComparison.Ordinal))
                     {
                         continue;
                     }
@@ -477,6 +487,30 @@ namespace Utsushi.Parsing.OpenXml
         /// <paramref name="cellCount"/>が<see cref="MaxCellsPerSheet"/>を超えていないか確認する。
         /// <see cref="EnsureRowIndexWithinLimit(int, string, string?)"/>と同じ理由でテスト可能にしている。
         /// </summary>
+        /// <summary>
+        /// アクティブシート(<c>workbookView/@activeTab</c>。省略時は0)の名前を返す。そのシートが非表示
+        /// (<c>state="hidden"</c>/<c>"veryHidden"</c>)または読めない場合は、表示されている最初のシートの名前を返す。
+        /// 表示されているシートが無ければ null(要件12.2)。
+        /// </summary>
+        private static string? ResolveActiveSheetName(X.Workbook workbook)
+        {
+            var allSheets = workbook.Sheets?.Elements<X.Sheet>().ToList() ?? new List<X.Sheet>();
+
+            var activeTab = workbook.BookViews?.GetFirstChild<X.WorkbookView>()?.ActiveTab?.Value ?? 0U;
+            if (activeTab < allSheets.Count && IsVisibleSheet(allSheets[(int)activeTab]))
+            {
+                return allSheets[(int)activeTab].Name!.Value;
+            }
+
+            return allSheets.FirstOrDefault(IsVisibleSheet)?.Name!.Value;
+        }
+
+        private static bool IsVisibleSheet(X.Sheet sheet) =>
+            !string.IsNullOrEmpty(sheet.Name?.Value)
+            && sheet.Id?.Value is not null
+            && sheet.State?.Value != X.SheetStateValues.Hidden
+            && sheet.State?.Value != X.SheetStateValues.VeryHidden;
+
         private static void EnsureCellCountWithinLimit(int cellCount, string sheetName, string? reportCode) =>
             EnsureCellCountWithinLimit(cellCount, MaxCellsPerSheet, sheetName, reportCode);
 
@@ -514,6 +548,15 @@ namespace Utsushi.Parsing.OpenXml
             [Dr.ShapeTypeValues.Callout1] = ShapePresetType.Callout1,
             [Dr.ShapeTypeValues.Callout2] = ShapePresetType.Callout2,
             [Dr.ShapeTypeValues.Callout3] = ShapePresetType.Callout3,
+            [Dr.ShapeTypeValues.BorderCallout1] = ShapePresetType.BorderCallout1,
+            [Dr.ShapeTypeValues.BorderCallout2] = ShapePresetType.BorderCallout2,
+            [Dr.ShapeTypeValues.BorderCallout3] = ShapePresetType.BorderCallout3,
+            [Dr.ShapeTypeValues.AccentCallout1] = ShapePresetType.AccentCallout1,
+            [Dr.ShapeTypeValues.AccentCallout2] = ShapePresetType.AccentCallout2,
+            [Dr.ShapeTypeValues.AccentCallout3] = ShapePresetType.AccentCallout3,
+            [Dr.ShapeTypeValues.AccentBorderCallout1] = ShapePresetType.AccentBorderCallout1,
+            [Dr.ShapeTypeValues.AccentBorderCallout2] = ShapePresetType.AccentBorderCallout2,
+            [Dr.ShapeTypeValues.AccentBorderCallout3] = ShapePresetType.AccentBorderCallout3,
             [Dr.ShapeTypeValues.Star4] = ShapePresetType.Star4,
             [Dr.ShapeTypeValues.Star5] = ShapePresetType.Star5,
             [Dr.ShapeTypeValues.Star6] = ShapePresetType.Star6,
@@ -543,6 +586,12 @@ namespace Utsushi.Parsing.OpenXml
             [Dr.ShapeTypeValues.CurvedConnector3] = ConnectorPresetType.Curved3Segment,
         };
 
+        private static readonly string[] LineCalloutGuideNames1 = { "adj1", "adj2", "adj3", "adj4" };
+
+        private static readonly string[] LineCalloutGuideNames2 = { "adj1", "adj2", "adj3", "adj4", "adj5", "adj6" };
+
+        private static readonly string[] LineCalloutGuideNames3 = { "adj1", "adj2", "adj3", "adj4", "adj5", "adj6", "adj7", "adj8" };
+
         /// <summary>
         /// プリセットごとの調整ガイド(<c>a:avLst/a:gd/@name</c>)の並び順。<see cref="ShapeModel.AdjustmentValues"/>
         /// はこの並びに対応する固定長のリストとして返し、ファイルにガイドが無い位置は
@@ -565,11 +614,23 @@ namespace Utsushi.Parsing.OpenXml
             [ShapePresetType.WedgeEllipseCallout] = new[] { "adj1", "adj2" },
             // cloudCallout本体の輪郭(バンプの個数・半径)は固定形状として近似描画するが、
             // 引き出し三角形の位置(adj1=X方向, adj2=Y方向)はwedgeRectCallout等と同じ意味の
-            // 調整ガイドのため読み取る(要件10.13)。callout1-3は固定形状のまま。
+            // 調整ガイドのため読み取る(要件10.13)。
             [ShapePresetType.CloudCallout] = new[] { "adj1", "adj2" },
-            [ShapePresetType.Callout1] = Array.Empty<string>(),
-            [ShapePresetType.Callout2] = Array.Empty<string>(),
-            [ShapePresetType.Callout3] = Array.Empty<string>(),
+            // 線吹き出し(callout/borderCallout/accentCallout/accentBorderCallout の1〜3)は、
+            // 引き出し線の頂点を (adj1=y1, adj2=x1), (adj3=y2, adj4=x2), ... の組で持つ(要件10.14)。
+            // 折れ数Nの吹き出しは N+1 個の頂点 = 2(N+1) 個のガイドを持つ。
+            [ShapePresetType.Callout1] = LineCalloutGuideNames1,
+            [ShapePresetType.Callout2] = LineCalloutGuideNames2,
+            [ShapePresetType.Callout3] = LineCalloutGuideNames3,
+            [ShapePresetType.BorderCallout1] = LineCalloutGuideNames1,
+            [ShapePresetType.BorderCallout2] = LineCalloutGuideNames2,
+            [ShapePresetType.BorderCallout3] = LineCalloutGuideNames3,
+            [ShapePresetType.AccentCallout1] = LineCalloutGuideNames1,
+            [ShapePresetType.AccentCallout2] = LineCalloutGuideNames2,
+            [ShapePresetType.AccentCallout3] = LineCalloutGuideNames3,
+            [ShapePresetType.AccentBorderCallout1] = LineCalloutGuideNames1,
+            [ShapePresetType.AccentBorderCallout2] = LineCalloutGuideNames2,
+            [ShapePresetType.AccentBorderCallout3] = LineCalloutGuideNames3,
             // star4/5/6/8はECMA-376既定で単一の調整ガイド"adj"(内側頂点の半径比)を持つ。
             [ShapePresetType.Star4] = new[] { "adj" },
             [ShapePresetType.Star5] = new[] { "adj" },

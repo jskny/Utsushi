@@ -332,6 +332,25 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   }
   ```
 - `Build` 時に、定義が参照するシート名・セル番地が `WorkbookModel` 上に実在するかを検証する(要件1.4)。
+- **帳票定義なしモード(要件12)**: 定義をJSONからロードせず、`ReportDefinition.CreateWithoutDefinition(documentName, sheetName)`
+  で既定値の定義を合成する(`SubstitutionFields`は空、`UnsupportedElements = Ignore`、
+  `MaxDigitWidthPx`/`ToleranceMm`は既定値、`PrintAreaOverride = null`)。合成した定義は以降の
+  `IReportModelBuilder.Build`・Substitution・Layout・Renderingに定義ありと同じ形で渡るため、
+  後段のレイヤーには分岐を入れない(帳票固有の分岐を共通レイヤーに置かない方針と同じ考え方)。
+  - ファサード `ReportPdfConverter` は帳票コードを取らないオーバーロード
+    `ConvertWithoutDefinition(Stream, Stream, cellOverrides?, documentName?)` /
+    `ConvertFileWithoutDefinition(string xlsxPath, string outputPath, cellOverrides?)` /
+    `ComputeLayoutWithoutDefinition(Stream, cellOverrides?, documentName?)` を持つ。
+    メソッド名を分けるのは、既存の `Convert(string reportCode, …)` と引数の並びが似ており、
+    オーバーロード解決で意図しない方が選ばれるのを避けるため。置換キーの辞書は受け取らない(要件12.4)。
+    帳票定義を使わない呼び出し元のために、帳票定義ルートを取らない `CreateDefault(fontOptions, renderOptions)` も用意する
+    (このとき帳票コードを指定した変換は `ReportDefinitionNotFoundException` になる)。
+  - 対象シートの決定(要件12.2)はParsingレイヤーの責務とし、`WorkbookReadOptions.ActiveSheetOnly = true` で
+    指定する。`OpenXmlWorkbookReader` は `workbookView/@activeTab` のシート(非表示なら表示されている
+    最初のシート)1枚だけを読み、サポート外要素の検出・安全弁もそのシートにだけ適用する
+    (全シートを読んでから1枚を選ぶと、使わないシートの上限超過で失敗しうるため)。
+  - 文書名(要件12.5)は合成定義の `ReportCode` に入れる。これにより PDF タイトル・`&F`/`&Z`・例外の
+    `ReportCode` に既存の経路のまま反映される。
 
 ### 3. Substitution レイヤー (`Utsushi.Substitution`)
 
@@ -576,10 +595,19 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       `["adj1", "adj2"]`を追加し、`CloudCalloutPath`のシグネチャに`adjustmentValues`を
       追加する)。ECMA-376上も雲形の輪郭自体(バンプ)は固定のパスであり、
       調整ガイドは引き出し位置のみに影響するため、この変更は輪郭の近似精度には影響しない。
-    - `callout1`/`callout2`/`callout3`(引き出し線付き吹き出し): 本体は`rect`、
-      そこから矩形の外側の1点(既定は左下方向)へ向けて1〜3本の線分からなる
-      折れ線(引き出し線)を追加する汎用の「N本引き出し線」生成ロジックとして実装する
-      (N=1,2,3をパラメータ化。三角形の塗りつぶしではなく線のみの点でwedge系と異なる)。
+    - 線吹き出し(要件10.14): `callout1`〜`3`/`borderCallout1`〜`3`/`accentCallout1`〜`3`/
+      `accentBorderCallout1`〜`3`の12種は、折れ数N(1〜3)・本体枠線の有無・強調線の有無の
+      組み合わせとして1つのロジック(`LineCalloutOutlinePath`)で描く。塗りつぶし用の`Build`は
+      本体の`rect`のみ、枠線用の`BuildOutline`は「本体の枠線(`borderCallout`系・
+      `accentBorderCallout`系のみ)」「強調線(accent系のみ。引き出し線の始点のX位置に本体の
+      上端から下端までの縦線)」「引き出し線(N+1個の頂点を結ぶ開いた折れ線)」を持つ。
+      ECMA-376上、`callout`(枠なし)系は本体の枠線を描かない(`stroke="false"`)ため、
+      以前の実装(`callout1`〜`3`にも本体の枠線を描いていた)から改めた。
+      引き出し線の頂点は調整ガイド`(adj1=y1, adj2=x1), (adj3=y2, adj4=x2), …`(本体の高さ・幅に
+      対する比率)で決まり、ファイルに無い位置はECMA-376 presetShapeDefinitionsの既定値
+      (折れ数1: 18750, -8333, 112500, -38333。折れ数2: 18750, -8333, 18750, -16667, 112500, -46667。
+      折れ数3: 18750, -8333, 18750, -16667, 100000, -16667, 112963, -8333。いずれも1/100000単位)を補う。
+      ファイル由来の極端な値はwedge系と同じ`CalloutTipAdjLimit`(±5倍)に収める。
     - `star4`/`star5`/`star6`/`star8`(星形、要件10.12): 外接円の半径`R`(=`min(幅,高さ)/2`)と、
       内側の頂点の半径比(ECMA-376既定の調整ガイド名は単一の`adj`)から、外側の頂点と
       内側の頂点を交互に結ぶ`2 * N`角形を組む(`N`=4/5/6/8)。`adj`の既定値(ファイルに
@@ -829,6 +857,9 @@ public enum ShapePresetType
     RightArrow, LeftArrow, UpArrow, DownArrow, LeftRightArrow, UpDownArrow,
     WedgeRectCallout, WedgeRoundRectCallout, WedgeEllipseCallout,
     CloudCallout, Callout1, Callout2, Callout3,             // 追加(拡張フェーズ)
+    BorderCallout1, BorderCallout2, BorderCallout3,         // 追加(要件10.14)
+    AccentCallout1, AccentCallout2, AccentCallout3,         // 追加(要件10.14)
+    AccentBorderCallout1, AccentBorderCallout2, AccentBorderCallout3, // 追加(要件10.14)
     Star4, Star5, Star6, Star8,                             // 追加(拡張フェーズ)
     FlowChartProcess, FlowChartDecision, FlowChartTerminator, // 追加(拡張フェーズ)
     FlowChartInputOutput, FlowChartDocument,                  // 追加(拡張フェーズ)
@@ -1226,6 +1257,11 @@ public sealed record GroupCommand(
   現時点では「登録済み自社帳票のみを対象とする」という製品スコープ上のリスク許容として
   対応を見送る。対象帳票の運用形態が変わり任意のExcelファイルを受け付ける可能性が
   出てきた場合は、実装前に必ず再評価すること。
+  帳票定義なしモード(要件12)の追加時に再評価した: 入力Excelはもともと呼び出し時に渡されるもので、
+  帳票定義の有無は入力ファイルの中身の信頼性を変えない(定義はシート名・セル番地を指定するだけで、
+  ファイルの内容を検証しない)。帳票定義なしモードの想定利用者も社内の担当者であり
+  (`.kiro/steering/product.md`「対象範囲」)、不特定の外部ユーザーからのアップロードは引き続き対象外のため、
+  リスク許容を維持する。公開のアップロード変換として使う計画が出た場合は、この項目を実装前に再評価すること。
 - **放射状グラデーションの`a:path`種別**(要件10.6): `a:path type="circle"`のみを
   厳密に扱い、`"rect"`/`"shape"`は同じ放射状近似にフォールバックする。矩形・図形に
   沿った塗りつぶしの厳密な再現は行わない。

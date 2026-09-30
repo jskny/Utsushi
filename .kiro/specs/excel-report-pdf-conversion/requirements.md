@@ -6,7 +6,8 @@
 (2) Excel上のレイアウト(改ページ・印刷範囲・列幅/行高・結合セル・フォント・罫線・配置)を崩さずに、
 (3) 商用ライブラリおよびOffice Interopに依存しない方法でPDFとして出力する機能を定義する。
 
-任意のExcelファイルを汎用的に扱う変換エンジンではなく、あらかじめ「帳票定義」として登録された特定の帳票のみを対象とする。
+任意のExcelファイルを汎用的に扱う変換エンジンではなく、あらかじめ「帳票定義」として登録された特定の帳票を主な対象とする。
+補助的に、社内の担当者が作成したExcelファイルを帳票定義なしでPDF化するベストエフォートの経路(要件12)を持つ。
 
 ## 用語
 
@@ -288,6 +289,7 @@
 11. WHEN 接続線(`xdr:cxnSp`)の始点/終点(`stCxn`/`endCxn`)が同一シート上の図形・画像・グループ(入れ子のグループ内要素を含む)を参照しており、その参照先が接続線と同じページ上で解決できる THEN システムは 接続線自身のアンカー矩形ではなく参照先の配置矩形上の接続点(下記補足)を実際の始点/終点として経路を決定する SHALL(参照先が解決できない場合は要件10.9の既定動作(自身のアンカー矩形と反転フラグのみによる経路決定)にフォールバックする)。
 12. WHEN 星形(`star4`/`star5`/`star6`/`star8`)の内側頂点の半径比を決める調整ガイド値(`a:avLst`)が指定されていない THEN システムは プリセットごとに異なるECMA-376の既定比率(下記補足)を用いる SHALL(全プリセット共通の単一の既定値を使わない)。
 13. WHEN 雲形吹き出し(`cloudCallout`)に引き出し位置の調整ガイド値(`adj1`/`adj2`)が指定されている THEN システムは 他の吹き出し(`wedgeRectCallout`等)と同様にその値を使って引き出し三角形の位置を決定する SHALL(指定が無い場合は既定値を使う)。
+14. WHEN 線吹き出し(`callout1`〜`3`、`borderCallout1`〜`3`、`accentCallout1`〜`3`、`accentBorderCallout1`〜`3`)が配置されている THEN システムは 調整ガイド値(`adj1`=y1, `adj2`=x1, `adj3`=y2, `adj4`=x2, …。折れ数Nに対して2(N+1)個)が表す頂点を結んだ引き出し線を描画する SHALL(指定が無い頂点はECMA-376の既定値を使う)。本体の枠線は`borderCallout`系・`accentBorderCallout`系のみ描画し、`accentCallout`系・`accentBorderCallout`系は引き出し線の始点のX位置に本体の上端から下端までの縦線(強調線)を描画する SHALL。
 
 > 補足(要件10.1): 対応済みプリセットジオメトリは、自社帳票での実用上の必要性を踏まえた
 > 以下の一覧に限定するキュレーション方式とする(ECMA-376の`ST_ShapeType`は約190種あり、
@@ -295,7 +297,8 @@
 >
 > - 基本図形: `rect`(矩形。`txBox="1"`が指定されたテキストボックスも幾何としてはこれを使う)、`roundRect`(角丸矩形)、`ellipse`(楕円・円)、`triangle`(三角形)
 > - 矢印: `rightArrow`, `leftArrow`, `upArrow`, `downArrow`, `leftRightArrow`, `upDownArrow`
-> - 吹き出し: `wedgeRectCallout`, `wedgeRoundRectCallout`, `wedgeEllipseCallout`, `cloudCallout`(雲形吹き出し), `callout1`, `callout2`, `callout3`(引き出し線付き吹き出し。折れ数が1〜3本)
+> - 吹き出し: `wedgeRectCallout`, `wedgeRoundRectCallout`, `wedgeEllipseCallout`, `cloudCallout`(雲形吹き出し)
+> - 線吹き出し(要件10.14。折れ数が1〜3本): `callout1`〜`3`(枠なし), `borderCallout1`〜`3`(Excelの「線吹き出し 1〜3」), `accentCallout1`〜`3`(強調線付き・枠なし), `accentBorderCallout1`〜`3`(強調線付き)
 > - 星形: `star4`, `star5`, `star6`, `star8`
 > - フローチャート記号: `flowChartProcess`(処理), `flowChartDecision`(判断), `flowChartTerminator`(端子), `flowChartInputOutput`(入出力), `flowChartDocument`(書類), `flowChartPredefinedProcess`(定義済み処理), `flowChartConnector`(結合子)
 >
@@ -401,3 +404,21 @@
 > 外字用の代替フォント一覧に登録すれば同じ仕組みで描画できる。
 > 異体字の字形はフォントの`cmap`から逆引きできないため、PDFから文字列をコピーした場合、
 > 異体字セレクタ付きの文字は抽出されないことがある(描画は正しく行う)。
+
+### 要件 12: 帳票定義なしでの変換
+
+**ユーザーストーリー:** 社内の担当者として、帳票定義(`definition.json`)を用意していないExcelファイルも、そのままPDFにしたい。それは、帳票として登録するほどではない社内資料や、登録前のテンプレートの見た目を手早く確認するためだ。
+
+#### 受け入れ基準
+
+1. WHEN 帳票コードを指定せずにExcelファイルが渡される THEN システムは 帳票定義をロードせず、下記の既定値で合成した帳票定義を使って、定義あり(要件1〜11)と同じパイプラインで変換する SHALL。
+2. WHEN 帳票定義なしで変換する THEN システムは ブックのアクティブシート(`workbookView/@activeTab`)を変換対象の1枚とし、それが非表示(`state="hidden"`/`"veryHidden"`)の場合は表示されている最初のシートを対象とする SHALL。表示されているシートが1枚も無い場合は変換を中止し、`InvalidExcelFileException`(`Reason=NoWorksheet`)を返す SHALL。
+3. WHEN 帳票定義なしで変換する THEN システムは サポート外要素(要件1.5, 9.4, 9.6, 10.7, 10.8)を無視(`unsupportedElements: "ignore"`相当)して変換を続行する SHALL。列幅換算の最大数字幅・印刷範囲は帳票定義の既定値(`maxDigitWidthPx`=7、印刷範囲はExcelの設定)を使う SHALL。
+4. WHEN 帳票定義なしで変換する THEN システムは 置換キーによる置換(要件2.1〜2.5)を受け付けず、セル番地直接指定による上書き(要件2.7〜2.9)のみを受け付ける SHALL。
+5. WHEN 帳票定義なしで変換する THEN システムは 帳票コードの代わりに文書名(ファイルから変換する場合は入力ファイル名から拡張子を除いたもの。ストリームから変換する場合は呼び出し元が指定した名前、指定が無ければ空文字列)を、PDFのタイトル・ヘッダー/フッターのファイル名(`&F`/`&Z`)・エラー情報の帳票コード欄に使う SHALL。
+6. WHEN 帳票定義なしで変換する THEN システムは 信頼できない入力に対する安全弁(要件6.6, 9.6, 10.8 など)を、定義ありの変換と同じ上限で適用する SHALL。
+7. WHEN CLIで`--report`を省略する THEN システムは 帳票定義なしで変換する SHALL。このとき`--set`が指定されていれば、置換キーを使えない旨の使い方エラーとする SHALL。
+
+> 補足(要件12): 帳票定義なしモードは、見た目の一致を保証しないベストエフォートの経路である
+> (`.kiro/steering/product.md`「対象範囲」)。サポート外要素を黙って無視するため、定義ありの
+> `unsupportedElements: "error"`のように欠落に気付く手段は無い。社外に出す帳票は帳票定義を登録して使うこと。

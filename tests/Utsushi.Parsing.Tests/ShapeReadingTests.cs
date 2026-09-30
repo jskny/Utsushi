@@ -90,6 +90,53 @@ namespace Utsushi.Parsing.Tests
             }
         }
 
+        [Theory]
+        [InlineData("Callout1", ShapePresetType.Callout1, 4)]
+        [InlineData("Callout3", ShapePresetType.Callout3, 8)]
+        [InlineData("BorderCallout1", ShapePresetType.BorderCallout1, 4)]
+        [InlineData("BorderCallout2", ShapePresetType.BorderCallout2, 6)]
+        [InlineData("BorderCallout3", ShapePresetType.BorderCallout3, 8)]
+        [InlineData("AccentCallout2", ShapePresetType.AccentCallout2, 6)]
+        [InlineData("AccentBorderCallout2", ShapePresetType.AccentBorderCallout2, 6)]
+        public void 線吹き出しを読み取り引き出し線の調整ガイドを折れ数に応じた個数で返す(
+            string presetName, ShapePresetType expected, int expectedGuideCount)
+        {
+            // 要件10.14: 線吹き出しは (adj1=y1, adj2=x1), (adj3=y2, adj4=x2), ... の組で引き出し線の
+            // 頂点を持つ。ファイルに無いガイドはNaN(Rendering側で既定値を補う)。
+            var anchor = ShapeWorkbookFixtures.ShapeAnchor(
+                PresetByName(presetName),
+                adjustValueList: ShapeWorkbookFixtures.AdjustValues(("adj1", 18750), ("adj2", -8333), ("adj3", 112500)));
+            var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                var shape = Assert.Single(sheet.DrawingObjects.OfType<ShapeModel>());
+
+                Assert.Equal(expected, shape.Preset);
+                Assert.Equal(expectedGuideCount, shape.AdjustmentValues.Count);
+                Assert.Equal(0.1875, shape.AdjustmentValues[0], 4);
+                Assert.Equal(-0.08333, shape.AdjustmentValues[1], 4);
+                Assert.Equal(1.125, shape.AdjustmentValues[2], 4);
+                Assert.True(double.IsNaN(shape.AdjustmentValues[3]));
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        private static A.ShapeTypeValues PresetByName(string name) => name switch
+        {
+            "Callout1" => A.ShapeTypeValues.Callout1,
+            "Callout3" => A.ShapeTypeValues.Callout3,
+            "BorderCallout1" => A.ShapeTypeValues.BorderCallout1,
+            "BorderCallout2" => A.ShapeTypeValues.BorderCallout2,
+            "BorderCallout3" => A.ShapeTypeValues.BorderCallout3,
+            "AccentCallout2" => A.ShapeTypeValues.AccentCallout2,
+            "AccentBorderCallout2" => A.ShapeTypeValues.AccentBorderCallout2,
+            _ => throw new ArgumentOutOfRangeException(nameof(name), name, null),
+        };
+
         [Fact]
         public void 雲形吹き出しのadj1とadj2が無い場合はNaNとして返す()
         {

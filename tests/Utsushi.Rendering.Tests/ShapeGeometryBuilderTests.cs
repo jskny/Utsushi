@@ -271,11 +271,28 @@ namespace Utsushi.Rendering.Tests
             Assert.True(path.Bounds.Height < Rect.Height * 3, $"Height={path.Bounds.Height}");
         }
 
+        public static IEnumerable<object[]> LineCallouts()
+        {
+            // (プリセット, 折れ数, 本体枠線の有無, 強調線の有無)
+            yield return new object[] { ShapePresetType.Callout1, 1, false, false };
+            yield return new object[] { ShapePresetType.Callout2, 2, false, false };
+            yield return new object[] { ShapePresetType.Callout3, 3, false, false };
+            yield return new object[] { ShapePresetType.BorderCallout1, 1, true, false };
+            yield return new object[] { ShapePresetType.BorderCallout2, 2, true, false };
+            yield return new object[] { ShapePresetType.BorderCallout3, 3, true, false };
+            yield return new object[] { ShapePresetType.AccentCallout1, 1, false, true };
+            yield return new object[] { ShapePresetType.AccentCallout2, 2, false, true };
+            yield return new object[] { ShapePresetType.AccentCallout3, 3, false, true };
+            yield return new object[] { ShapePresetType.AccentBorderCallout1, 1, true, true };
+            yield return new object[] { ShapePresetType.AccentBorderCallout2, 2, true, true };
+            yield return new object[] { ShapePresetType.AccentBorderCallout3, 3, true, true };
+        }
+
+        public static IEnumerable<object[]> LineCalloutPresets() => LineCallouts().Select(row => new[] { row[0] });
+
         [Theory]
-        [InlineData(ShapePresetType.Callout1)]
-        [InlineData(ShapePresetType.Callout2)]
-        [InlineData(ShapePresetType.Callout3)]
-        public void callout系のBuildは本体矩形のみで引き出し線を含まない(ShapePresetType preset)
+        [MemberData(nameof(LineCalloutPresets))]
+        public void 線吹き出しのBuildは本体矩形のみで引き出し線を含まない(ShapePresetType preset)
         {
             // Build(塗りつぶし用)は本体(矩形)のみであり、引き出し線(枠線専用)は含まない設計
             // (design.md「no-fillの引き出し線」要件)。境界は入力矩形とちょうど一致するはず。
@@ -285,30 +302,83 @@ namespace Utsushi.Rendering.Tests
         }
 
         [Theory]
-        [InlineData(ShapePresetType.Callout1, 1)]
-        [InlineData(ShapePresetType.Callout2, 2)]
-        [InlineData(ShapePresetType.Callout3, 3)]
-        public void callout系のBuildOutlineはBuildと異なり引き出し線ぶん矩形の外側へ広がる(ShapePresetType preset, int segments)
+        [MemberData(nameof(LineCallouts))]
+        public void 線吹き出しのBuildOutlineは種類ごとに本体枠線と強調線と引き出し線を持つ(ShapePresetType preset, int segments, bool hasBorder, bool hasAccentBar)
         {
-            using var body = ShapeGeometryBuilder.Build(preset, Array.Empty<double>(), Rect);
             using var outline = ShapeGeometryBuilder.BuildOutline(preset, Array.Empty<double>(), Rect);
 
-            // Buildは本体(矩形)のみの4点(+Close)だが、BuildOutlineは本体に加えて
-            // segments+1個の頂点からなる引き出し折れ線を追加で持つため点数が異なる。
-            Assert.NotEqual(body.PointCount, outline.PointCount);
-            Assert.True(outline.PointCount > body.PointCount + segments, "引き出し線の頂点が追加されているはず");
+            // 本体枠線は矩形(4点)、強調線は縦線(2点)、引き出し線は segments + 1 点の折れ線。
+            var expectedPoints = (hasBorder ? 4 : 0) + (hasAccentBar ? 2 : 0) + segments + 1;
+            Assert.Equal(expectedPoints, outline.PointCount);
 
-            // Buildは矩形の外に出ないが、BuildOutlineは引き出し先端(既定で左下方向)ぶん外側へ広がる。
-            AssertBoundsApproximately(Rect, body.Bounds);
+            // ECMA-376既定の引き出し線は本体の左外側・下外側へ伸びる。
             Assert.True(outline.Bounds.Left < Rect.Left, $"Left: expected < {Rect.Left} actual={outline.Bounds.Left}");
             Assert.True(outline.Bounds.Bottom > Rect.Bottom, $"Bottom: expected > {Rect.Bottom} actual={outline.Bounds.Bottom}");
         }
 
+        [Fact]
+        public void 線吹き出しの引き出し線は調整値のyとxの組で頂点が決まる()
+        {
+            // borderCallout2: (adj1=y1, adj2=x1), (adj3=y2, adj4=x2), (adj5=y3, adj6=x3)。
+            // 本体枠線(矩形4点)の後に引き出し線の3点が続く。
+            var adj = new[] { 0.5, 1.0, 0.5, 1.5, 2.0, 2.0 };
+            using var outline = ShapeGeometryBuilder.BuildOutline(ShapePresetType.BorderCallout2, adj, Rect);
+
+            var points = outline.Points;
+            Assert.Equal(7, points.Length);
+            AssertPoint(Rect.Left + Rect.Width, Rect.Top + (Rect.Height * 0.5f), points[4]);
+            AssertPoint(Rect.Left + (Rect.Width * 1.5f), Rect.Top + (Rect.Height * 0.5f), points[5]);
+            AssertPoint(Rect.Left + (Rect.Width * 2f), Rect.Top + (Rect.Height * 2f), points[6]);
+        }
+
+        [Fact]
+        public void 線吹き出しの調整値が無い位置は既定値で補う()
+        {
+            // adj1/adj2(始点)だけ指定し、残り(adj3/adj4)はファイルに無い(NaN)ケース。
+            var adj = new[] { 0.0, 0.0, double.NaN, double.NaN };
+            using var outline = ShapeGeometryBuilder.BuildOutline(ShapePresetType.Callout1, adj, Rect);
+
+            var points = outline.Points;
+            Assert.Equal(2, points.Length);
+            AssertPoint(Rect.Left, Rect.Top, points[0]);
+
+            // callout1の既定値: adj3=112500(y), adj4=-38333(x)
+            AssertPoint(Rect.Left + (Rect.Width * -0.38333f), Rect.Top + (Rect.Height * 1.125f), points[1]);
+        }
+
+        [Fact]
+        public void 強調線付き吹き出しの強調線は引き出し線の始点のX位置で本体の上端から下端まで引く()
+        {
+            var adj = new[] { 0.5, 0.25, 1.5, -0.5 };
+            using var outline = ShapeGeometryBuilder.BuildOutline(ShapePresetType.AccentCallout1, adj, Rect);
+
+            var points = outline.Points;
+            var accentX = Rect.Left + (Rect.Width * 0.25f);
+            AssertPoint(accentX, Rect.Top, points[0]);
+            AssertPoint(accentX, Rect.Bottom, points[1]);
+        }
+
+        [Fact]
+        public void 線吹き出しの極端な調整値は有限の範囲に収める()
+        {
+            var adj = new[] { 1e9, -1e9, 1e9, 1e9 };
+            using var outline = ShapeGeometryBuilder.BuildOutline(ShapePresetType.BorderCallout1, adj, Rect);
+
+            Assert.True(outline.Bounds.Width < Rect.Width * 12, $"Width={outline.Bounds.Width}");
+            Assert.True(outline.Bounds.Height < Rect.Height * 12, $"Height={outline.Bounds.Height}");
+        }
+
         public static IEnumerable<object[]> PresetsOtherThanCallouts()
         {
+            var lineCallouts = new HashSet<ShapePresetType>();
+            foreach (var row in LineCallouts())
+            {
+                lineCallouts.Add((ShapePresetType)row[0]);
+            }
+
             foreach (ShapePresetType preset in Enum.GetValues(typeof(ShapePresetType)))
             {
-                if (preset is ShapePresetType.Callout1 or ShapePresetType.Callout2 or ShapePresetType.Callout3)
+                if (lineCallouts.Contains(preset))
                 {
                     continue;
                 }
@@ -319,13 +389,20 @@ namespace Utsushi.Rendering.Tests
 
         [Theory]
         [MemberData(nameof(PresetsOtherThanCallouts))]
-        public void callout系以外はBuildOutlineがBuildと同じジオメトリを返す(ShapePresetType preset)
+        public void 線吹き出し以外はBuildOutlineがBuildと同じジオメトリを返す(ShapePresetType preset)
         {
             using var body = ShapeGeometryBuilder.Build(preset, Array.Empty<double>(), Rect);
             using var outline = ShapeGeometryBuilder.BuildOutline(preset, Array.Empty<double>(), Rect);
 
             Assert.Equal(body.PointCount, outline.PointCount);
             AssertBoundsApproximately(body.Bounds, outline.Bounds);
+        }
+
+        private static void AssertPoint(float expectedX, float expectedY, SKPoint actual)
+        {
+            const float tolerance = 0.01f;
+            Assert.True(Math.Abs(expectedX - actual.X) < tolerance, $"X: expected={expectedX} actual={actual.X}");
+            Assert.True(Math.Abs(expectedY - actual.Y) < tolerance, $"Y: expected={expectedY} actual={actual.Y}");
         }
 
         private static void AssertBoundsWithin(SKRect outer, SKRect inner)
