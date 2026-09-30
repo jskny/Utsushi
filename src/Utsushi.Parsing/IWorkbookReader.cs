@@ -26,6 +26,7 @@ namespace Utsushi.Parsing
     /// <param name="ActiveSheetOnly">
     /// true の場合、ブックのアクティブシート(<c>workbookView/@activeTab</c>。非表示なら表示されている最初のシート)
     /// 1枚だけを読む(帳票定義なしモード、要件12.2)。<see cref="SheetNameFilter"/> を指定した場合はそちらを優先する。
+    /// 実装は、true のとき返す <see cref="WorkbookModel.Sheets"/> を1枚だけにしなければならない。
     /// </param>
     public sealed record WorkbookReadOptions(
         UnsupportedElementBehavior UnsupportedElementBehavior = UnsupportedElementBehavior.Ignore,

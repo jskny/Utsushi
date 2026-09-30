@@ -102,9 +102,9 @@ namespace Utsushi.Parsing.OpenXml
                 var sheetNameFilter = options.SheetNameFilter;
                 if (sheetNameFilter is null && options.ActiveSheetOnly)
                 {
-                    sheetNameFilter = ResolveActiveSheetName(workbookPart.Workbook)
+                    sheetNameFilter = ResolveActiveSheetName(workbookPart)
                         ?? throw new InvalidExcelFileException(
-                            "表示されているワークシートが1つもありません。",
+                            "表示されているワークシートが1つもありません(グラフシートは変換できません)。",
                             InvalidExcelFileReason.NoWorksheet,
                             options.ReportCode);
                 }
@@ -484,25 +484,28 @@ namespace Utsushi.Parsing.OpenXml
         }
 
         /// <summary>
-        /// <paramref name="cellCount"/>が<see cref="MaxCellsPerSheet"/>を超えていないか確認する。
-        /// <see cref="EnsureRowIndexWithinLimit(int, string, string?)"/>と同じ理由でテスト可能にしている。
-        /// </summary>
-        /// <summary>
         /// アクティブシート(<c>workbookView/@activeTab</c>。省略時は0)の名前を返す。そのシートが非表示
-        /// (<c>state="hidden"</c>/<c>"veryHidden"</c>)または読めない場合は、表示されている最初のシートの名前を返す。
-        /// 表示されているシートが無ければ null(要件12.2)。
+        /// (<c>state="hidden"</c>/<c>"veryHidden"</c>)またはワークシートでない(グラフシート等)場合は、
+        /// 表示されている最初のワークシートの名前を返す。該当するシートが無ければ null(要件12.2)。
         /// </summary>
-        private static string? ResolveActiveSheetName(X.Workbook workbook)
+        /// <remarks>
+        /// 候補の判定条件は、本体の読み取りループ(<see cref="WorksheetPart"/>だけを読む)と揃えておくこと。
+        /// ずれると、選んだシートが読み取りループで読み飛ばされて0枚になる。
+        /// </remarks>
+        private static string? ResolveActiveSheetName(WorkbookPart workbookPart)
         {
+            var workbook = workbookPart.Workbook;
             var allSheets = workbook.Sheets?.Elements<X.Sheet>().ToList() ?? new List<X.Sheet>();
 
+            bool IsCandidate(X.Sheet sheet) => IsVisibleSheet(sheet) && IsWorksheet(workbookPart, sheet);
+
             var activeTab = workbook.BookViews?.GetFirstChild<X.WorkbookView>()?.ActiveTab?.Value ?? 0U;
-            if (activeTab < allSheets.Count && IsVisibleSheet(allSheets[(int)activeTab]))
+            if (activeTab < allSheets.Count && IsCandidate(allSheets[(int)activeTab]))
             {
                 return allSheets[(int)activeTab].Name!.Value;
             }
 
-            return allSheets.FirstOrDefault(IsVisibleSheet)?.Name!.Value;
+            return allSheets.FirstOrDefault(IsCandidate)?.Name!.Value;
         }
 
         private static bool IsVisibleSheet(X.Sheet sheet) =>
@@ -511,6 +514,23 @@ namespace Utsushi.Parsing.OpenXml
             && sheet.State?.Value != X.SheetStateValues.Hidden
             && sheet.State?.Value != X.SheetStateValues.VeryHidden;
 
+        private static bool IsWorksheet(WorkbookPart workbookPart, X.Sheet sheet)
+        {
+            try
+            {
+                return workbookPart.GetPartById(sheet.Id!.Value!) is WorksheetPart;
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // r:id に対応するパートが無い壊れた参照は候補にしない(読み取りループでも読めない)。
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// <paramref name="cellCount"/>が<see cref="MaxCellsPerSheet"/>を超えていないか確認する。
+        /// <see cref="EnsureRowIndexWithinLimit(int, string, string?)"/>と同じ理由でテスト可能にしている。
+        /// </summary>
         private static void EnsureCellCountWithinLimit(int cellCount, string sheetName, string? reportCode) =>
             EnsureCellCountWithinLimit(cellCount, MaxCellsPerSheet, sheetName, reportCode);
 

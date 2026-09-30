@@ -297,7 +297,8 @@ namespace Utsushi.Rendering
 
                 if (shape.Outline is { } outline)
                 {
-                    // callout1/2/3は本体と塗りつぶしを持たない引き出し線が別ジオメトリになるため、
+                    // 線吹き出し(callout/borderCallout/accentCallout/accentBorderCallout の1〜3)は、
+                    // 塗りつぶしを持たない引き出し線・強調線を持ち、本体の枠線の有無も種類で異なるため、
                     // 塗りつぶし用(Build)とは別に枠線用のジオメトリを組み立てる(それ以外の
                     // プリセットはBuildと同じ形状を返す)。
                     using var outlinePath = ShapeGeometryBuilder.BuildOutline(shape.Preset, shape.AdjustmentValues, skRect);

@@ -39,6 +39,15 @@ namespace Utsushi.Rendering
         private const double CalloutTipAdjLimit = 5.0;
 
         /// <summary>
+        /// 線吹き出しの引き出し線の頂点の調整値(本体の幅・高さに対する比率)の絶対値の上限。
+        /// 線吹き出しは小さな本体から離れたセルを指す使い方が多く、wedge系と同じ±5倍では
+        /// 実在する配置(例: 高さ20ptの本体から150pt下のセル = 7.5倍)の先端が動いてしまうため、
+        /// 座標の発散を防ぐ目的に足りる範囲で大きめにとる(描画オブジェクトの寸法はLayout側で
+        /// <c>MaxDrawingObjectDimensionPt</c>に抑えられているため、座標は有限に収まる)。
+        /// </summary>
+        private const double LineCalloutAdjLimit = 1000.0;
+
+        /// <summary>
         /// star4/5/6/8の内側頂点の半径比(外接円半径に対する比率)の既定値。ECMA-376は
         /// この既定値を単一の調整ガイド<c>adj</c>の既定値(0〜50000。ここでは
         /// <c>既定値 ÷ 50000</c>で比率化したもの)としてプリセットごとに定義しており、
@@ -563,7 +572,7 @@ namespace Utsushi.Rendering
         /// 線吹き出しの引き出し線の頂点列(<paramref name="segments"/> + 1 個)。i番目の頂点は
         /// 調整ガイド (adj(2i+1)=y, adj(2i+2)=x) の組(本体の高さ・幅に対する比率)で決まり、
         /// ファイルに指定が無い位置はECMA-376の既定値を使う。ファイル由来の極端な値で座標が
-        /// 発散しないよう、wedge系の引き出し先端と同じ上限(<see cref="CalloutTipAdjLimit"/>)に収める。
+        /// 発散しないよう、<see cref="LineCalloutAdjLimit"/>の範囲に収める。
         /// </summary>
         private static SKPoint[] BuildLeaderPoints(SKRect rect, int segments, IReadOnlyList<double> adjustmentValues)
         {
@@ -587,7 +596,7 @@ namespace Utsushi.Rendering
             return points;
         }
 
-        private static double ClampCalloutAdj(double value) => Math.Max(-CalloutTipAdjLimit, Math.Min(CalloutTipAdjLimit, value));
+        private static double ClampCalloutAdj(double value) => Math.Max(-LineCalloutAdjLimit, Math.Min(LineCalloutAdjLimit, value));
 
         private static float Clamp(float value, float min, float max) => Math.Max(min, Math.Min(max, value));
     }

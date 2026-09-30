@@ -864,7 +864,7 @@
 
 - [x] 24. 帳票定義なしでの変換
   - [x] 24.1 product.md・requirements.md(要件12)・design.mdを更新する
-    - _Requirements: 12.1〜12.7_
+    - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7_
   - [x] 24.2 Parsing: `WorkbookReadOptions.ActiveSheetOnly` を追加し、アクティブシート(非表示なら表示されている最初のシート)1枚だけを読む
     - _Requirements: 12.2, 12.6_
   - [x] 24.3 ReportDefinition: 既定値の定義を合成する `ReportDefinition.CreateWithoutDefinition` を追加する
@@ -875,6 +875,13 @@
   - [x] 24.5 CLI: `--report` を省略可能にし、省略時は帳票定義なしで変換する。`--set` との併用は使い方エラーにする
     - _Requirements: 12.7_
   - [x] 24.6 テストを追加する(Parsingのシート選択、ファサードの定義なし変換、上書き、文書名)
-    - _Requirements: 12.1〜12.6_
+    - CLIはテストプロジェクトが無いため自動テストの対象外とし、手動で `--report` 省略・`--set`/`--definitions` 併用エラーを確認した
+    - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6_
   - [x] 24.7 CLAUDE.md・README・docs(ライブラリの使い方・テンプレート作成ガイド)を更新する
-    - _Requirements: 12.1〜12.7_
+    - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7_
+  - [x] 24.8 レビュー対応
+    - アクティブシートがグラフシートを指す場合に、他のワークシートがあっても `NoWorksheet` になる不具合を修正する
+      (code-reviewer・spec-compliance-reviewer・layout-fidelity-reviewer指摘)
+    - 線吹き出しの調整値の上限を、小さい本体から遠くのセルを指す実用的な配置を変えない値に広げる(layout-fidelity-reviewer指摘)
+    - 文書名を省略したときの例外の帳票コードを空文字列に揃える。要件1.4・2.7補足と要件12の矛盾を解消する
+    - _Requirements: 1.4, 2.7, 10.14, 12.2, 12.5, 12.7_

@@ -275,11 +275,20 @@ namespace Utsushi
             var name = documentName ?? string.Empty;
             var readOptions = new WorkbookReadOptions(
                 UnsupportedElementBehavior.Ignore,
-                name.Length == 0 ? null : name,
+                name,
                 SheetNameFilter: null,
                 ActiveSheetOnly: true);
 
             var workbook = _workbookReader.Read(xlsxStream, readOptions);
+            if (workbook.Sheets.Count != 1)
+            {
+                // IWorkbookReader の契約(ActiveSheetOnly なら1枚だけ返す)に反する実装が差し替えられた場合に、
+                // アクティブでないシートを黙って変換しないよう止める。
+                throw new InvalidOperationException(
+                    $"{nameof(IWorkbookReader)} が {nameof(WorkbookReadOptions.ActiveSheetOnly)} を指定したのに "
+                    + $"{workbook.Sheets.Count} 枚のシートを返しました。");
+            }
+
             var definition = ReportDefinition.CreateWithoutDefinition(name, workbook.Sheets[0].Name);
 
             return BuildLayout(workbook, definition, NoValues, cellOverrides);

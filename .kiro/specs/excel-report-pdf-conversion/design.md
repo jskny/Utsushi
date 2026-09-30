@@ -346,8 +346,8 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     帳票定義を使わない呼び出し元のために、帳票定義ルートを取らない `CreateDefault(fontOptions, renderOptions)` も用意する
     (このとき帳票コードを指定した変換は `ReportDefinitionNotFoundException` になる)。
   - 対象シートの決定(要件12.2)はParsingレイヤーの責務とし、`WorkbookReadOptions.ActiveSheetOnly = true` で
-    指定する。`OpenXmlWorkbookReader` は `workbookView/@activeTab` のシート(非表示なら表示されている
-    最初のシート)1枚だけを読み、サポート外要素の検出・安全弁もそのシートにだけ適用する
+    指定する。`OpenXmlWorkbookReader` は `workbookView/@activeTab` のシート(非表示、またはグラフシート等の
+    ワークシートでない場合は、表示されている最初のワークシート)1枚だけを読み、サポート外要素の検出・安全弁もそのシートにだけ適用する
     (全シートを読んでから1枚を選ぶと、使わないシートの上限超過で失敗しうるため)。
   - 文書名(要件12.5)は合成定義の `ReportCode` に入れる。これにより PDF タイトル・`&F`/`&Z`・例外の
     `ReportCode` に既存の経路のまま反映される。
@@ -1186,6 +1186,8 @@ public sealed record GroupCommand(
   紐付け規則を確定させたうえで対応する。
   `&F`(ファイル名)は、Utsushi が Stream を入力に取り元のファイル名を持たないため、
   帳票コードを代わりに展開している(`&Z`(ファイルパス)も同様の理由で同じ値を使う)。
+  帳票定義なしモード(要件12.5)では帳票コードの代わりに文書名(ファイル変換では拡張子を除いた入力ファイル名)を
+  展開する。Excelの`&F`は拡張子付きのファイル名を出すため、この点はExcelと異なる。
 - **改ページをまたぐ画像・図形**(要件9, 10): 画像・図形のアンカー左上セルが属するページにのみ
   全体を配置し、他のページには何も描画しない(結合セルのような「見えている部分だけ切り出す」対応は
   行わない)。ページ全体からはみ出す部分は `SKCanvas` が自然にクリップするため見た目が崩れる
@@ -1198,7 +1200,8 @@ public sealed record GroupCommand(
   SkiaSharpが直接デコードできず、対応するには追加の変換ライブラリ(ライセンス確認が必要)か
   自前のパーサが要る。対象帳票で実際に必要になった時点で改めて検討する。
 - **図形プリセットのさらなる拡張**(要件10.1, 10.7): 拡張フェーズで星形4種・
-  フローチャート記号7種・吹き出し4種(雲形・引き出し線1〜3本)・接続線5種を追加したが、
+  フローチャート記号7種・吹き出し4種(雲形・引き出し線1〜3本)・接続線5種を追加し、
+  その後、要件10.14で線吹き出しを12種(`callout`/`borderCallout`/`accentCallout`/`accentBorderCallout`の1〜3)に広げたが、
   フローチャート記号の残り(`flowChartOr`等)・自由曲線(`custGeom`)・より複雑な星形
   (`star10`以上)は引き続き「サポート外要素」である。対象帳票で実際に必要になった時点で
   一覧に追記する。
@@ -1268,7 +1271,8 @@ public sealed record GroupCommand(
 - **画像・図形の上限がシート単位でありワークブック単位の合算上限が無い**(security-reviewer指摘):
   `MaxImagesPerSheet`/`MaxShapesPerSheet`はシートごとにリセットされるカウンタであり、
   ワークブック全体でシートをまたいだ合算上限は無い。`ReportPdfConverter.Convert`は
-  常に帳票定義の`sheetName`1枚に処理対象を絞る(`WorkbookReadOptions.SheetNameFilter`)ため
+  常に帳票定義の`sheetName`1枚に処理対象を絞り(`WorkbookReadOptions.SheetNameFilter`)、帳票定義なしモード(要件12)も
+  アクティブシート1枚に絞る(`WorkbookReadOptions.ActiveSheetOnly`)ため
   現状の呼び出し経路では実害は無いが、`IWorkbookReader`/`OpenXmlWorkbookReader`は
   `public`であり、`SheetNameFilter`を指定しない(全シート読み取り)呼び出し方をする
   将来のコードが現れた場合はシート数倍の積み上げに対する上限が無い。対象帳票で

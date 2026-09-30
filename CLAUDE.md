@@ -76,7 +76,7 @@ dotnet run --project src/Utsushi.Cli -- \
   --output /tmp/invoice.pdf --definitions samples/reports \
   --set CustomerName="株式会社サンプル 御中" --set InvoiceNo="INV-0001" --set TotalAmount="¥1,000"
 
-# 帳票定義なしで変換する(--report を省略。アクティブシートを変換し、未対応の要素は無視する)
+# 帳票定義なしで変換する(--report を省略。--set・--definitions は使えない。アクティブシートを変換し、未対応の要素は無視する)
 dotnet run --project src/Utsushi.Cli -- \
   --input samples/reports/invoice/template.xlsx --output /tmp/no-definition.pdf --allow-font-fallback
 ```

@@ -103,7 +103,7 @@ namespace Utsushi.Cli
             Console.Error.WriteLine("  --definitions, -d   帳票定義のルートディレクトリ(既定: ./reports)");
             Console.Error.WriteLine("  --set, -s           置換キーと値。複数指定可(例: --set InvoiceNo=A-001)");
             Console.Error.WriteLine("  --override          セル番地と値。帳票定義への登録有無に関わらず直接上書きする。");
-            Console.Error.WriteLine("                      複数指定可(例: --override B5=INV-0001)。結合セルは");
+            Console.Error.WriteLine("                      複数指定可(例: --override A1=請求書(控))。結合セルは");
             Console.Error.WriteLine("                      先頭(アンカー)セルの番地を指定すること");
             Console.Error.WriteLine("  --allow-font-fallback");
             Console.Error.WriteLine("                      フォント未検出時に代替フォントを使う(見た目が崩れる可能性あり)");

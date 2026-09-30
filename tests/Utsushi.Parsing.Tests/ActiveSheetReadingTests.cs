@@ -50,6 +50,47 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void activeTabがグラフシートを指すと表示されている最初のワークシートを読む()
+        {
+            // グラフシートはワークシートとして読めないため候補にしない(code-reviewer等の指摘)。
+            // 以前は選んだグラフシートが読み取りループで読み飛ばされ、誤って NoWorksheet になっていた。
+            var names = ReadSheetNames(
+                ActiveOnly, 0U, new Spec("グラフ1", IsChartSheet: true), new Spec("明細"), new Spec("集計"));
+
+            Assert.Equal(new[] { "明細" }, names);
+        }
+
+        [Fact]
+        public void 表示されている最初のシートがグラフシートなら次のワークシートを読む()
+        {
+            var names = ReadSheetNames(
+                ActiveOnly,
+                0U,
+                new Spec("表紙", SheetStateValues.Hidden),
+                new Spec("グラフ1", IsChartSheet: true),
+                new Spec("明細"));
+
+            Assert.Equal(new[] { "明細" }, names);
+        }
+
+        [Fact]
+        public void グラフシートしか表示されていなければNoWorksheetエラーになる()
+        {
+            var path = ActiveSheetWorkbookFixtures.CreateWorkbook(
+                0U, new Spec("グラフ1", IsChartSheet: true), new Spec("明細", SheetStateValues.Hidden));
+            try
+            {
+                using var stream = File.OpenRead(path);
+                var ex = Assert.Throws<InvalidExcelFileException>(() => _reader.Read(stream, ActiveOnly));
+                Assert.Equal(InvalidExcelFileReason.NoWorksheet, ex.Reason);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void activeTabが2番目のシートを指すとそのシートだけを読む()
         {
             var path = ActiveSheetWorkbookFixtures.CreateWorkbook(

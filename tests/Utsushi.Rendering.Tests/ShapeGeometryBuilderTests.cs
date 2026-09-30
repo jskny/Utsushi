@@ -364,8 +364,22 @@ namespace Utsushi.Rendering.Tests
             var adj = new[] { 1e9, -1e9, 1e9, 1e9 };
             using var outline = ShapeGeometryBuilder.BuildOutline(ShapePresetType.BorderCallout1, adj, Rect);
 
-            Assert.True(outline.Bounds.Width < Rect.Width * 12, $"Width={outline.Bounds.Width}");
-            Assert.True(outline.Bounds.Height < Rect.Height * 12, $"Height={outline.Bounds.Height}");
+            // 上限(本体の幅・高さの1000倍)で止まり、有限の座標に収まる。
+            Assert.True(float.IsFinite(outline.Bounds.Width) && float.IsFinite(outline.Bounds.Height));
+            Assert.True(outline.Bounds.Width <= Rect.Width * 2001, $"Width={outline.Bounds.Width}");
+            Assert.True(outline.Bounds.Height <= Rect.Height * 2001, $"Height={outline.Bounds.Height}");
+        }
+
+        [Fact]
+        public void 線吹き出しは小さな本体から離れたセルを指す実用的な調整値をそのまま使う()
+        {
+            // 本体の高さの7.5倍下・幅の10倍右を指す(小さなラベルから離れたセルを指す配置)。
+            // wedge系の上限(±5倍)で丸めると先端が動いてしまう(layout-fidelity-reviewer指摘)。
+            var adj = new[] { 0.5, 1.0, 7.5, 10.0 };
+            using var outline = ShapeGeometryBuilder.BuildOutline(ShapePresetType.BorderCallout1, adj, Rect);
+
+            var points = outline.Points;
+            AssertPoint(Rect.Left + (Rect.Width * 10f), Rect.Top + (Rect.Height * 7.5f), points[5]);
         }
 
         public static IEnumerable<object[]> PresetsOtherThanCallouts()

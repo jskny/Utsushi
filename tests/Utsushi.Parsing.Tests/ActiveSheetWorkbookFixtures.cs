@@ -18,10 +18,12 @@ namespace Utsushi.Parsing.Tests
         /// <param name="Name">シート名。A1セルにもこの名前を文字列として書き込む。</param>
         /// <param name="State">シートの表示状態。null なら属性を省略する(=表示)。</param>
         /// <param name="Anchors">シートに置く描画オブジェクトのアンカー。null または空なら描画パートを作らない。</param>
+        /// <param name="IsChartSheet">true ならワークシートではなくグラフシート(<c>ChartsheetPart</c>)として作る。</param>
         public sealed record SheetSpec(
             string Name,
             SheetStateValues? State = null,
-            IReadOnlyList<OpenXmlElement>? Anchors = null);
+            IReadOnlyList<OpenXmlElement>? Anchors = null,
+            bool IsChartSheet = false);
 
         /// <summary>
         /// 指定したシート群を持つ .xlsx を一時ファイルとして作成する。呼び出し側で削除すること。
@@ -49,6 +51,28 @@ namespace Utsushi.Parsing.Tests
                 var sheetId = 1U;
                 foreach (var spec in sheetSpecs)
                 {
+                    if (spec.IsChartSheet)
+                    {
+                        var chartsheetPart = workbookPart.AddNewPart<ChartsheetPart>();
+                        chartsheetPart.Chartsheet = new Chartsheet();
+                        chartsheetPart.Chartsheet.Save();
+
+                        var chartSheet = new Sheet
+                        {
+                            Id = workbookPart.GetIdOfPart(chartsheetPart),
+                            SheetId = sheetId++,
+                            Name = spec.Name,
+                        };
+
+                        if (spec.State is { } chartState)
+                        {
+                            chartSheet.State = chartState;
+                        }
+
+                        sheets.Append(chartSheet);
+                        continue;
+                    }
+
                     var worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
                     worksheetPart.Worksheet = new Worksheet(
                         new SheetData(
