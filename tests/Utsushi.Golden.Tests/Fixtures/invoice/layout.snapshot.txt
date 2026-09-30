@@ -262,6 +262,9 @@ shape  rect=[50.4,134.5 42x28] preset=Star6 rotation=0 fill=linGradient:0:#FFFFF
 shape  rect=[105.4,134.5 60x28] preset=FlowChartTerminator rotation=0 fill=radGradient:0:#FFE0F7FA,1:#FF0288D1@center(0.5,0.5) outline=#FF01579B/1pt text=[]
 shape  rect=[320.4,132.5 60x30] preset=FlowChartInputOutput rotation=0 fill=solid:#FFFFFFFF outline=#FF444444/1pt text=[]
 shape  rect=[410.4,132.5 60x30] preset=FlowChartInputOutput rotation=0 fill=solid:#FFFFFFFF outline=#FF444444/1pt text=[]
+shape  rect=[80.4,424 80x18] preset=BorderCallout2 rotation=0 fill=solid:#FFFFFFFF outline=#FFC00000/1pt/tail=Triangle:Medium:Medium text=[origin=(120.4,435.8) anchor=Center font=Calibri@10pt/#FF000000 value="要確認"] adj=[0.5,1,0.5,1.25,1.5,1.6]
+shape  rect=[210.4,438 28x28] preset=Ellipse rotation=0 fill=solid:#FF4472C4 outline=#FF2F528F/1pt text=[origin=(224.4,454.8) anchor=Center font=Calibri@10pt/#FFFFFFFF value="済"]
+shape  rect=[241.4,446 17x12] preset=RightArrow rotation=0 fill=solid:#FF2E8B57 outline=none text=[] flipH=True flipV=False
 connector rect=[180.4,136.5 46x24] preset=Bent3Segment rotation=0 flipH=False flipV=False outline=#FF444444/1pt resolvedStart=none resolvedEnd=none
 connector rect=[380.4,132.5 30x30] preset=Straight rotation=0 flipH=False flipV=False outline=#FF444444/1pt resolvedStart=(374.4,147.5) resolvedEnd=(416.4,147.5)
 group  center=(272.9,149.5) rotation=-8 children=2

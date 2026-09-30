@@ -60,6 +60,12 @@ points = pixels * 72 / 96
   **帳票定義の `maxDigitWidthPx`(既定7)で明示的に与える**方式とした。理由は2つある。
   - 実行環境にインストールされたフォントの版差で `MDW` が変わると、改ページ位置が環境依存になる。
   - 帳票ごとに標準フォントが異なりうるため、帳票固有の値は帳票定義側へ寄せる方針と整合する。
+- `sheetFormatPr/@defaultColWidth` が無いシート(Excelが通常保存するブック)の既定列幅は、保存値ではなく
+  「`baseColWidth` 文字分(×MDW)+ 余白5px」を8ピクセルの倍数に切り上げたピクセル数とする
+  (`ExcelUnitConverter.DefaultColumnWidthToPixels`。Calibri 11 = MDW 7 で64px、ＭＳ Ｐゴシック 11 = MDW 8 で72px。
+  Excelの画面上の既定列幅「8.43」「8.38」と一致する)。Parsingは既定列幅を知らない(MDWを持たない)ため、
+  幅の指定が無い列の幅を `NaN` とし、`SheetModel.BaseColumnWidth` とともにLayoutへ渡す。以前は保存値 8.43 を
+  既定列幅として換算しており、MDW 7 で59px(Excelより5px狭い)になっていた(code-reviewer指摘)。
 
 ### フォントメトリクスの参照方法
 
@@ -217,6 +223,41 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     `a:noFill` は塗りなし(`Fill = null`)。枠線は `a:ln` の `a:solidFill` の色と
     `@w`(EMU)から変換した太さを読み取り、`a:ln` 自体が無い/`a:noFill` の場合は
     `Outline = null` とする(接続線も同じ`ReadShapeOutline`を流用する)。
+  - **テーマの色・スタイル参照(要件10.15, 10.16)**: 色の読み取りは`DrawingColorResolver`
+    (Parsing内部)に集約する。`a:srgbClr`/`a:schemeClr`/`a:sysClr`を基本色として読み、子要素の修飾
+    (`lumMod`/`lumOff`はHSL輝度、`tint`/`shade`は線形RGBで白/黒へ補間、`alpha`は不透明度)を順に適用する。
+    `a:schemeClr`の`phClr`は、スタイル参照(`lnRef`等)の色を差し込む位置を表す。テーマの配色は
+    `ColorResolver`が読み込んだものを使い、色名(`dk1`/`lt1`/`dk2`/`lt2`/`accent1`〜`6`/`hlink`/`folHlink`
+    と別名`tx1`/`bg1`/`tx2`/`bg2`)から引けるようにする。
+    `spPr`に塗りつぶし(`solidFill`/`gradFill`/`noFill`)・枠線の色が無い場合は`xdr:style`を見る。
+    - `fillRef/@idx`: 0は塗りなし。1以上はテーマの`fillStyleLst`(1000以上は`bgFillStyleLst`)の書式を指すが、
+      Excelの既定テーマではいずれも`phClr`を基にした塗りのため、スタイルの色の単色で近似する。
+    - `lnRef/@idx`: 0は線なし。1以上はテーマの`lnStyleLst[idx-1]`の`@w`を太さに、スタイルの色を線の色にする。
+      `a:ln`があって色だけ無い場合は、`a:ln/@w`を優先する。`lnStyleLst`に該当する番号が無い場合の太さは0.75ptとする。
+      `a:ln`に色があってスタイルも`@w`も無い場合は1ptとする(従来の既定の細線)。
+    - `fontRef`: 文字の`a:rPr`に色が無いときの既定の文字色にする。`a:rPr`の色が未対応の指定(`a:prstClr`等)で
+      解決できない場合も、この既定の文字色で代用する(塗りつぶし・線は「なし」にできるが、文字は色なしにできないため)。
+    - テーマが無いブックでは、配色はOffice既定テーマの配色、`lnStyleLst`の太さはOffice既定テーマの値(0.5/1/1.5pt)を使う。
+    テーマの書式設定(`a:fmtScheme`)は`lnStyleLst`の太さだけを読み、要素数は各リストの先頭の数個
+    (Excelのテーマは3個)に限る。
+  - **反転(要件10.17)**: 図形・グループ・グループ内図形の`a:xfrm/@flipH`・`@flipV`を読み取り、`ShapeModel`・
+    `GroupChildShape`・`GroupShapeModel`・`GroupChildGroup`に持たせる。Layoutはグループの反転を、子要素の
+    配置矩形をグループの矩形内で鏡映し、子要素の反転フラグを反転させることで展開する(接続線は
+    始点・終点の座標を鏡映する)。Renderingは図形の中心を軸に、回転の内側で`canvas.Scale(-1, 1)`等を
+    かけて形状を描き、文字はその変換の外(回転の内側)で描く。上下反転の図形では、文字を図形の中心で180°回して描く
+    (Officeは上下反転した図形の文字を逆さにし、鏡像にはしない。この挙動はOfficeの一般的な仕様に基づくもので、
+    Excelで保存した実物との突き合わせは未実施。未決事項を参照)。接続点の解決(要件10.11)は、反転前の図形上の
+    接続点を配置矩形の中心で鏡映する(左右反転なら接続点1と3、上下反転なら0と2が入れ替わるのと同じ)。反転した
+    グループ自身・グループ内の画像を接続先にした場合も、グループの反転を反映する。グループ内の画像の中身は鏡像にしない。
+  - **矢印(要件10.18)**: `a:ln/a:headEnd`・`a:tailEnd`の`@type`・`@w`・`@len`を`ShapeOutline`の
+    `HeadEnd`/`TailEnd`(`LineEndStyle`)として読み取る。`headEnd`は線の始点、`tailEnd`は終点に付く。
+    大きさは線の太さの倍数(`sm`=2倍、`med`=3倍、`lg`=5倍。線が細い場合でも見えるよう最小寸法を設ける)で
+    近似する(倍率・最小寸法はExcelの出力との実測での突き合わせが未実施。未決事項を参照)。
+    接続線は`Outline`がnullのときRenderingが既定の黒い線を補うため、線を明示的に消している場合(`a:ln/a:noFill`、
+    または図形のスタイルがあって線の色が決まらない場合)は透明の線として読み取り、既定の線と区別する。
+    逆に、色の無い`a:ln`に矢印だけがある場合は、既定の黒い線(`a:ln/@w`、無ければ1pt)に矢印を付けて読み取る。
+    Renderingは接続線・線吹き出しの引き出し線の端点と、端での線の向きから矢印の形状を組み立て、
+    `triangle`/`stealth`/`diamond`/`oval`は線の色で塗り、`arrow`は開いた線で描く。
   - **回転**: `xdr:spPr/a:xfrm/@rot`(60,000分の1度、時計回り)を `RotationDegrees`
     (度)に変換する。座標系が「Y軸下方向」(単位と座標系の節)のため、そのままの符号で
     時計回りの回転として扱える。
@@ -332,23 +373,30 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   }
   ```
 - `Build` 時に、定義が参照するシート名・セル番地が `WorkbookModel` 上に実在するかを検証する(要件1.4)。
-- **帳票定義なしモード(要件12)**: 定義をJSONからロードせず、`ReportDefinition.CreateWithoutDefinition(documentName, sheetName)`
-  で既定値の定義を合成する(`SubstitutionFields`は空、`UnsupportedElements = Ignore`、
-  `MaxDigitWidthPx`/`ToleranceMm`は既定値、`PrintAreaOverride = null`)。合成した定義は以降の
+- **帳票定義なしモード(要件12)**: 定義をJSONからロードせず、`ReportDefinition.CreateWithoutDefinition(documentName, sheetName, maxDigitWidthPx)`
+  で定義を合成する(`SubstitutionFields`は空、`UnsupportedElements = Ignore`、`ToleranceMm`は既定値、
+  `MaxDigitWidthPx`は後述の見積もりまたは呼び出し元の指定、`PrintAreaOverride = null`)。合成した定義は以降の
   `IReportModelBuilder.Build`・Substitution・Layout・Renderingに定義ありと同じ形で渡るため、
   後段のレイヤーには分岐を入れない(帳票固有の分岐を共通レイヤーに置かない方針と同じ考え方)。
   - ファサード `ReportPdfConverter` は帳票コードを取らないオーバーロード
-    `ConvertWithoutDefinition(Stream, Stream, cellOverrides?, documentName?)` /
-    `ConvertFileWithoutDefinition(string xlsxPath, string outputPath, cellOverrides?, documentName?)` /
-    `ComputeLayoutWithoutDefinition(Stream, cellOverrides?, documentName?)` を持つ。
+    `ConvertWithoutDefinition(Stream, Stream, cellOverrides?, documentName?, maxDigitWidthPx?)` /
+    `ConvertFileWithoutDefinition(string xlsxPath, string outputPath, cellOverrides?, documentName?, maxDigitWidthPx?)` /
+    `ComputeLayoutWithoutDefinition(Stream, cellOverrides?, documentName?, maxDigitWidthPx?)` を持つ。
     メソッド名を分けるのは、既存の `Convert(string reportCode, …)` と引数の並びが似ており、
     オーバーロード解決で意図しない方が選ばれるのを避けるため。置換キーの辞書は受け取らない(要件12.4)。
     帳票定義を使わない呼び出し元のために、帳票定義ルートを取らない `CreateDefault(fontOptions, renderOptions)` も用意する
     (このとき帳票コードを指定した変換は `ReportDefinitionNotFoundException` になる)。
   - 対象シートの決定(要件12.2)はParsingレイヤーの責務とし、`WorkbookReadOptions.ActiveSheetOnly = true` で
     指定する。`OpenXmlWorkbookReader` は `workbookView/@activeTab` のシート(非表示、またはグラフシート等の
-    ワークシートでない場合は、表示されている最初のワークシート)1枚だけを読み、サポート外要素の検出・安全弁もそのシートにだけ適用する
-    (全シートを読んでから1枚を選ぶと、使わないシートの上限超過で失敗しうるため)。
+    ワークシートでない場合は、表示されている最初のワークシート)1枚だけを読み、サポート外要素の検出・シート単位の安全弁もそのシートにだけ適用する
+    (全シートを読んでから1枚を選ぶと、使わないシートの上限超過で失敗しうるため)。ただしXMLの入れ子の深さ・パートの
+    大きさの検査(要件6.7)は、DOMを組み立てる前にパッケージ内の全XMLパートに対して行う。
+  - 列幅換算の最大数字幅(要件12.3)は、呼び出し元の指定(API の `maxDigitWidthPx`、CLI の `--max-digit-width`)が
+    無ければ `ReportDefinition.EstimateMaxDigitWidthPx` でブックの標準フォントから見積もる。見積もりは、Excelが既定の
+    列幅として表示する値(英語版 Calibri 11 の「8.43(64ピクセル)」、日本語版 ＭＳ Ｐゴシック/游ゴシック 11 の
+    「8.38(72ピクセル)」)を列幅の換算式に当てはめて逆算した固定の表であり、実行環境のフォントには依存しない
+    (環境のフォントの版の違いで結果が変わらないようにするため。帳票定義の `maxDigitWidthPx` を自動導出しない
+    理由と同じ)。表に無いフォント・サイズは既定値7を使う。
   - 文書名(要件12.5)は合成定義の `ReportCode` に入れる。これにより PDF タイトル・`&F`/`&Z`・例外の
     `ReportCode` に既存の経路のまま反映される。
 
@@ -537,6 +585,14 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   }
   ```
 - `PagedLayout` は「ページのリスト」であり、各ページは「描画すべき矩形(セル背景・罫線・テキストラン)のリスト」を持つ、Renderingレイヤーに依存しない中間表現とする。
+
+- **印刷範囲が無いシートの使用範囲(要件3.10)**: `UsedRangeResolver` が、セルの使用範囲
+  (`SheetModel.GetUsedRange`)に、各描画オブジェクトが占めるセルの範囲を合わせる。二セルアンカーは終端のセル
+  (終端のオフセットが0ならその1つ手前)まで、一セルアンカー(固定サイズ)はアンカーセルから列幅・行高をたどって
+  終端が掛かるセルまでとする。たどる回数は4,096回で打ち切る(幅・高さ0の行・列が続く入力への安全弁)。
+  非表示の行・列は幅・高さ0として扱い、描画オブジェクトの寸法は描画時と同じ上限(固定サイズは5,000pt、
+  二セルアンカーの終端は始点から4,096行・列)に抑える(描画では切り詰められる寸法で使用範囲だけが広がらないように)。
+  帳票定義の `printArea` による上書き・Excelの印刷範囲がある場合は使わない。
 
 ### 5. Rendering レイヤー (`Utsushi.Rendering`)
 
@@ -1052,16 +1108,17 @@ public sealed record GroupCommand(
     `"UnsupportedShapePreset"`、図形・接続線・グループの合計個数の上限超過を示す
     `"TooManyShapes"`、図形内テキストの文字数上限超過を示す`"ShapeTextTooLong"`、
     グループのネスト段数の上限超過を示す`"GroupNestingTooDeep"`、
-    結合セル範囲の個数上限超過を示す`"TooManyMergedRanges"`(要件2.9)を持つ)
+    結合セル範囲の個数上限超過を示す`"TooManyMergedRanges"`(要件2.9)、画像の参照先パートが無いことを示す
+    `"MissingImagePart"`(要件6.10)を持つ)
   - `SubstitutionKeyNotFoundException` / `RequiredSubstitutionValueMissingException`(要件2.3, 2.4, 2.12)
   - `InvalidSubstitutionValueException`(要件2.10。差し込み値が`null`、改行以外の制御文字、対になっていないサロゲートを含む)
   - `InvalidCellOverrideAddressException`(要件2.8。セル番地直接指定がA1形式として解釈できない場合)
   - `NonAnchorMergedCellOverrideException`(要件2.9。セル番地直接指定の対象が結合セル範囲の非アンカー位置の場合)
-  - `InvalidExcelFileException`(要件6.1, 6.2, 6.5, 6.6。`Reason` で非xlsx/破損/パスワード保護/
+  - `InvalidExcelFileException`(要件6.1, 6.2, 6.5, 6.6, 6.7, 6.8。`Reason` で非xlsx/破損/パスワード保護/
     ファイルを開けない(存在しない・アクセス不可)/ワークシートが無い/ファイル・共有文字列・
     セル数が上限超過(`TooLarge`)を区別する)
   - `ReportDefinitionSchemaException`(要件6.3。問題のあったプロパティパスを保持する)
-  - `LayoutComputationException`(要件2.6, 2.13, 2.14 を含む) / `PdfRenderingException` / `FontNotAvailableException`
+  - `LayoutComputationException`(要件2.6, 2.13, 2.14, 6.9 を含む) / `PdfRenderingException` / `FontNotAvailableException`
   - `MissingGlyphException`(要件5.5。描画する文字の字形がフォントに無い)
 - すべての例外は、帳票コード・シート名・セル番地・処理段階(Parsing/Substitution/Layout/Rendering)を構造化プロパティとして保持し、ログ出力時に特定できるようにする(要件6.4)。ただし`MissingGlyphException`は描画命令(`TextCommand`)がセル番地を持たないためセル番地を含まず、代わりに該当文字列(`Text`)で特定する。
 - Renderingレイヤーは一時ファイル/一時ストリームに書き込み、正常終了時のみ最終出力先へ確定させる(要件5.4: 不完全PDFを残さない)。
@@ -1076,6 +1133,19 @@ public sealed record GroupCommand(
 | レイヤー / クラス | 定数 | 既定値 | 超過時の挙動 | 根拠要件 |
 |---|---|---|---|---|
 | Parsing / `OpenXmlWorkbookReader` | `MaxXlsxPackageBytes` | 1 GiB | `InvalidExcelFileException(TooLarge)` | 6.6 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxXmlElementDepth` | 256段(全XMLパートの要素の入れ子) | `InvalidExcelFileException(TooLarge)`(DOM構築前に`XmlReader`で流し読みして検査) | 6.7 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxXmlPartBytes` | 64 MiB/XMLパート(展開後) | `InvalidExcelFileException(TooLarge)`(同上。`OpenSettings.MaxCharactersInPart`にも同じ値を設定) | 6.7 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxXmlElementsPerPart` | 5,000,000個/XMLパート | `InvalidExcelFileException(TooLarge)`(同上。DOMのメモリを抑える) | 6.7 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxRelationshipsPerPart` | 10,000件/関係パート | `InvalidExcelFileException(TooLarge)`(`SpreadsheetDocument.Open`より前にZIPを直接流し読みして検査) | 6.7 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxCellTextLength` | 32,767文字(共有文字列・インライン文字列。Excel自体の上限) | `InvalidExcelFileException(TooLarge)` | 6.8 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxHeaderFooterTextLength` | 1,024文字/ヘッダー・フッター | `InvalidExcelFileException(TooLarge)` | 6.8 |
+| Parsing / `OpenXmlWorkbookReader` | `MinPrintScalePercent`/`MaxPrintScalePercent` | 10〜400%(Excelと同じ) | 範囲外の拡大縮小率を丸める(例外化なし) | 6.9 |
+| Parsing / `StyleTable` | `MaxNumberFormatCodeLength` | 255文字(Excel自体の上限) | その数値書式を読み取らず既定書式にフォールバック(例外化なし) | 6.8 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxColumnExpansionsPerSheet` | 65,536列(`<col>`の`min`〜`max`の展開の合計) | `InvalidExcelFileException(TooLarge)` | 6.8 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxPageBreaksPerSheet` | 1,026件(行・列それぞれ。Excel自体の上限) | `InvalidExcelFileException(TooLarge)` | 6.8 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxPrintAreasPerSheet` | 1,000個 | `InvalidExcelFileException(TooLarge)` | 6.8 |
+| Layout / `ReportLayoutEngine` | `MaxPrintRangeCells` | 2,000,000(印刷範囲ごとの(行数+タイトル行数)×(列数+タイトル列数)の合計) | `LayoutComputationException`(`SheetGrid`を作る前に判定) | 6.9 |
+| Layout / `ReportLayoutEngine` | `MaxPagesPerDocument` | 5,000ページ | `LayoutComputationException`(ページを組み立てる前に判定) | 6.9 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxSharedStringCount` | 200,000件 | `InvalidExcelFileException(TooLarge)` | 6.6 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxCellsPerSheet` | 500,000(シート内セル数、および行番号の上限を兼ねる) | `InvalidExcelFileException(TooLarge)` | 6.6 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxImagesPerSheet` | 50枚/シート | `UnsupportedWorkbookElementException(TooManyImages)` | 9.6 |
@@ -1267,9 +1337,9 @@ public sealed record GroupCommand(
   また、定義ありモードでは登録済みのシート名に一致するファイルしか事実上通らないのに対し、定義なしモードは
   任意の`.xlsx`を受け付けるため、社内の担当者が社外から受け取ったファイルをそのまま変換する経路が現実に生じる。
   このため「帳票定義の有無は入力の信頼性を変えない」とは言えず、リスクは定義なしモードで大きくなる。
-  対策(SDKのDOMに触れる前に`XmlReader`で要素の深さを検査する、`OpenSettings.MaxCharactersInPart`を設定する)は
-  タスク25で行う。それまでは、定義なしモードに社外から受け取ったファイルを渡さない運用とする
-  (`docs/ライブラリの使い方.md`「帳票定義なしでの変換」)。
+  タスク25で、SDKのDOMに触れる前に、パッケージ内の全XMLパートを`XmlReader`で流し読みして要素の深さ
+  (`MaxXmlElementDepth`)とパートの大きさ(`MaxXmlPartBytes`)を検査するようにした(要件6.7)。流し読みは
+  再帰しないため、深いネストでもスタックを消費しない。この対策で上記のスタックオーバーフローは起きなくなった。
 - **放射状グラデーションの`a:path`種別**(要件10.6): `a:path type="circle"`のみを
   厳密に扱い、`"rect"`/`"shape"`は同じ放射状近似にフォールバックする。矩形・図形に
   沿った塗りつぶしの厳密な再現は行わない。
@@ -1284,10 +1354,18 @@ public sealed record GroupCommand(
   実際に必要になった時点でワークブック単位の合算上限を検討する。
   なお、同じ名前の`<sheet>`を大量に並べると名前での絞り込みを素通りして同じシートを何度も読めてしまう問題は、
   絞り込んだ1枚を読んだ時点でループを打ち切ることで解消した(タスク24.9)。
-- **ファイルの内容だけで処理量が決まる経路の上限漏れ**(帳票定義なしモード追加時のsecurity-reviewer指摘。タスク25):
-  (1) 1文書あたりのページ数と印刷範囲の個数(`_xlnm.Print_Area`)に上限が無い。セルがA1とXFD500000の2個だけの
-  1KB未満のファイルでメモリを使い果たし、`S!$A$1:$A$1`を30万個並べた8.6KBのファイルで30万ページのPDFが出る。
-  定義なしモードでは`PrintAreaOverride`が常にnullのため影響が大きい。(2) `<col>`の範囲展開(1要素あたり最大16,384回)に
-  要素数の上限が無い。(3) 手動改ページ(`<brk>`)の件数に上限が無い(Excel自体の上限は1,026件)。
-  (4) 画像の`r:embed`の参照先が無い場合、OpenXml SDKの`ArgumentOutOfRangeException`が`UtsushiException`階層の外へ漏れる
-  (シートの`r:id`は対応済み)。
+- **ファイルの内容だけで処理量が決まる経路の上限漏れ**(帳票定義なしモード追加時のsecurity-reviewer指摘):
+  タスク25で対応した(要件6.7〜6.10、上の安全弁一覧)。残る制約は次のとおり。`MaxPrintRangeCells`以内でも、
+  1ページ内のセルごとに結合範囲を線形に探す(`SheetModel.FindMergedRange`)ため、処理量は
+  「印刷範囲のセル数×結合範囲の個数(最大`MaxMergedRangesPerSheet`)」に比例する。自社帳票の規模では問題にならない。
+  その後の security-reviewer の実測で見つかった経路(型として不正な属性値による SDK の例外の漏れ、検証に失敗した
+  画像が枚数に数えられない、印刷タイトルでの上限の迂回、文字列の長さ、DOM の要素数、関係パートの数)も、
+  上の安全弁一覧のとおり対応した(タスク25.6)。属性値の例外は、個々の読み取り箇所ではなく `ReadCore` で
+  `FormatException`/`OverflowException` をまとめて `InvalidExcelFileException(Corrupted)` に読み替える。
+- **図形の色・反転・矢印の未検証事項・既知の差分**(要件10.15〜10.18。layout-fidelity-reviewer指摘):
+  (1) 上下反転した図形の文字を180°回す挙動と、矢印の大きさ(線の太さの2/3/5倍、元の太さの最小1pt)は、Excelで保存した
+  ファイルのPDF出力との実測での突き合わせが未実施。LibreOfficeの実装では元の太さの最小が約2ptで、開いた矢印(`arrow`)の
+  倍率が大きいとされており、細い線の矢印はExcelより小さく描かれている可能性がある。対象帳票で矢印・上下反転を使う場合は、
+  実物と見比べて調整する。(2) `fillRef`の2・3番目(Office既定テーマではグラデーション)はスタイルの色の単色で近似するため、
+  「グラデーション」系のスタイルの図形は実際と色合いが異なる。(3) `fontRef`は色だけを使い、書体(`minor`/`major`)は使わない。
+  (4) 未対応の色の指定(`a:prstClr`/`a:scrgbClr`/`a:hslClr`)と修飾(`satMod`/`hueMod`等)は通知なく無視される。

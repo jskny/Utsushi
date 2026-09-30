@@ -101,7 +101,9 @@ namespace Utsushi.Golden.Tests
             ShapeCommand shape =>
                 $"shape  rect={Rect(shape.Rect)} preset={shape.Preset} rotation={N(shape.RotationDegrees)} "
                 + $"fill={Fill(shape.Fill)} outline={Outline(shape.Outline)} "
-                + $"text=[{string.Join(";", shape.TextLines.Select(ShapeTextLine))}]",
+                + $"text=[{string.Join(";", shape.TextLines.Select(ShapeTextLine))}]"
+                + (shape.FlipHorizontal || shape.FlipVertical ? $" flipH={shape.FlipHorizontal} flipV={shape.FlipVertical}" : string.Empty)
+                + Adjustments(shape.AdjustmentValues),
 
             ConnectorCommand connector =>
                 $"connector rect={Rect(connector.Rect)} preset={connector.Preset} rotation={N(connector.RotationDegrees)} "
@@ -128,8 +130,23 @@ namespace Utsushi.Golden.Tests
         private static string GradientStops(IReadOnlyList<GradientStop> stops) =>
             string.Join(",", stops.Select(s => $"{N(s.Position)}:{s.Color}"));
 
+        /// <summary>
+        /// 調整値(<c>a:avLst</c>。線吹き出しの引き出し線の位置など、要件10.13)。どれか1つでも指定がある場合だけ出力し、
+        /// 既存の期待値を変えない(調整値を指定しない図形は、プリセットの数だけ未指定(NaN)が並ぶ)。未指定は "-" と書く。
+        /// </summary>
+        private static string Adjustments(IReadOnlyList<double> values) =>
+            values.Any(v => !double.IsNaN(v))
+                ? $" adj=[{string.Join(",", values.Select(v => double.IsNaN(v) ? "-" : N(v)))}]"
+                : string.Empty;
+
+        // 矢印(要件10.18)は指定がある場合だけ出力し、既存の期待値を変えない。
         private static string Outline(ShapeOutline? outline) =>
-            outline is { } o ? $"{o.Color}/{N(o.WidthPt)}pt" : "none";
+            outline is { } o
+                ? $"{o.Color}/{N(o.WidthPt)}pt{LineEnd("head", o.HeadEnd)}{LineEnd("tail", o.TailEnd)}"
+                : "none";
+
+        private static string LineEnd(string name, LineEndStyle? end) =>
+            end is { } e ? $"/{name}={e.Type}:{e.Width}:{e.Length}" : string.Empty;
 
         private static string ShapeTextLine(ShapeTextLine line) =>
             $"origin={Point(line.Origin)} anchor={line.Anchor} font={Font(line.Font)} value={Quote(line.Text)}";

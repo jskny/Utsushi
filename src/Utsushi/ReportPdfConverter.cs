@@ -171,19 +171,24 @@ namespace Utsushi
         /// <param name="documentName">
         /// PDFのタイトル・ヘッダー/フッターのファイル名(<c>&amp;F</c>)・エラー情報に使う名前。null の場合は空文字列。
         /// </param>
+        /// <param name="maxDigitWidthPx">
+        /// 列幅の換算に使う最大数字幅(ピクセル)。null の場合はブックの標準フォントから見積もる
+        /// (<see cref="ReportDefinition.EstimateMaxDigitWidthPx"/>)。列幅がExcelとずれる場合に指定する。
+        /// </param>
         /// <exception cref="UtsushiException">入力ファイル・レイアウト・描画のいずれかで失敗した場合。</exception>
         public void ConvertWithoutDefinition(
             Stream xlsxStream,
             Stream output,
             IReadOnlyDictionary<string, string>? cellOverrides = null,
-            string? documentName = null)
+            string? documentName = null,
+            double? maxDigitWidthPx = null)
         {
             if (output is null)
             {
                 throw new ArgumentNullException(nameof(output));
             }
 
-            var layout = ComputeLayoutWithoutDefinition(xlsxStream, cellOverrides, documentName);
+            var layout = ComputeLayoutWithoutDefinition(xlsxStream, cellOverrides, documentName, maxDigitWidthPx);
             _renderer.Render(layout, output);
         }
 
@@ -197,16 +202,18 @@ namespace Utsushi
         /// PDFのタイトル・ヘッダー/フッターのファイル名・エラー情報に使う名前。null の場合は入力ファイル名から
         /// 拡張子を除いたもの(要件12.5)。ファイル名に取引先名などを含み、PDFのメタデータやログに出したくない場合に指定する。
         /// </param>
+        /// <param name="maxDigitWidthPx">列幅の換算に使う最大数字幅(ピクセル)。null の場合はブックの標準フォントから見積もる。</param>
         public void ConvertFileWithoutDefinition(
             string xlsxPath,
             string outputPath,
             IReadOnlyDictionary<string, string>? cellOverrides = null,
-            string? documentName = null)
+            string? documentName = null,
+            double? maxDigitWidthPx = null)
         {
             documentName ??= Path.GetFileNameWithoutExtension(xlsxPath ?? throw new ArgumentNullException(nameof(xlsxPath)));
 
             using var input = OpenInputFile(xlsxPath, documentName);
-            var layout = ComputeLayoutWithoutDefinition(input, cellOverrides, documentName);
+            var layout = ComputeLayoutWithoutDefinition(input, cellOverrides, documentName, maxDigitWidthPx);
             RenderToFile(layout, outputPath);
         }
 
@@ -272,8 +279,14 @@ namespace Utsushi
         public PagedLayout ComputeLayoutWithoutDefinition(
             Stream xlsxStream,
             IReadOnlyDictionary<string, string>? cellOverrides = null,
-            string? documentName = null)
+            string? documentName = null,
+            double? maxDigitWidthPx = null)
         {
+            if (maxDigitWidthPx is { } mdw && (mdw <= 0 || double.IsNaN(mdw) || double.IsInfinity(mdw)))
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxDigitWidthPx), mdw, "最大数字幅は正の数である必要があります。");
+            }
+
             if (xlsxStream is null)
             {
                 throw new ArgumentNullException(nameof(xlsxStream));
@@ -296,7 +309,10 @@ namespace Utsushi
                     + $"{workbook.Sheets.Count} 枚のシートを返しました。");
             }
 
-            var definition = ReportDefinition.CreateWithoutDefinition(name, workbook.Sheets[0].Name);
+            var definition = ReportDefinition.CreateWithoutDefinition(
+                name,
+                workbook.Sheets[0].Name,
+                maxDigitWidthPx ?? ReportDefinition.EstimateMaxDigitWidthPx(workbook.DefaultFont.Name, workbook.DefaultFont.SizePt));
 
             return BuildLayout(workbook, definition, NoValues, cellOverrides);
         }

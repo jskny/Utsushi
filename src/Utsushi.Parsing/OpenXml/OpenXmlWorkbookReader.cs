@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Xml;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using Utsushi.Core;
@@ -77,7 +78,10 @@ namespace Utsushi.Parsing.OpenXml
             SpreadsheetDocument document;
             try
             {
-                document = SpreadsheetDocument.Open(stream, isEditable: false);
+                document = SpreadsheetDocument.Open(
+                    stream,
+                    isEditable: false,
+                    new OpenSettings { MaxCharactersInPart = MaxXmlPartBytes });
             }
             catch (Exception ex)
             {
@@ -86,6 +90,30 @@ namespace Utsushi.Parsing.OpenXml
 
             using (document)
             {
+                try
+                {
+                    return ReadDocument(document, options);
+                }
+                catch (Exception ex) when (ex is FormatException or OverflowException)
+                {
+                    // OpenXml SDK の型付き属性(.Value)は、不正な文字列(例: flipH="maybe"、r="abc")を読むと
+                    // FormatException/OverflowException を投げる。個々の読み取り箇所で漏れなく扱うのは難しいため、
+                    // ここでまとめて「壊れたファイル」として UtsushiException 階層に読み替える(要件6.4。security-reviewer指摘)。
+                    throw new InvalidExcelFileException(
+                        "入力ファイルに不正な値の属性が含まれているため読み取れません。",
+                        InvalidExcelFileReason.Corrupted,
+                        options.ReportCode,
+                        ex);
+                }
+            }
+        }
+
+        private static WorkbookModel ReadDocument(SpreadsheetDocument document, WorkbookReadOptions options)
+        {
+            {
+                // DOM に触れる前に、全XMLパートの入れ子の深さと大きさを流し読みで検査する(要件6.7)。
+                GuardXmlParts(document, options.ReportCode);
+
                 var workbookPart = document.WorkbookPart
                     ?? throw new InvalidExcelFileException(
                         "ワークブックパートが存在しません。ファイルが破損している可能性があります。",
@@ -98,6 +126,7 @@ namespace Utsushi.Parsing.OpenXml
                 var styles = StyleTable.Create(workbookPart, colors);
                 var sharedStrings = ReadSharedStrings(workbookPart, options.ReportCode);
                 var definedNames = ReadDefinedNames(workbookPart);
+                var drawingColors = DrawingColorResolver.Create(workbookPart);
 
                 // ActiveSheetOnly では、名前ではなく <sheet> 要素そのもので対象を決める。名前で絞ると、
                 // 同じ名前の <sheet> が複数ある不正なファイルで別の要素(非表示・参照切れ)を読んでしまうため。
@@ -138,7 +167,7 @@ namespace Utsushi.Parsing.OpenXml
                         continue;
                     }
 
-                    sheets.Add(ReadSheet(name!, worksheetPart, styles, sharedStrings, definedNames, options));
+                    sheets.Add(ReadSheet(name!, worksheetPart, styles, sharedStrings, definedNames, drawingColors, options));
 
                     // 対象を1枚に絞っている場合は、見つけた時点で打ち切る。Excelはシート名の重複を許さないが、
                     // OpenXml SDK は検証しないため、同じ名前の <sheet> を大量に並べたファイルで同じシートを
@@ -181,6 +210,7 @@ namespace Utsushi.Parsing.OpenXml
             StyleTable styles,
             IReadOnlyList<string> sharedStrings,
             IReadOnlyDictionary<string, Dictionary<string, string>> definedNames,
+            DrawingColorResolver drawingColors,
             WorkbookReadOptions options)
         {
             var worksheet = worksheetPart.Worksheet;
@@ -233,15 +263,15 @@ namespace Utsushi.Parsing.OpenXml
                         cellCount++;
                         EnsureCellCountWithinLimit(cellCount, name, options.ReportCode);
 
-                        cells[address] = ReadCell(cell, styles, sharedStrings);
+                        cells[address] = ReadCell(cell, styles, sharedStrings, name, options.ReportCode);
                     }
                 }
             }
 
-            var (columnWidths, hiddenColumns) = ReadColumns(worksheet, defaultColumnWidth);
+            var (columnWidths, hiddenColumns) = ReadColumns(worksheet, defaultColumnWidth, name, options.ReportCode);
             var mergedRanges = ReadMergedRanges(name, worksheet, options);
-            var pageSetup = ReadPageSetup(name, worksheet, definedNames);
-            var drawingObjects = ReadDrawingObjects(name, worksheetPart, options);
+            var pageSetup = ReadPageSetup(name, worksheet, definedNames, options.ReportCode);
+            var drawingObjects = ReadDrawingObjects(name, worksheetPart, drawingColors, options);
 
             return new SheetModel(
                 name,
@@ -254,7 +284,8 @@ namespace Utsushi.Parsing.OpenXml
                 hiddenColumns,
                 hiddenRows,
                 pageSetup,
-                drawingObjects);
+                drawingObjects,
+                (int)Math.Min(sheetFormat?.BaseColumnWidth?.Value ?? 8U, 255U));
         }
 
         /// <summary>
@@ -267,13 +298,14 @@ namespace Utsushi.Parsing.OpenXml
                 return explicitWidth;
             }
 
-            var baseWidth = sheetFormat?.BaseColumnWidth?.Value ?? 8U;
-
-            // Excel の既定列幅(8.43文字)は baseColWidth=8 にパディングを加えた値に相当する。
-            return baseWidth + 0.43;
+            // defaultColWidth が無い場合、Excel の既定列幅は baseColWidth と標準フォントの最大数字幅から決まる
+            // (例: Calibri 11 で 64px、ＭＳ Ｐゴシック 11 で 72px)。最大数字幅は帳票定義側の値のため、ここでは
+            // 「暗黙の既定幅」を NaN で表し、Layout レイヤーが求める(ExcelUnitConverter.DefaultColumnWidthToPixels)。
+            return double.NaN;
         }
 
-        private static CellModel ReadCell(X.Cell cell, StyleTable styles, IReadOnlyList<string> sharedStrings)
+        private static CellModel ReadCell(
+            X.Cell cell, StyleTable styles, IReadOnlyList<string> sharedStrings, string sheetName, string? reportCode)
         {
             var style = styles.GetCellStyle(cell.StyleIndex?.Value is { } s ? (int)s : null);
             var hasFormula = cell.CellFormula is not null;
@@ -284,6 +316,7 @@ namespace Utsushi.Parsing.OpenXml
             if (dataType is not null && dataType == X.CellValues.InlineString)
             {
                 var text = cell.InlineString?.Text?.Text ?? cell.InlineString?.InnerText ?? string.Empty;
+                EnsureTextLengthWithinLimit(text, MaxCellTextLength, $"シート '{sheetName}' のセルの文字列", reportCode);
                 return new CellModel(text, CellValueKind.Text, style, text, hasFormula);
             }
 
@@ -332,8 +365,11 @@ namespace Utsushi.Parsing.OpenXml
             return new CellModel(rawValue, CellValueKind.Text, style, rawValue, hasFormula);
         }
 
-        private static (List<double> Widths, HashSet<int> Hidden) ReadColumns(X.Worksheet worksheet, double defaultWidth)
+        private static (List<double> Widths, HashSet<int> Hidden) ReadColumns(
+            X.Worksheet worksheet, double defaultWidth, string sheetName, string? reportCode)
         {
+            var expansions = 0;
+
             var widths = new List<double>();
             var hidden = new HashSet<int>();
 
@@ -345,15 +381,25 @@ namespace Utsushi.Parsing.OpenXml
 
             foreach (var column in columns.Elements<X.Column>())
             {
-                var min = (int)(column.Min?.Value ?? 0U);
-                var max = (int)(column.Max?.Value ?? 0U);
-                if (min < 1 || max < min)
+                // uint のまま最大列で丸めてから int にする(int の範囲を超える値がキャストで負にならないように)。
+                var min = (int)Math.Min(column.Min?.Value ?? 0U, (uint)CellAddress.MaxColumn + 1);
+                var max = (int)Math.Min(column.Max?.Value ?? 0U, (uint)CellAddress.MaxColumn);
+                if (min < 1)
                 {
                     continue;
                 }
 
-                // Excel は未使用の右端まで Column 要素を伸ばすことがある。使用範囲を超える定義は既定幅と同じなので無視する。
-                max = Math.Min(max, CellAddress.MaxColumn);
+                // Excel は未使用の右端まで Column 要素を伸ばすことがある。最大列を超える部分は丸めた。
+
+                // min が最大列を超える定義は範囲が空になる。そのまま数えると展開回数の合計が負になり、
+                // 上限(MaxColumnExpansionsPerSheet)をすり抜けられるため読み飛ばす(spec-compliance-reviewer指摘)。
+                if (max < min)
+                {
+                    continue;
+                }
+
+                expansions += max - min + 1;
+                EnsureColumnExpansionsWithinLimit(expansions, MaxColumnExpansionsPerSheet, sheetName, reportCode);
 
                 var isHidden = column.Hidden?.Value == true;
                 var width = column.Width?.Value ?? defaultWidth;
@@ -452,6 +498,72 @@ namespace Utsushi.Parsing.OpenXml
         /// Layoutレイヤー側の<c>MaxSpanCells</c>で別途上限を設けている。
         /// </summary>
         internal const int MaxMergedRangesPerSheet = 1000;
+
+        /// <summary>
+        /// セルの文字列(共有文字列・インライン文字列)の長さの上限(要件6.8)。Excel 自体の上限(32,767文字)に合わせる。
+        /// 極端に長い文字列を多数のセルから参照させ、レイアウト計算(文字幅の計測・折り返し)を長時間かけさせるのを防ぐ
+        /// (security-reviewer指摘)。
+        /// </summary>
+        internal const int MaxCellTextLength = 32767;
+
+        /// <summary>
+        /// ヘッダー/フッター1つの文字列(書式コードを含む)の長さの上限(要件6.8)。Excel の画面では255文字までだが、
+        /// 他のツールで作ったファイルを考慮して余裕をもたせる。
+        /// </summary>
+        internal const int MaxHeaderFooterTextLength = 1024;
+
+        /// <summary>拡大縮小率(<c>pageSetup/@scale</c>)の範囲(Excel と同じ 10〜400%。要件6.9)。</summary>
+        internal const int MinPrintScalePercent = 10;
+
+        /// <summary>拡大縮小率の上限(%)。</summary>
+        internal const int MaxPrintScalePercent = 400;
+
+        /// <summary>
+        /// XMLパート1つに含める要素の数の上限(要件6.7)。パートの大きさの上限だけでは、小さな要素(例: <c>&lt;row/&gt;</c>)を
+        /// 大量に並べて DOM に数GBのメモリを使わせられるため(100MiB 分の <c>&lt;row/&gt;</c> で 4.6GB。security-reviewer指摘)。
+        /// <see cref="MaxCellsPerSheet"/> いっぱいのシート(セル1つあたり数要素)でも収まる値にする。
+        /// </summary>
+        internal const long MaxXmlElementsPerPart = 5_000_000;
+
+        /// <summary>
+        /// 関係パート(<c>*.rels</c>)1つに含める関係(<c>Relationship</c>)の数の上限(要件6.7)。関係パートは
+        /// <c>SpreadsheetDocument.Open</c> の中で解析され、関係の数に対して2乗より速く処理時間が増える
+        /// (10万件で139秒。security-reviewer指摘)ため、Open より前に ZIP を直接流し読みして検査する。
+        /// 自社帳票の関係の数は、ハイパーリンクを多用しても数百件程度である。
+        /// </summary>
+        internal const int MaxRelationshipsPerPart = 10_000;
+
+        /// <summary>
+        /// XMLパートの要素の入れ子の深さの上限(要件6.7)。OpenXml SDK は DOM を再帰で組み立てるため、
+        /// 数千段にネストした要素(例: <c>xdr:grpSp</c>)でスタックオーバーフローし、呼び出し元のプロセスごと
+        /// 落ちる(スタック1MBで深さ5,000段・4.2KBのファイルで再現。security-reviewer指摘)。
+        /// Excelが保存する帳票の入れ子は、グループを上限(<see cref="MaxShapeNestingDepth"/>)まで重ねても
+        /// 数十段に収まるため、十分大きな値にする。
+        /// </summary>
+        internal const int MaxXmlElementDepth = 256;
+
+        /// <summary>
+        /// XMLパート1つの展開後の大きさの上限(64MiB。要件6.7)。<see cref="MaxCellsPerSheet"/>いっぱいの
+        /// シートでも数十MBに収まる。<c>OpenSettings.MaxCharactersInPart</c>にも同じ値を設定する。
+        /// </summary>
+        internal const long MaxXmlPartBytes = 64L * 1024 * 1024;
+
+        /// <summary>
+        /// 1シートの列定義(<c>&lt;col&gt;</c>)の <c>min</c>〜<c>max</c> を展開する回数の合計の上限(要件6.8)。
+        /// Excelは重ならない範囲で保存するため合計は最大列数(16,384)以下になる。範囲の重なる
+        /// <c>&lt;col&gt;</c>を大量に並べた入力で処理時間が極端に増えるのを防ぐ(security-reviewer指摘)。
+        /// </summary>
+        internal const int MaxColumnExpansionsPerSheet = 4 * CellAddress.MaxColumn;
+
+        /// <summary>手動改ページ(<c>&lt;brk&gt;</c>)の件数の上限(行・列それぞれ。Excel自体の上限。要件6.8)。</summary>
+        internal const int MaxPageBreaksPerSheet = 1026;
+
+        /// <summary>
+        /// 1シートの印刷範囲(<c>_xlnm.Print_Area</c>のカンマ区切り)の個数の上限(要件6.8)。印刷範囲は
+        /// 1個ごとに独立したページ群になるため、大量の範囲で数十万ページのPDFを出力させられるのを防ぐ
+        /// (8.6KBのファイルで30万ページになった。security-reviewer指摘)。
+        /// </summary>
+        internal const int MaxPrintAreasPerSheet = 1000;
 
         /// <summary>
         /// 入力ファイル自体のバイト数、および展開後のZIPエントリ宣言サイズ合計の上限(1GiB)。
@@ -569,6 +681,30 @@ namespace Utsushi.Parsing.OpenXml
         /// </summary>
         private static void EnsureCellCountWithinLimit(int cellCount, string sheetName, string? reportCode) =>
             EnsureCellCountWithinLimit(cellCount, MaxCellsPerSheet, sheetName, reportCode);
+
+        /// <summary>文字列の長さが上限以下か確認する(要件6.8)。</summary>
+        internal static void EnsureTextLengthWithinLimit(string text, int maxLength, string description, string? reportCode)
+        {
+            if (text.Length > maxLength)
+            {
+                throw new InvalidExcelFileException(
+                    $"{description}の長さが上限({maxLength}文字)を超えています。",
+                    InvalidExcelFileReason.TooLarge,
+                    reportCode);
+            }
+        }
+
+        /// <summary><c>&lt;col&gt;</c>の展開回数の合計が上限以下か確認する(要件6.8。テスト用に上限を引数に取る)。</summary>
+        internal static void EnsureColumnExpansionsWithinLimit(int expansions, int maxExpansions, string sheetName, string? reportCode)
+        {
+            if (expansions > maxExpansions)
+            {
+                throw new InvalidExcelFileException(
+                    $"シート '{sheetName}' の列定義(<col>)が上限({maxExpansions}列分)を超えています。",
+                    InvalidExcelFileReason.TooLarge,
+                    reportCode);
+            }
+        }
 
         internal static void EnsureCellCountWithinLimit(int cellCount, int maxCells, string sheetName, string? reportCode)
         {
@@ -744,7 +880,7 @@ namespace Utsushi.Parsing.OpenXml
         /// 同じ設定に従う(要件9.4, 9.6, 10.7, 10.8)。
         /// </remarks>
         private static List<DrawingObjectModel> ReadDrawingObjects(
-            string sheetName, WorksheetPart worksheetPart, WorkbookReadOptions options)
+            string sheetName, WorksheetPart worksheetPart, DrawingColorResolver colors, WorkbookReadOptions options)
         {
             var result = new List<DrawingObjectModel>();
             var drawing = worksheetPart.DrawingsPart?.WorksheetDrawing;
@@ -799,7 +935,7 @@ namespace Utsushi.Parsing.OpenXml
 
                 if (shape is not null)
                 {
-                    var shapeModel = ReadShape(sheetName, anchor, shape, anchorCell, anchorOffset, options, ref shapeCount);
+                    var shapeModel = ReadShape(sheetName, anchor, shape, anchorCell, anchorOffset, colors, options, ref shapeCount);
                     if (shapeModel is not null)
                     {
                         result.Add(shapeModel);
@@ -817,7 +953,7 @@ namespace Utsushi.Parsing.OpenXml
 
                 if (connector is not null)
                 {
-                    var connectorModel = ReadConnector(sheetName, anchor, connector, anchorCell, anchorOffset, options, ref shapeCount);
+                    var connectorModel = ReadConnector(sheetName, anchor, connector, anchorCell, anchorOffset, colors, options, ref shapeCount);
                     if (connectorModel is not null)
                     {
                         result.Add(connectorModel);
@@ -836,7 +972,7 @@ namespace Utsushi.Parsing.OpenXml
                 if (group is not null)
                 {
                     var groupModel = ReadGroupShape(
-                        sheetName, drawingsPart, anchor, group, anchorCell, anchorOffset, options, ref shapeCount, ref imageCount);
+                        sheetName, drawingsPart, anchor, group, anchorCell, anchorOffset, colors, options, ref shapeCount, ref imageCount);
                     if (groupModel is not null)
                     {
                         result.Add(groupModel);
@@ -888,6 +1024,10 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
+            // 読み取りを試みた時点で数える。検証に失敗した画像を数えないと、同じ画像パートを参照する
+            // 壊れたアンカーを大量に並べて、上限に達しないまま画像を何度も展開させられる(security-reviewer指摘)。
+            imageCount++;
+
             // ReadAnchorExtentより先に検証する。壊れたアンカー(ReadAnchorExtentの失敗)は
             // モードによらず常に無言でスキップするため、先に判定すると不正な画像形式/
             // サイズ超過/シグネチャ不一致がErrorモードでも例外化されずに握りつぶされてしまう
@@ -906,7 +1046,6 @@ namespace Utsushi.Parsing.OpenXml
             var id = ReadShapeId(picture.NonVisualPictureProperties?.NonVisualDrawingProperties);
             var rotationDegrees = (picture.ShapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
 
-            imageCount++;
             return new ImageModel(id, data, contentType, rotationDegrees, anchorCell, anchorOffset, extent);
         }
 
@@ -927,7 +1066,33 @@ namespace Utsushi.Parsing.OpenXml
             contentType = string.Empty;
 
             var embedId = picture.BlipFill?.Blip?.Embed?.Value;
-            if (string.IsNullOrEmpty(embedId) || drawingsPart.GetPartById(embedId!) is not ImagePart imagePart)
+            if (string.IsNullOrEmpty(embedId))
+            {
+                return false;
+            }
+
+            OpenXmlPart embeddedPart;
+            try
+            {
+                embeddedPart = drawingsPart.GetPartById(embedId!);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // 参照先のパートがファイル内に無い(要件6.10)。SDKの例外を漏らさず、サポート外要素として扱う。
+                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
+                {
+                    throw new UnsupportedWorkbookElementException(
+                        $"シート '{sheetName}' の画像の参照先('{embedId}')がファイル内にありません。"
+                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                        "MissingImagePart",
+                        options.ReportCode,
+                        sheetName);
+                }
+
+                return false;
+            }
+
+            if (embeddedPart is not ImagePart imagePart)
             {
                 return false;
             }
@@ -995,6 +1160,7 @@ namespace Utsushi.Parsing.OpenXml
             Xdr.Shape shape,
             CellAddress anchorCell,
             PointPt anchorOffset,
+            DrawingColorResolver colors,
             WorkbookReadOptions options,
             ref int shapeCount)
         {
@@ -1042,9 +1208,9 @@ namespace Utsushi.Parsing.OpenXml
 
             var adjustmentValues = ReadShapeAdjustmentValues(preset, presetGeometry);
             var rotationDegrees = (shapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
-            var fill = ReadShapeFill(shapeProperties);
-            var outline = ReadShapeOutline(shapeProperties);
-            var text = ReadShapeText(shape.TextBody, out var textTooLong);
+            var fill = ReadShapeFill(shapeProperties, shape.ShapeStyle, colors);
+            var outline = ReadShapeOutline(shapeProperties, shape.ShapeStyle, colors);
+            var text = ReadShapeText(shape.TextBody, shape.ShapeStyle, colors, out var textTooLong);
 
             if (textTooLong)
             {
@@ -1064,7 +1230,10 @@ namespace Utsushi.Parsing.OpenXml
             var id = ReadShapeId(shape.NonVisualShapeProperties?.NonVisualDrawingProperties);
 
             shapeCount++;
-            return new ShapeModel(id, preset, adjustmentValues, rotationDegrees, fill, outline, text, anchorCell, anchorOffset, extent);
+            return new ShapeModel(
+                id, preset, adjustmentValues, rotationDegrees, fill, outline, text, anchorCell, anchorOffset, extent,
+                shapeProperties?.Transform2D?.HorizontalFlip?.Value ?? false,
+                shapeProperties?.Transform2D?.VerticalFlip?.Value ?? false);
         }
 
         /// <summary>1つの<c>xdr:cxnSp</c>アンカーを<see cref="ConnectorModel"/>として読み取る(要件10.9)。</summary>
@@ -1074,6 +1243,7 @@ namespace Utsushi.Parsing.OpenXml
             Xdr.ConnectionShape connector,
             CellAddress anchorCell,
             PointPt anchorOffset,
+            DrawingColorResolver colors,
             WorkbookReadOptions options,
             ref int shapeCount)
         {
@@ -1122,7 +1292,7 @@ namespace Utsushi.Parsing.OpenXml
             var rotationDegrees = (transform?.Rotation?.Value ?? 0) / 60000.0;
             var flipHorizontal = transform?.HorizontalFlip?.Value ?? false;
             var flipVertical = transform?.VerticalFlip?.Value ?? false;
-            var outline = ReadShapeOutline(shapeProperties);
+            var outline = ReadConnectorOutline(shapeProperties, connector.ShapeStyle, colors);
 
             var connectorShapeDrawingProperties =
                 connector.NonVisualConnectionShapeProperties?.NonVisualConnectorShapeDrawingProperties;
@@ -1143,6 +1313,7 @@ namespace Utsushi.Parsing.OpenXml
             Xdr.GroupShape group,
             CellAddress anchorCell,
             PointPt anchorOffset,
+            DrawingColorResolver colors,
             WorkbookReadOptions options,
             ref int shapeCount,
             ref int imageCount)
@@ -1178,7 +1349,7 @@ namespace Utsushi.Parsing.OpenXml
 
             var rotationDegrees = (transformGroup?.Rotation?.Value ?? 0) / 60000.0;
 
-            var children = ReadGroupChildren(sheetName, drawingsPart, group, options, ref shapeCount, ref imageCount, currentGroupDepth: 1);
+            var children = ReadGroupChildren(sheetName, drawingsPart, group, colors, options, ref shapeCount, ref imageCount, currentGroupDepth: 1);
             if (children is null)
             {
                 // Ignoreモードで内部に非対応要素があった場合。グループの一部だけを描画すると
@@ -1208,7 +1379,9 @@ namespace Utsushi.Parsing.OpenXml
 
             shapeCount++;
             return new GroupShapeModel(
-                id, childOffset.Value, childExtent.Value, children, rotationDegrees, anchorCell, anchorOffset, extent);
+                id, childOffset.Value, childExtent.Value, children, rotationDegrees, anchorCell, anchorOffset, extent,
+                transformGroup?.HorizontalFlip?.Value ?? false,
+                transformGroup?.VerticalFlip?.Value ?? false);
         }
 
         /// <summary>
@@ -1222,6 +1395,7 @@ namespace Utsushi.Parsing.OpenXml
             string sheetName,
             DrawingsPart drawingsPart,
             Xdr.GroupShape group,
+            DrawingColorResolver colors,
             WorkbookReadOptions options,
             ref int shapeCount,
             ref int imageCount,
@@ -1241,11 +1415,11 @@ namespace Utsushi.Parsing.OpenXml
                 var isSupportedChildType = element is Xdr.Shape or Xdr.Picture or Xdr.ConnectionShape or Xdr.GroupShape;
                 GroupChildModel? child = element switch
                 {
-                    Xdr.Shape shape => ReadGroupChildShape(sheetName, shape, options, ref shapeCount),
+                    Xdr.Shape shape => ReadGroupChildShape(sheetName, shape, colors, options, ref shapeCount),
                     Xdr.Picture picture => ReadGroupChildImage(sheetName, drawingsPart, picture, options, ref imageCount),
-                    Xdr.ConnectionShape connector => ReadGroupChildConnector(sheetName, connector, options, ref shapeCount),
+                    Xdr.ConnectionShape connector => ReadGroupChildConnector(sheetName, connector, colors, options, ref shapeCount),
                     Xdr.GroupShape nestedGroup => ReadGroupChildGroup(
-                        sheetName, drawingsPart, nestedGroup, options, ref shapeCount, ref imageCount, currentGroupDepth + 1),
+                        sheetName, drawingsPart, nestedGroup, colors, options, ref shapeCount, ref imageCount, currentGroupDepth + 1),
                     _ => null,
                 };
 
@@ -1274,7 +1448,7 @@ namespace Utsushi.Parsing.OpenXml
 
         /// <summary>グループ内の<c>xdr:sp</c>子要素を<see cref="GroupChildShape"/>として読み取る(要件10.10)。</summary>
         private static GroupChildShape? ReadGroupChildShape(
-            string sheetName, Xdr.Shape shape, WorkbookReadOptions options, ref int shapeCount)
+            string sheetName, Xdr.Shape shape, DrawingColorResolver colors, WorkbookReadOptions options, ref int shapeCount)
         {
             if (shapeCount >= MaxShapesPerSheet)
             {
@@ -1319,9 +1493,9 @@ namespace Utsushi.Parsing.OpenXml
 
             var adjustmentValues = ReadShapeAdjustmentValues(preset, presetGeometry);
             var rotationDegrees = (shapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
-            var fill = ReadShapeFill(shapeProperties);
-            var outline = ReadShapeOutline(shapeProperties);
-            var text = ReadShapeText(shape.TextBody, out var textTooLong);
+            var fill = ReadShapeFill(shapeProperties, shape.ShapeStyle, colors);
+            var outline = ReadShapeOutline(shapeProperties, shape.ShapeStyle, colors);
+            var text = ReadShapeText(shape.TextBody, shape.ShapeStyle, colors, out var textTooLong);
 
             if (textTooLong)
             {
@@ -1341,7 +1515,10 @@ namespace Utsushi.Parsing.OpenXml
             var id = ReadShapeId(shape.NonVisualShapeProperties?.NonVisualDrawingProperties);
 
             shapeCount++;
-            return new GroupChildShape(id, localRect.Value, preset, adjustmentValues, rotationDegrees, fill, outline, text);
+            return new GroupChildShape(
+                id, localRect.Value, preset, adjustmentValues, rotationDegrees, fill, outline, text,
+                shapeProperties?.Transform2D?.HorizontalFlip?.Value ?? false,
+                shapeProperties?.Transform2D?.VerticalFlip?.Value ?? false);
         }
 
         /// <summary>グループ内の<c>xdr:pic</c>子要素を<see cref="GroupChildImage"/>として読み取る(要件10.10)。</summary>
@@ -1363,6 +1540,9 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
+            // トップレベルの画像と同じく、読み取りを試みた時点で数える。
+            imageCount++;
+
             if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType))
             {
                 return null;
@@ -1377,13 +1557,12 @@ namespace Utsushi.Parsing.OpenXml
             var id = ReadShapeId(picture.NonVisualPictureProperties?.NonVisualDrawingProperties);
             var rotationDegrees = (picture.ShapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
 
-            imageCount++;
             return new GroupChildImage(id, localRect.Value, data, contentType, rotationDegrees);
         }
 
         /// <summary>グループ内の<c>xdr:cxnSp</c>子要素を<see cref="GroupChildConnector"/>として読み取る(要件10.10)。</summary>
         private static GroupChildConnector? ReadGroupChildConnector(
-            string sheetName, Xdr.ConnectionShape connector, WorkbookReadOptions options, ref int shapeCount)
+            string sheetName, Xdr.ConnectionShape connector, DrawingColorResolver colors, WorkbookReadOptions options, ref int shapeCount)
         {
             if (shapeCount >= MaxShapesPerSheet)
             {
@@ -1430,7 +1609,7 @@ namespace Utsushi.Parsing.OpenXml
             var rotationDegrees = (transform?.Rotation?.Value ?? 0) / 60000.0;
             var flipHorizontal = transform?.HorizontalFlip?.Value ?? false;
             var flipVertical = transform?.VerticalFlip?.Value ?? false;
-            var outline = ReadShapeOutline(shapeProperties);
+            var outline = ReadConnectorOutline(shapeProperties, connector.ShapeStyle, colors);
 
             var connectorShapeDrawingProperties =
                 connector.NonVisualConnectionShapeProperties?.NonVisualConnectorShapeDrawingProperties;
@@ -1452,6 +1631,7 @@ namespace Utsushi.Parsing.OpenXml
             string sheetName,
             DrawingsPart drawingsPart,
             Xdr.GroupShape group,
+            DrawingColorResolver colors,
             WorkbookReadOptions options,
             ref int shapeCount,
             ref int imageCount,
@@ -1498,7 +1678,7 @@ namespace Utsushi.Parsing.OpenXml
 
             var rotationDegrees = (transformGroup?.Rotation?.Value ?? 0) / 60000.0;
 
-            var children = ReadGroupChildren(sheetName, drawingsPart, group, options, ref shapeCount, ref imageCount, depth);
+            var children = ReadGroupChildren(sheetName, drawingsPart, group, colors, options, ref shapeCount, ref imageCount, depth);
             if (children is null)
             {
                 return null;
@@ -1524,7 +1704,10 @@ namespace Utsushi.Parsing.OpenXml
             var id = ReadShapeId(group.NonVisualGroupShapeProperties?.NonVisualDrawingProperties);
 
             shapeCount++;
-            return new GroupChildGroup(id, localRect.Value, rotationDegrees, childOffset.Value, childExtent.Value, children);
+            return new GroupChildGroup(
+                id, localRect.Value, rotationDegrees, childOffset.Value, childExtent.Value, children,
+                transformGroup?.HorizontalFlip?.Value ?? false,
+                transformGroup?.VerticalFlip?.Value ?? false);
         }
 
         /// <summary>
@@ -1617,17 +1800,21 @@ namespace Utsushi.Parsing.OpenXml
             return true;
         }
 
-        /// <summary>図形の塗りつぶし(<c>a:noFill</c>/<c>a:solidFill</c>/<c>a:gradFill</c>)を読み取る。</summary>
-        private static ShapeFill? ReadShapeFill(Xdr.ShapeProperties? shapeProperties)
+        /// <summary>
+        /// 図形の塗りつぶし(<c>a:noFill</c>/<c>a:solidFill</c>/<c>a:gradFill</c>)を読み取る。<c>spPr</c>に塗りつぶしの
+        /// 指定が無ければ、図形のスタイルの<c>fillRef</c>から求める(要件10.15, 10.16)。
+        /// </summary>
+        private static ShapeFill? ReadShapeFill(
+            Xdr.ShapeProperties? shapeProperties, Xdr.ShapeStyle? style, DrawingColorResolver colors)
         {
-            if (shapeProperties is null || shapeProperties.GetFirstChild<Dr.NoFill>() is not null)
+            if (shapeProperties?.GetFirstChild<Dr.NoFill>() is not null)
             {
                 return null;
             }
 
-            if (shapeProperties.GetFirstChild<Dr.GradientFill>() is { } gradientFill)
+            if (shapeProperties?.GetFirstChild<Dr.GradientFill>() is { } gradientFill)
             {
-                var stops = ReadGradientStops(gradientFill.GradientStopList);
+                var stops = ReadGradientStops(gradientFill.GradientStopList, colors);
                 if (stops is null)
                 {
                     return null;
@@ -1648,9 +1835,26 @@ namespace Utsushi.Parsing.OpenXml
                 return new LinearGradientShapeFill(stops, angle / 60000.0);
             }
 
-            if (shapeProperties.GetFirstChild<Dr.SolidFill>() is { } solidFill && TryReadColor(solidFill, out var color))
+            if (shapeProperties?.GetFirstChild<Dr.SolidFill>() is { } solidFill)
             {
-                return new SolidShapeFill(color);
+                return colors.TryResolve(solidFill, placeholder: null, out var color) ? new SolidShapeFill(color) : null;
+            }
+
+            // 画像・模様・グループの塗りつぶしは対応していない。スタイルの塗りつぶしで代用しない。
+            if (shapeProperties?.GetFirstChild<Dr.BlipFill>() is not null
+                || shapeProperties?.GetFirstChild<Dr.PatternFill>() is not null
+                || shapeProperties?.GetFirstChild<Dr.GroupFill>() is not null)
+            {
+                return null;
+            }
+
+            // fillRef/@idx が 0 なら塗りなし。1以上はテーマの塗りつぶしの書式を指すが、Excelの既定テーマでは
+            // いずれもスタイルの色(phClr)を基にした塗りのため、その色の単色で近似する(要件10.16)。
+            if (style?.FillReference is { } fillRef
+                && fillRef.Index?.Value is { } fillIndex && fillIndex > 0
+                && colors.TryResolve(fillRef, placeholder: null, out var styleColor))
+            {
+                return new SolidShapeFill(styleColor);
             }
 
             return null;
@@ -1661,7 +1865,7 @@ namespace Utsushi.Parsing.OpenXml
         /// 位置・色のいずれかを読み取れないストップが1つでもあれば全体を<c>null</c>とし、
         /// 呼び出し側で塗りなしにフォールバックする(画像対応時の「不正な入力は無視する」方針と同様)。
         /// </summary>
-        private static IReadOnlyList<GradientStop>? ReadGradientStops(Dr.GradientStopList? gradientStopList)
+        private static IReadOnlyList<GradientStop>? ReadGradientStops(Dr.GradientStopList? gradientStopList, DrawingColorResolver colors)
         {
             if (gradientStopList is null)
             {
@@ -1678,7 +1882,7 @@ namespace Utsushi.Parsing.OpenXml
                     return null;
                 }
 
-                if (stop.Position?.Value is not { } position || !TryReadColor(stop, out var color))
+                if (stop.Position?.Value is not { } position || !colors.TryResolve(stop, placeholder: null, out var color))
                 {
                     return null;
                 }
@@ -1695,31 +1899,111 @@ namespace Utsushi.Parsing.OpenXml
         /// <summary><c>a:fillToRect</c>の1辺(<see cref="Int32Value"/>)を比率に変換する。無指定なら50%とする。</summary>
         private static double FillToRectFraction(Int32Value? value) => value?.Value is { } v ? PermilleToFraction(v) : 0.5;
 
-        /// <summary>図形の枠線(<c>a:ln</c>)を読み取る。</summary>
-        private static ShapeOutline? ReadShapeOutline(Xdr.ShapeProperties? shapeProperties)
+        /// <summary>
+        /// 図形・接続線の枠線(<c>a:ln</c>)を読み取る。<c>a:ln</c>に色の指定が無ければ、図形のスタイルの
+        /// <c>lnRef</c>から色と太さを求める(要件10.15, 10.16)。
+        /// </summary>
+        private static ShapeOutline? ReadShapeOutline(
+            Xdr.ShapeProperties? shapeProperties, Xdr.ShapeStyle? style, DrawingColorResolver colors)
         {
             var outline = shapeProperties?.GetFirstChild<Dr.Outline>();
-            if (outline is null || outline.GetFirstChild<Dr.NoFill>() is not null)
+            if (outline?.GetFirstChild<Dr.NoFill>() is not null)
             {
                 return null;
             }
 
-            if (outline.GetFirstChild<Dr.SolidFill>() is not { } solidFill || !TryReadColor(solidFill, out var color))
+            var lineRef = style?.LineReference is { } reference && reference.Index?.Value is { } lineIndex && lineIndex > 0
+                ? reference
+                : null;
+
+            ArgbColor color;
+            if (outline?.GetFirstChild<Dr.SolidFill>() is { } solidFill)
+            {
+                if (!colors.TryResolve(solidFill, placeholder: null, out color))
+                {
+                    return null;
+                }
+            }
+            else if (outline?.GetFirstChild<Dr.GradientFill>() is not null || outline?.GetFirstChild<Dr.PatternFill>() is not null)
+            {
+                // グラデーション・模様の線は対応していない。スタイルの線で代用しない。
+                return null;
+            }
+            else if (lineRef is null || !colors.TryResolve(lineRef, placeholder: null, out color))
             {
                 return null;
             }
 
-            // @w省略時の既定太さはECMA-376上厳密には未指定だが、線色が明示されている以上
-            // 「見える枠線がある」とみなし、Excelの既定的な細線に近い1ptを補う。
-            var widthPt = Units.EmusToPoints(outline.Width?.Value ?? 12700);
-            return new ShapeOutline(color, widthPt);
+            // @w が無ければスタイルの線の書式(テーマの lnStyleLst)の太さ。スタイルも無ければ、
+            // 線の色が明示されている以上「見える枠線がある」とみなし、Excelの既定的な細線に近い1ptを補う。
+            var widthPt = outline?.Width?.Value is { } width
+                ? Units.EmusToPoints(width)
+                : lineRef is not null ? colors.GetLineStyleWidthPt(lineRef.Index!.Value) : 1.0;
+            return new ShapeOutline(
+                color, widthPt, ReadLineEnd(outline?.GetFirstChild<Dr.HeadEnd>()), ReadLineEnd(outline?.GetFirstChild<Dr.TailEnd>()));
         }
 
-        private static bool TryReadColor(Dr.SolidFill solidFill, out ArgbColor color) =>
-            ArgbColor.TryParseHex(solidFill.RgbColorModelHex?.Val?.Value, out color);
+        /// <summary>
+        /// 接続線の線を読み取る。接続線は <see cref="ConnectorModel.Outline"/> が null のとき Rendering が既定の黒い線を補うため、
+        /// 線を明示的に消している場合(<c>a:ln/a:noFill</c>、または図形のスタイルがあり線の色が決まらない場合)は
+        /// 透明の線にして、既定の線と区別する(要件10.16)。
+        /// </summary>
+        private static ShapeOutline? ReadConnectorOutline(
+            Xdr.ShapeProperties? shapeProperties, Xdr.ShapeStyle? style, DrawingColorResolver colors)
+        {
+            var outline = ReadShapeOutline(shapeProperties, style, colors);
+            if (outline is not null)
+            {
+                return outline;
+            }
 
-        private static bool TryReadColor(Dr.GradientStop stop, out ArgbColor color) =>
-            ArgbColor.TryParseHex(stop.RgbColorModelHex?.Val?.Value, out color);
+            var line = shapeProperties?.GetFirstChild<Dr.Outline>();
+            var explicitNoLine = line?.GetFirstChild<Dr.NoFill>() is not null || style is not null;
+            if (explicitNoLine)
+            {
+                return new ShapeOutline(ArgbColor.Transparent, 0.0);
+            }
+
+            // 色の無い a:ln に矢印だけがある場合、既定の黒い線(Rendering が null のとき補う線と同じ)に矢印を付けて返す。
+            // null にすると、線は既定値で描かれるのに矢印だけが黙って消えるため(code-reviewer指摘)。
+            var headEnd = ReadLineEnd(line?.GetFirstChild<Dr.HeadEnd>());
+            var tailEnd = ReadLineEnd(line?.GetFirstChild<Dr.TailEnd>());
+            if (headEnd is null && tailEnd is null)
+            {
+                return null;
+            }
+
+            var widthPt = line?.Width?.Value is { } width ? Units.EmusToPoints(width) : 1.0;
+            return new ShapeOutline(ArgbColor.Black, widthPt, headEnd, tailEnd);
+        }
+
+        /// <summary>線の端の矢印(<c>a:headEnd</c>/<c>a:tailEnd</c>)を読み取る(要件10.18)。<c>none</c>・未指定は null。</summary>
+        private static LineEndStyle? ReadLineEnd(Dr.LineEndPropertiesType? lineEnd)
+        {
+            var type = lineEnd?.Type?.InnerText switch
+            {
+                "triangle" => LineEndType.Triangle,
+                "stealth" => LineEndType.Stealth,
+                "arrow" => LineEndType.Arrow,
+                "oval" => LineEndType.Oval,
+                "diamond" => LineEndType.Diamond,
+                _ => (LineEndType?)null,
+            };
+
+            if (type is null)
+            {
+                return null;
+            }
+
+            return new LineEndStyle(type.Value, ReadLineEndSize(lineEnd!.Width?.InnerText), ReadLineEndSize(lineEnd.Length?.InnerText));
+        }
+
+        private static LineEndSize ReadLineEndSize(string? value) => value switch
+        {
+            "sm" => LineEndSize.Small,
+            "lg" => LineEndSize.Large,
+            _ => LineEndSize.Medium,
+        };
 
         /// <summary>
         /// 図形内テキスト(<c>xdr:txBody</c>)を段落・ラン単位で読み取る(要件10.4)。
@@ -1728,13 +2012,19 @@ namespace Utsushi.Parsing.OpenXml
         /// フォント・色の解析(<see cref="ReadShapeRunFont"/>)は上限を超えていないランに対してのみ
         /// 行うため、極端に大量のランを仕込んだ入力でも処理コストが合計文字数の上限で頭打ちになる。
         /// </summary>
-        private static ShapeTextBody? ReadShapeText(Xdr.TextBody? textBody, out bool textTooLong)
+        private static ShapeTextBody? ReadShapeText(
+            Xdr.TextBody? textBody, Xdr.ShapeStyle? style, DrawingColorResolver colors, out bool textTooLong)
         {
             textTooLong = false;
             if (textBody is null)
             {
                 return null;
             }
+
+            // 文字の a:rPr に色が無ければ、図形のスタイルの fontRef の色を使う(要件10.16)。
+            var defaultColor = style?.FontReference is { } fontRef && colors.TryResolve(fontRef, placeholder: null, out var fontColor)
+                ? fontColor
+                : ArgbColor.Black;
 
             var paragraphs = new List<ShapeTextParagraph>();
             var totalLength = 0;
@@ -1756,7 +2046,7 @@ namespace Utsushi.Parsing.OpenXml
                         return null;
                     }
 
-                    runs.Add(new ShapeTextRun(text!, ReadShapeRunFont(run.RunProperties)));
+                    runs.Add(new ShapeTextRun(text!, ReadShapeRunFont(run.RunProperties, defaultColor, colors)));
                 }
 
                 if (runs.Count == 0)
@@ -1777,11 +2067,11 @@ namespace Utsushi.Parsing.OpenXml
             return new ShapeTextBody(paragraphs, vAlign);
         }
 
-        private static FontStyle ReadShapeRunFont(Dr.RunProperties? runProperties)
+        private static FontStyle ReadShapeRunFont(Dr.RunProperties? runProperties, ArgbColor defaultColor, DrawingColorResolver colors)
         {
             if (runProperties is null)
             {
-                return FontStyle.Default;
+                return FontStyle.Default with { Color = defaultColor };
             }
 
             var sizePt = runProperties.FontSize?.Value is { } sz ? sz / 100.0 : FontStyle.Default.SizePt;
@@ -1790,9 +2080,10 @@ namespace Utsushi.Parsing.OpenXml
             var underline = MapUnderline(runProperties.Underline?.Value);
             var strike = runProperties.Strike?.Value is { } strikeValue && strikeValue != Dr.TextStrikeValues.NoStrike;
             var name = runProperties.GetFirstChild<Dr.LatinFont>()?.Typeface?.Value ?? FontStyle.Default.Name;
-            var color = runProperties.GetFirstChild<Dr.SolidFill>() is { } solidFill && TryReadColor(solidFill, out var runColor)
+            var color = runProperties.GetFirstChild<Dr.SolidFill>() is { } solidFill
+                && colors.TryResolve(solidFill, placeholder: null, out var runColor)
                 ? runColor
-                : ArgbColor.Black;
+                : defaultColor;
 
             return new FontStyle(name!, sizePt, bold, italic, underline, strike, color);
         }
@@ -1900,7 +2191,8 @@ namespace Utsushi.Parsing.OpenXml
         private static PageSetupModel ReadPageSetup(
             string sheetName,
             X.Worksheet worksheet,
-            IReadOnlyDictionary<string, Dictionary<string, string>> definedNames)
+            IReadOnlyDictionary<string, Dictionary<string, string>> definedNames,
+            string? reportCode)
         {
             var setup = worksheet.GetFirstChild<X.PageSetup>();
             var margins = worksheet.GetFirstChild<X.PageMargins>();
@@ -1924,16 +2216,24 @@ namespace Utsushi.Parsing.OpenXml
                 ? PageOrder.OverThenDown
                 : PageOrder.DownThenOver;
 
-            var rowBreaks = ReadBreaks(worksheet.GetFirstChild<X.RowBreaks>());
-            var columnBreaks = ReadBreaks(worksheet.GetFirstChild<X.ColumnBreaks>());
+            var rowBreaks = ReadBreaks(worksheet.GetFirstChild<X.RowBreaks>(), sheetName, reportCode);
+            var columnBreaks = ReadBreaks(worksheet.GetFirstChild<X.ColumnBreaks>(), sheetName, reportCode);
 
             definedNames.TryGetValue(sheetName, out var sheetNames);
             var printAreas = DefinedNameParser.ParsePrintArea(
                 sheetNames is not null && sheetNames.TryGetValue(DefinedNameParser.PrintAreaName, out var area) ? area : null);
+            if (printAreas.Count > MaxPrintAreasPerSheet)
+            {
+                throw new InvalidExcelFileException(
+                    $"シート '{sheetName}' の印刷範囲の個数が上限({MaxPrintAreasPerSheet}個)を超えています。",
+                    InvalidExcelFileReason.TooLarge,
+                    reportCode);
+            }
+
             var printTitles = DefinedNameParser.ParsePrintTitles(
                 sheetNames is not null && sheetNames.TryGetValue(DefinedNameParser.PrintTitlesName, out var titles) ? titles : null);
 
-            var headerFooter = ReadHeaderFooter(worksheet);
+            var headerFooter = ReadHeaderFooter(worksheet, sheetName, reportCode);
 
             return new PageSetupModel(
                 paper, orientation, pageMargins, scaling, printAreas, rowBreaks, columnBreaks,
@@ -1941,12 +2241,22 @@ namespace Utsushi.Parsing.OpenXml
         }
 
         /// <summary>ページヘッダー/フッターの設定を読み取る(要件3.7〜3.9)。</summary>
-        private static HeaderFooterModel ReadHeaderFooter(X.Worksheet worksheet)
+        private static HeaderFooterModel ReadHeaderFooter(X.Worksheet worksheet, string sheetName, string? reportCode)
         {
             var headerFooter = worksheet.GetFirstChild<X.HeaderFooter>();
             if (headerFooter is null)
             {
                 return HeaderFooterModel.None;
+            }
+
+            foreach (var text in new[]
+            {
+                headerFooter.OddHeader?.Text, headerFooter.OddFooter?.Text, headerFooter.EvenHeader?.Text,
+                headerFooter.EvenFooter?.Text, headerFooter.FirstHeader?.Text, headerFooter.FirstFooter?.Text,
+            })
+            {
+                EnsureTextLengthWithinLimit(
+                    text ?? string.Empty, MaxHeaderFooterTextLength, $"シート '{sheetName}' のヘッダー/フッター", reportCode);
             }
 
             return new HeaderFooterModel(
@@ -1964,11 +2274,15 @@ namespace Utsushi.Parsing.OpenXml
 
         private static PageScaling ReadScaling(X.PageSetup? setup, X.SheetProperties? sheetProperties)
         {
-            var scale = (int)(setup?.Scale?.Value ?? 100U);
+            var scale = (int)Math.Min(setup?.Scale?.Value ?? 100U, 1000U);
             if (scale <= 0)
             {
                 scale = 100;
             }
+
+            // Excel の拡大縮小率は 10〜400%。範囲外の値は Excel と同じく丸める(極端な縮小で1ページに
+            // 大量のセルを詰め込ませるのを防ぐ。要件6.9。security-reviewer指摘)。
+            scale = Math.Max(MinPrintScalePercent, Math.Min(MaxPrintScalePercent, scale));
 
             // fitToPage が有効なときだけ fitToWidth/fitToHeight を採用する。
             // 値 0 は「その方向は制限しない」を意味するため null に落とす。
@@ -1987,7 +2301,7 @@ namespace Utsushi.Parsing.OpenXml
                 fitToHeight > 0 ? fitToHeight : null);
         }
 
-        private static List<int> ReadBreaks(X.PageBreakType? breaks)
+        private static List<int> ReadBreaks(X.PageBreakType? breaks, string sheetName, string? reportCode)
         {
             var result = new List<int>();
             if (breaks is null)
@@ -1995,8 +2309,17 @@ namespace Utsushi.Parsing.OpenXml
                 return result;
             }
 
+            var count = 0;
             foreach (var brk in breaks.Elements<X.Break>())
             {
+                if (++count > MaxPageBreaksPerSheet)
+                {
+                    throw new InvalidExcelFileException(
+                        $"シート '{sheetName}' の改ページの件数が上限({MaxPageBreaksPerSheet}件)を超えています。",
+                        InvalidExcelFileReason.TooLarge,
+                        reportCode);
+                }
+
                 // man="true" の改ページのみが手動改ページ。自動改ページはレイアウト側で計算する(要件3.2/3.3)。
                 if (brk.ManualPageBreak?.Value != true)
                 {
@@ -2171,14 +2494,9 @@ namespace Utsushi.Parsing.OpenXml
                 }
 
                 // リッチテキスト(複数 run)の場合は run を連結する。run 単位の書式差は再現しない。
-                if (item.Text?.Text is { } text)
-                {
-                    result.Add(text);
-                    continue;
-                }
-
-                var runs = item.Elements<X.Run>().Select(r => r.Text?.Text ?? string.Empty);
-                result.Add(string.Concat(runs));
+                var text = item.Text?.Text ?? string.Concat(item.Elements<X.Run>().Select(r => r.Text?.Text ?? string.Empty));
+                EnsureTextLengthWithinLimit(text, MaxCellTextLength, "共有文字列", reportCode);
+                result.Add(text);
             }
 
             return result;
@@ -2359,14 +2677,215 @@ namespace Utsushi.Parsing.OpenXml
                             reportCode);
                     }
                 }
+
+                // 関係パートは SpreadsheetDocument.Open の中で解析されるため、Open より前に件数を検査する(要件6.7)。
+                foreach (var entry in archive.Entries)
+                {
+                    if (entry.FullName.EndsWith(".rels", StringComparison.OrdinalIgnoreCase))
+                    {
+                        using var relsStream = entry.Open();
+                        EnsureRelationshipCountWithinLimit(relsStream, MaxRelationshipsPerPart, entry.FullName, reportCode);
+                    }
+                }
             }
-            catch (InvalidDataException)
+            catch (Exception ex) when (ex is InvalidDataException or IOException)
             {
-                // 不正なZIP構造はSpreadsheetDocument.Open側の失敗分類に委ねる。
+                // 不正なZIP構造・壊れた圧縮データはSpreadsheetDocument.Open側の失敗分類に委ねる。
             }
             finally
             {
                 stream.Position = position;
+            }
+        }
+
+        /// <summary>
+        /// 関係パート(<c>*.rels</c>)の関係の数が上限以下か、流し読みで確認する(要件6.7。テスト用に上限を引数に取る)。
+        /// XMLとして壊れている場合は、ここでは判断せず <c>SpreadsheetDocument.Open</c> 側の失敗分類に委ねる。
+        /// </summary>
+        internal static void EnsureRelationshipCountWithinLimit(Stream rels, int maxRelationships, string partName, string? reportCode)
+        {
+            var settings = new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+                IgnoreComments = true,
+                IgnoreWhitespace = true,
+                IgnoreProcessingInstructions = true,
+            };
+
+            try
+            {
+                using var bounded = new BoundedReadStream(rels, MaxXmlPartBytes);
+                using var reader = XmlReader.Create(bounded, settings);
+                var count = 0;
+                while (reader.Read())
+                {
+                    // ルート要素(Relationships)は数えず、子の Relationship だけを数える。
+                    if (reader.NodeType == XmlNodeType.Element && reader.Depth > 0 && ++count > maxRelationships)
+                    {
+                        throw new InvalidExcelFileException(
+                            $"関係パート '{partName}' の関係の数が上限({maxRelationships}件)を超えています。",
+                            InvalidExcelFileReason.TooLarge,
+                            reportCode);
+                    }
+                }
+            }
+            catch (BoundedReadStream.LimitExceededException)
+            {
+                throw new InvalidExcelFileException(
+                    $"関係パート '{partName}' の大きさが上限({MaxXmlPartBytes / (1024 * 1024)}MB)を超えています。",
+                    InvalidExcelFileReason.TooLarge,
+                    reportCode);
+            }
+            catch (XmlException)
+            {
+                // 壊れた関係パートは Open 側で Corrupted として分類される。
+            }
+        }
+
+        /// <summary>
+        /// パッケージ内の全XMLパートを <see cref="XmlReader"/> で流し読みし、要素の入れ子の深さと
+        /// 展開後の大きさが上限以下か確認する(要件6.7)。OpenXml SDK が DOM を組み立てる前に呼ぶこと。
+        /// 流し読みは再帰しないため、深いネストでもスタックを消費しない。
+        /// </summary>
+        private static void GuardXmlParts(SpreadsheetDocument document, string? reportCode)
+        {
+            foreach (var part in document.GetAllParts())
+            {
+                if (!IsXmlContentType(part.ContentType))
+                {
+                    continue;
+                }
+
+                using var stream = part.GetStream(FileMode.Open, FileAccess.Read);
+                EnsureXmlWithinLimits(stream, MaxXmlElementDepth, MaxXmlPartBytes, part.Uri.ToString(), reportCode);
+            }
+        }
+
+        private static bool IsXmlContentType(string contentType) =>
+            contentType.EndsWith("+xml", StringComparison.OrdinalIgnoreCase)
+            || contentType.EndsWith("/xml", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// XMLストリームの要素の入れ子の深さと大きさが上限以下か確認する(要件6.7。テスト用に上限を引数に取る)。
+        /// </summary>
+        internal static void EnsureXmlWithinLimits(Stream xml, int maxDepth, long maxBytes, string partName, string? reportCode) =>
+            EnsureXmlWithinLimits(xml, maxDepth, maxBytes, MaxXmlElementsPerPart, partName, reportCode);
+
+        /// <summary>
+        /// <see cref="EnsureXmlWithinLimits(Stream, int, long, string, string?)"/> の本体。要素の数の上限も引数に取る(テスト用)。
+        /// </summary>
+        internal static void EnsureXmlWithinLimits(
+            Stream xml, int maxDepth, long maxBytes, long maxElements, string partName, string? reportCode)
+        {
+            var settings = new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+                IgnoreComments = true,
+                IgnoreWhitespace = true,
+                IgnoreProcessingInstructions = true,
+            };
+
+            try
+            {
+                using var bounded = new BoundedReadStream(xml, maxBytes);
+                using var reader = XmlReader.Create(bounded, settings);
+                var elements = 0L;
+                while (reader.Read())
+                {
+                    if (reader.NodeType != XmlNodeType.Element)
+                    {
+                        continue;
+                    }
+
+                    if (++elements > maxElements)
+                    {
+                        throw new InvalidExcelFileException(
+                            $"パート '{partName}' の要素の数が上限({maxElements}個)を超えています。",
+                            InvalidExcelFileReason.TooLarge,
+                            reportCode);
+                    }
+
+                    if (reader.Depth >= maxDepth)
+                    {
+                        throw new InvalidExcelFileException(
+                            $"パート '{partName}' の要素の入れ子が上限({maxDepth}段)を超えています。",
+                            InvalidExcelFileReason.TooLarge,
+                            reportCode);
+                    }
+                }
+            }
+            catch (BoundedReadStream.LimitExceededException)
+            {
+                throw new InvalidExcelFileException(
+                    $"パート '{partName}' の大きさが上限({maxBytes / (1024 * 1024)}MB)を超えています。",
+                    InvalidExcelFileReason.TooLarge,
+                    reportCode);
+            }
+            catch (Exception ex) when (ex is XmlException or InvalidDataException or IOException)
+            {
+                // 壊れた圧縮データ(deflate)は InvalidDataException/IOException になる(code-reviewer指摘)。
+                throw new InvalidExcelFileException(
+                    $"パート '{partName}' のXMLが壊れているため読み取れません。",
+                    InvalidExcelFileReason.Corrupted,
+                    reportCode,
+                    ex);
+            }
+        }
+
+        /// <summary>読み取ったバイト数が上限を超えたら例外を投げる読み取り専用ストリーム。</summary>
+        private sealed class BoundedReadStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxBytes;
+            private long _read;
+
+            public BoundedReadStream(Stream inner, long maxBytes)
+            {
+                _inner = inner;
+                _maxBytes = maxBytes;
+            }
+
+            public override bool CanRead => true;
+
+            public override bool CanSeek => false;
+
+            public override bool CanWrite => false;
+
+            public override long Length => throw new NotSupportedException();
+
+            public override long Position
+            {
+                get => _read;
+                set => throw new NotSupportedException();
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                var n = _inner.Read(buffer, offset, count);
+                _read += n;
+                if (_read > _maxBytes)
+                {
+                    throw new LimitExceededException();
+                }
+
+                return n;
+            }
+
+            public override void Flush()
+            {
+            }
+
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            /// <summary>上限超過を <see cref="XmlException"/> と区別するための例外。</summary>
+            public sealed class LimitExceededException : Exception
+            {
             }
         }
 
@@ -2410,7 +2929,8 @@ namespace Utsushi.Parsing.OpenXml
                 }
             }
 
-            if (ex is InvalidDataException or FileFormatException)
+            // 壊れた関係パート(.rels)は Open の中で XmlException になる。
+            if (ex is InvalidDataException or FileFormatException or XmlException)
             {
                 return InvalidExcelFileReason.Corrupted;
             }

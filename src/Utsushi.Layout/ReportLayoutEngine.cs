@@ -28,6 +28,16 @@ namespace Utsushi.Layout
     /// </remarks>
     public sealed class ReportLayoutEngine : IReportLayoutEngine
     {
+        /// <summary>
+        /// 印刷範囲(複数ある場合は合計)の行数×列数の上限(要件6.9)。ページごとにセルを1つずつ走査するため、
+        /// 極端に大きな印刷範囲・使用範囲(例: A1とXFD500000の2セルだけのシート)で処理が終わらなくなるのを防ぐ
+        /// (security-reviewer指摘)。自社帳票(数千行×数十列)より十分大きい。
+        /// </summary>
+        internal const long MaxPrintRangeCells = 2_000_000;
+
+        /// <summary>1文書あたりの出力ページ数の上限(要件6.9)。</summary>
+        internal const int MaxPagesPerDocument = 5000;
+
         private readonly IFontMetricsProvider _fontMetrics;
         private readonly Func<DateTime> _clock;
 
@@ -71,6 +81,7 @@ namespace Utsushi.Layout
 
             // 複数の印刷範囲はそれぞれ独立したページ群になる(要件3.6)。
             var printRanges = ResolvePrintRanges(sheet, definition);
+            EnsurePrintRangeCellsWithinLimit(printRanges, MaxPrintRangeCells, definition.ReportCode, sheet.Name, pageSetup.PrintTitles);
             ValidateRequiredFieldsAreInPrintRanges(definition, sheet, printRanges, pageSetup.PrintTitles);
             ValidateSubstitutedCellsAreInPrintRanges(report, printRanges, pageSetup.PrintTitles);
 
@@ -145,8 +156,54 @@ namespace Utsushi.Layout
             var columnBands = PageBandCalculator.Split(
                 bodyColumns, grid.GetColumnWidthPt, availableWidthPt, pageSetup.ManualColumnBreaks);
 
+            EnsurePageCountWithinLimit(
+                firstPageNumber - 1L + ((long)rowBands.Count * columnBands.Count),
+                MaxPagesPerDocument,
+                definition.ReportCode,
+                sheet.Name);
+
             return BuildPages(
                 report, grid, titleRows, titleColumns, rowBands, columnBands, scale, pageSetup, firstPageNumber);
+        }
+
+        /// <summary>
+        /// 印刷範囲の行数×列数の合計が上限以下か確認する(要件6.9。テスト用に上限を引数に取る)。
+        /// 印刷タイトルの行・列はすべての印刷範囲・ページで繰り返し走査されるため、各印刷範囲の行数・列数に
+        /// タイトルの行数・列数を足して数える(タイトルだけで上限を迂回されないように。security-reviewer指摘)。
+        /// </summary>
+        internal static void EnsurePrintRangeCellsWithinLimit(
+            IReadOnlyList<CellRange> printRanges, long maxCells, string? reportCode, string sheetName, PrintTitles? titles = null)
+        {
+            var titleRows = titles is { HasRows: true } ? Math.Max(0L, (long)titles.LastRow!.Value - titles.FirstRow!.Value + 1) : 0L;
+            var titleColumns = titles is { HasColumns: true }
+                ? Math.Max(0L, (long)titles.LastColumn!.Value - titles.FirstColumn!.Value + 1)
+                : 0L;
+
+            var total = 0L;
+            foreach (var range in printRanges)
+            {
+                total += (range.RowCount + titleRows) * (range.ColumnCount + titleColumns);
+                if (total > maxCells)
+                {
+                    throw new LayoutComputationException(
+                        $"シート '{sheetName}' の印刷範囲が大きすぎます(行数×列数の合計が上限 {maxCells:N0} を超えています)。"
+                        + "印刷範囲を設定し直してください。",
+                        reportCode,
+                        sheetName);
+                }
+            }
+        }
+
+        /// <summary>出力ページ数が上限以下か確認する(要件6.9。テスト用に上限を引数に取る)。</summary>
+        internal static void EnsurePageCountWithinLimit(long pageCount, int maxPages, string? reportCode, string sheetName)
+        {
+            if (pageCount > maxPages)
+            {
+                throw new LayoutComputationException(
+                    $"シート '{sheetName}' の出力ページ数が上限({maxPages}ページ)を超えます。",
+                    reportCode,
+                    sheetName);
+            }
         }
 
         /// <summary>
@@ -215,7 +272,8 @@ namespace Utsushi.Layout
                 return printAreas;
             }
 
-            var used = sheet.GetUsedRange();
+            // 印刷範囲が無ければ、セルと描画オブジェクトが置かれた範囲を印刷する(要件3.10)。
+            var used = UsedRangeResolver.Resolve(sheet, definition.MaxDigitWidthPx);
             if (used is { } usedRange)
             {
                 return new[] { usedRange };

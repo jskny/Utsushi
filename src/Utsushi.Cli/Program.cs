@@ -51,7 +51,8 @@ namespace Utsushi.Cli
                 {
                     // --report 省略時は帳票定義なしで変換する(要件12.7)。
                     using var converter = ReportPdfConverter.CreateDefault(fontOptions, renderOptions);
-                    converter.ConvertFileWithoutDefinition(options.InputPath, options.OutputPath, options.CellOverrides);
+                    converter.ConvertFileWithoutDefinition(
+                        options.InputPath, options.OutputPath, options.CellOverrides, maxDigitWidthPx: options.MaxDigitWidthPx);
                 }
                 else
                 {
@@ -105,6 +106,9 @@ namespace Utsushi.Cli
             Console.Error.WriteLine("  --override          セル番地と値。帳票定義への登録有無に関わらず直接上書きする。");
             Console.Error.WriteLine("                      複数指定可(例: --override A1=請求書(控))。結合セルは");
             Console.Error.WriteLine("                      先頭(アンカー)セルの番地を指定すること");
+            Console.Error.WriteLine("  --max-digit-width   帳票定義なしの変換で、列幅の換算に使う最大数字幅(ピクセル)。");
+            Console.Error.WriteLine("                      省略時はブックの標準フォントから見積もる(Calibri 11=7、");
+            Console.Error.WriteLine("                      ＭＳ Ｐゴシック/游ゴシック 11=8)。列幅がExcelとずれる場合に指定する");
             Console.Error.WriteLine("  --allow-font-fallback");
             Console.Error.WriteLine("                      フォント未検出時に代替フォントを使う(見た目が崩れる可能性あり)");
             Console.Error.WriteLine("  --allow-missing-glyphs");
@@ -116,7 +120,7 @@ namespace Utsushi.Cli
         }
 
         /// <summary>コマンドライン引数。</summary>
-        private sealed class CommandLineOptions
+        internal sealed class CommandLineOptions
         {
             private CommandLineOptions(
                 string? reportCode,
@@ -128,8 +132,10 @@ namespace Utsushi.Cli
                 bool allowFontFallback,
                 string? fallbackFont,
                 bool allowMissingGlyphs,
-                bool outlineText)
+                bool outlineText,
+                double? maxDigitWidthPx)
             {
+                MaxDigitWidthPx = maxDigitWidthPx;
                 ReportCode = reportCode;
                 InputPath = inputPath;
                 OutputPath = outputPath;
@@ -163,6 +169,9 @@ namespace Utsushi.Cli
 
             public bool OutlineText { get; }
 
+            /// <summary>帳票定義なしの変換で使う最大数字幅。null ならブックの標準フォントから見積もる。</summary>
+            public double? MaxDigitWidthPx { get; }
+
             /// <summary>引数を解釈する。ヘルプ要求時は options=null, error=null を返す。</summary>
             public static CommandLineOptions? Parse(string[] args, out string? error)
             {
@@ -177,6 +186,7 @@ namespace Utsushi.Cli
                 string? fallbackFont = null;
                 var allowMissingGlyphs = false;
                 var outlineText = false;
+                double? maxDigitWidthPx = null;
 
                 if (args.Length == 0)
                 {
@@ -241,6 +251,20 @@ namespace Utsushi.Cli
                             outlineText = true;
                             break;
 
+                        case "--max-digit-width":
+                            {
+                                if (!TryTakeValue(args, ref i, "--max-digit-width", out var text, out error)) { return null; }
+                                if (!double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var mdw)
+                                    || double.IsNaN(mdw) || mdw <= 0 || double.IsInfinity(mdw))
+                                {
+                                    error = $"--max-digit-width には正の数を指定してください: '{text}'";
+                                    return null;
+                                }
+
+                                maxDigitWidthPx = mdw;
+                                break;
+                            }
+
                         default:
                             error = $"不明なオプションです: '{args[i]}'";
                             return null;
@@ -257,6 +281,13 @@ namespace Utsushi.Cli
                 {
                     error = "--set(置換キーによる差し込み)は --report と併用してください。"
                         + "帳票定義なしで変換する場合は --override <セル番地>=<値> を使ってください。";
+                    return null;
+                }
+
+                if (reportCode is not null && maxDigitWidthPx is not null)
+                {
+                    error = "--max-digit-width は帳票定義なしの変換(--report の省略)でのみ指定できます。"
+                        + "帳票定義ありの場合は definition.json の maxDigitWidthPx を使います。";
                     return null;
                 }
 
@@ -280,7 +311,7 @@ namespace Utsushi.Cli
 
                 return new CommandLineOptions(
                     reportCode, inputPath!, outputPath!, definitionRoot, values, cellOverrides,
-                    allowFallback, fallbackFont, allowMissingGlyphs, outlineText);
+                    allowFallback, fallbackFont, allowMissingGlyphs, outlineText, maxDigitWidthPx);
             }
 
             private static bool TryTakeValue(

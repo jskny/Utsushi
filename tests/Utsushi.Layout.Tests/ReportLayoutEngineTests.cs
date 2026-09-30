@@ -832,7 +832,14 @@ namespace Utsushi.Layout.Tests
             var image = new ImageModel(
                 1u, Array.Empty<byte>(), "image/png", 0,
                 CellAddress.Parse("A1"), default, new FixedAnchorExtent(6000.0, 6000.0));
-            sheet = sheet with { DrawingObjects = new[] { image } };
+
+            // 印刷範囲が無いと、使用範囲に画像の占める範囲も含まれて複数ページになる(要件3.10)。
+            // ここでは寸法の上限だけを見るため、印刷範囲をセルの範囲に固定する。
+            sheet = sheet with
+            {
+                DrawingObjects = new[] { image },
+                PageSetup = sheet.PageSetup with { PrintAreas = new[] { CellRange.Parse("A1:C3") } },
+            };
 
             var page = Assert.Single(Compute(sheet).Pages);
             var command = Assert.Single(Images(page));

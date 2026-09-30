@@ -894,15 +894,51 @@
     - グループのネストに対するリスク許容の記述を実測値で改め、社外から受け取ったファイルを定義なしで変換しない運用を明記する
     - _Requirements: 6.4, 12.5, 12.6_
 
-- [ ] 25. ファイルの内容だけで処理量が決まる経路の安全弁(帳票定義なしモード追加時のsecurity-reviewer指摘)
-  - [ ] 25.1 SDKのDOMに触れる前に、対象シートのworksheet・drawingパートを `XmlReader` で流し読みして要素の深さを検査し、
+- [x] 25. ファイルの内容だけで処理量が決まる経路の安全弁(帳票定義なしモード追加時のsecurity-reviewer指摘)
+  - [x] 25.0 requirements.mdに要件6.7〜6.10を追加し、design.mdの安全弁一覧を更新する
+    - _Requirements: 6.7, 6.8, 6.9, 6.10_
+  - [x] 25.1 SDKのDOMに触れる前に、パッケージ内の全XMLパートを `XmlReader` で流し読みして要素の深さ・大きさを検査し、
         `OpenSettings.MaxCharactersInPart` を設定する(深くネストした `grpSp` によるスタックオーバーフロー対策)
-    - _Requirements: 6.6, 10.8, 12.6_
-  - [ ] 25.2 1文書あたりのページ数と印刷範囲の個数に上限を設け、ページを組み立てる前に判定する
-    - _Requirements: 6.6, 12.6_
-  - [ ] 25.3 `<col>` の要素数(または展開の総回数)と手動改ページの件数に上限を設ける
-    - _Requirements: 6.6, 12.6_
-  - [ ] 25.4 画像の `r:embed` の参照先が無い場合を `UtsushiException` 階層で扱う
-    - _Requirements: 6.4_
-  - [ ] 25.5 追加した上限を design.md「信頼できない入力に対する安全弁 一覧」に追記する
-    - _Requirements: 6.6_
+    - _Requirements: 6.7, 12.6_
+  - [x] 25.2 1文書あたりのページ数と印刷範囲の個数に上限を設け、ページを組み立てる前に判定する
+    - _Requirements: 6.8, 6.9, 12.6_
+  - [x] 25.3 `<col>` の要素数(または展開の総回数)と手動改ページの件数に上限を設ける
+    - _Requirements: 6.8, 12.6_
+  - [x] 25.4 画像の `r:embed` の参照先が無い場合を `UtsushiException` 階層で扱う
+    - _Requirements: 6.4, 6.10_
+  - [x] 25.6 セキュリティレビュー対応: 型として不正な属性値の例外の読み替え、画像を読み取りを試みた時点で数える、
+        印刷タイトルを含めたセル数の上限、拡大縮小率の丸め、文字列の長さ・DOMの要素数・関係パートの数の上限、
+        数値書式コードの長さの上限を追加する
+    - _Requirements: 6.2, 6.4, 6.7, 6.8, 6.9_
+  - [x] 25.5 追加した上限を design.md「信頼できない入力に対する安全弁 一覧」に追記する
+    - _Requirements: 6.6, 6.7, 6.8, 6.9_
+
+- [x] 26. 図形のテーマの色・スタイル参照・反転・矢印への対応
+  - [x] 26.1 requirements.mdに要件10.15〜10.18を追加し、design.mdに設計を書く
+    - _Requirements: 10.15, 10.16, 10.17, 10.18_
+  - [x] 26.2 Parsing: テーマの色(`schemeClr`/`sysClr`)と色の修飾を解決する `DrawingColorResolver` を追加し、
+        図形・グループ内図形・接続線の塗りつぶし・枠線・文字色の読み取りに使う
+    - _Requirements: 10.15_
+  - [x] 26.3 Parsing: 図形のスタイル(`fillRef`/`lnRef`/`fontRef`)とテーマの `lnStyleLst` の太さを読み、
+        `spPr`・`a:rPr`に指定が無い場合の塗りつぶし・枠線・文字色にする
+    - _Requirements: 10.16_
+  - [x] 26.4 Parsing/Layout/Rendering: 図形・グループの反転を読み取り、描画と接続点の解決に反映する
+    - _Requirements: 10.11, 10.17_
+  - [x] 26.5 Parsing/Rendering: 線の端の矢印(`headEnd`/`tailEnd`)を読み取り、接続線と線吹き出しに描く
+    - _Requirements: 10.18_
+  - [x] 26.6 テスト(ユニット・ゴールデン)を追加・更新し、テンプレート作成ガイドの「再現しない」表を更新する
+    - _Requirements: 10.15, 10.16, 10.17, 10.18_
+
+- [x] 27. 帳票定義なしモードの列幅と、印刷範囲が無いシートの描画オブジェクト
+  - [x] 27.1 requirements.mdに要件3.10を追加し、要件12.3(最大数字幅の見積もり)を改め、design.mdに設計を書く
+    - _Requirements: 3.10, 12.3_
+  - [x] 27.2 ReportDefinition/ファサード/CLI: 標準フォントから最大数字幅を見積もる `ReportDefinition.EstimateMaxDigitWidthPx` と、
+        呼び出し元が指定する `maxDigitWidthPx`・`--max-digit-width` を追加する
+    - _Requirements: 12.3, 12.7_
+  - [x] 27.3 Layout: 印刷範囲が無いシートの使用範囲に、描画オブジェクトが占める範囲を含める(`UsedRangeResolver`)
+    - _Requirements: 3.10_
+  - [x] 27.4 テストを追加する
+    - CLIの引数の解釈のテストプロジェクト(`tests/Utsushi.Cli.Tests`)を新設し、要件12.7の使い方エラーも確認する
+    - サンプル帳票(invoice)に線吹き出し(矢印付き)・既定スタイルの図形・左右反転した図形を追加し、ゴールデンを更新する
+      (追加した3行のみの差分であることと、PDFの見た目を目視で確認した)。ゴールデンの図形の行に調整値を出力する
+    - _Requirements: 3.10, 10.14, 10.16, 10.17, 10.18, 12.3, 12.7_

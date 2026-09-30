@@ -8,7 +8,7 @@
 中核機能(`.kiro/specs/excel-report-pdf-conversion/`)の実装は完了している。`dotnet build` / `dotnet test` / `dotnet format` はいずれもグリーン。
 
 - `src/` — Core / Parsing / ReportDefinition / Substitution / Layout / Rendering の5レイヤー+共通基盤、ファサード `Utsushi`、CLI
-- `tests/` — 各レイヤーのユニットテストとゴールデン(回帰)テスト
+- `tests/` — 各レイヤー・CLIの引数解釈のユニットテストとゴールデン(回帰)テスト
 - `samples/reports/<帳票コード>/` — 帳票定義(`definition.json`)とテンプレート(`template.xlsx`)
 - `tools/Utsushi.SampleGenerator/` — サンプル帳票 `.xlsx` の生成ツール(製品コードからは参照されない)
 - `.kiro/steering/` — 常時適用される方針(製品概要・技術方針・プロジェクト構成)

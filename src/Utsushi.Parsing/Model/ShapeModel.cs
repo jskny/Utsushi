@@ -22,6 +22,8 @@ namespace Utsushi.Parsing.Model
     /// <param name="AnchorCell">アンカー左上セル。</param>
     /// <param name="AnchorOffset">アンカーセル左上からのオフセット(ポイント)。</param>
     /// <param name="Extent">図形の終端(サイズ)の決め方。</param>
+    /// <param name="FlipHorizontal"><c>a:xfrm/@flipH</c>。配置矩形の中心を軸に左右反転する(要件10.17)。</param>
+    /// <param name="FlipVertical"><c>a:xfrm/@flipV</c>。配置矩形の中心を軸に上下反転する(要件10.17)。</param>
     public sealed record ShapeModel(
         uint Id,
         ShapePresetType Preset,
@@ -32,7 +34,9 @@ namespace Utsushi.Parsing.Model
         ShapeTextBody? Text,
         CellAddress AnchorCell,
         PointPt AnchorOffset,
-        AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
+        AnchorExtent Extent,
+        bool FlipHorizontal = false,
+        bool FlipVertical = false) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
 
     /// <summary>
     /// 対応済みのプリセットジオメトリ(要件10.1補足)。自社帳票での実用上の必要性を
@@ -123,7 +127,32 @@ namespace Utsushi.Parsing.Model
     public sealed record RadialGradientShapeFill(IReadOnlyList<GradientStop> Stops, PointPt CenterFraction) : ShapeFill;
 
     /// <summary>図形の枠線(<c>a:ln</c>)。接続線の枠線としても使う。</summary>
-    public sealed record ShapeOutline(ArgbColor Color, double WidthPt);
+    /// <param name="HeadEnd">線の始点の矢印(<c>a:headEnd</c>。要件10.18)。<c>null</c>は矢印なし。</param>
+    /// <param name="TailEnd">線の終点の矢印(<c>a:tailEnd</c>。要件10.18)。<c>null</c>は矢印なし。</param>
+    public sealed record ShapeOutline(ArgbColor Color, double WidthPt, LineEndStyle? HeadEnd = null, LineEndStyle? TailEnd = null);
+
+    /// <summary>線の端の矢印の種類(<c>ST_LineEndType</c>。<c>none</c>は<see cref="LineEndStyle"/>自体を持たないことで表す)。</summary>
+    public enum LineEndType
+    {
+        Triangle,
+        Stealth,
+        Arrow,
+        Oval,
+        Diamond,
+    }
+
+    /// <summary>線の端の矢印の大きさ(<c>ST_LineEndWidth</c>/<c>ST_LineEndLength</c>)。</summary>
+    public enum LineEndSize
+    {
+        Small,
+        Medium,
+        Large,
+    }
+
+    /// <summary>線の端の矢印(要件10.18)。</summary>
+    /// <param name="Width">矢印の幅(線と垂直な方向)。</param>
+    /// <param name="Length">矢印の長さ(線の方向)。</param>
+    public sealed record LineEndStyle(LineEndType Type, LineEndSize Width, LineEndSize Length);
 
     /// <summary>
     /// 図形内テキスト(<c>xdr:txBody</c>)。折り返しは行わず、段落・ランをそのまま保持する
@@ -207,6 +236,8 @@ namespace Utsushi.Parsing.Model
     /// <param name="ChildExtent"><c>a:chExt</c>(ポイント換算)。X=幅、Y=高さ。</param>
     /// <param name="Children">直接の子要素(<c>drawing.xml</c>上の出現順)。</param>
     /// <param name="RotationDegrees"><c>a:xfrm/@rot</c> から変換したグループ自身の回転角(度)。</param>
+    /// <param name="FlipHorizontal"><c>a:xfrm/@flipH</c>。配置矩形の中心を軸に左右反転する(要件10.17)。</param>
+    /// <param name="FlipVertical"><c>a:xfrm/@flipV</c>。配置矩形の中心を軸に上下反転する(要件10.17)。</param>
     public sealed record GroupShapeModel(
         uint Id,
         PointPt ChildOffset,
@@ -215,7 +246,9 @@ namespace Utsushi.Parsing.Model
         double RotationDegrees,
         CellAddress AnchorCell,
         PointPt AnchorOffset,
-        AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
+        AnchorExtent Extent,
+        bool FlipHorizontal = false,
+        bool FlipVertical = false) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
 
     /// <summary>
     /// グループ内の子要素の共通の位置決め情報。<see cref="LocalRect"/>は、それを含む
@@ -233,7 +266,9 @@ namespace Utsushi.Parsing.Model
         double RotationDegrees,
         ShapeFill? Fill,
         ShapeOutline? Outline,
-        ShapeTextBody? Text) : GroupChildModel(LocalRect);
+        ShapeTextBody? Text,
+        bool FlipHorizontal = false,
+        bool FlipVertical = false) : GroupChildModel(LocalRect);
 
     /// <summary>グループ内の画像。<see cref="Id"/>は接続線の接続先解決(要件10.11)のために保持する。</summary>
     /// <param name="RotationDegrees"><c>a:xfrm/@rot</c> から変換した回転角(度、時計回り。要件9.7)。</param>
@@ -265,5 +300,7 @@ namespace Utsushi.Parsing.Model
         double RotationDegrees,
         PointPt ChildOffset,
         PointPt ChildExtent,
-        IReadOnlyList<GroupChildModel> Children) : GroupChildModel(LocalRect);
+        IReadOnlyList<GroupChildModel> Children,
+        bool FlipHorizontal = false,
+        bool FlipVertical = false) : GroupChildModel(LocalRect);
 }

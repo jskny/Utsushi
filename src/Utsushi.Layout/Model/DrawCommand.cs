@@ -64,6 +64,11 @@ namespace Utsushi.Layout.Model
     /// 図形内テキストの各行(折り返し・配置は確定済み)。座標は回転前のローカル座標であり、
     /// 回転の適用はRenderingレイヤーの責務。
     /// </param>
+    /// <param name="FlipHorizontal">
+    /// <see cref="Rect"/>の中心を軸に形状を左右反転する(要件10.17)。文字(<see cref="TextLines"/>)は反転しない。
+    /// グループの反転はLayoutレイヤーで子要素の反転に畳み込み済み。
+    /// </param>
+    /// <param name="FlipVertical"><see cref="FlipHorizontal"/>の上下版。</param>
     public sealed record ShapeCommand(
         RectPt Rect,
         ShapePresetType Preset,
@@ -71,7 +76,9 @@ namespace Utsushi.Layout.Model
         double RotationDegrees,
         ShapeFill? Fill,
         ShapeOutline? Outline,
-        IReadOnlyList<ShapeTextLine> TextLines) : DrawCommand;
+        IReadOnlyList<ShapeTextLine> TextLines,
+        bool FlipHorizontal = false,
+        bool FlipVertical = false) : DrawCommand;
 
     /// <summary>図形内テキストの1行(要件10.4)。座標は<see cref="ShapeCommand.Rect"/>を基準とした、回転前のローカル座標。</summary>
     public sealed record ShapeTextLine(PointPt Origin, string Text, FontStyle Font, TextAnchor Anchor);

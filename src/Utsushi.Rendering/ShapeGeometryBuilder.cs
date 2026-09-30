@@ -132,6 +132,23 @@ namespace Utsushi.Rendering
                 ? LineCalloutOutlinePath(rect, callout, adjustmentValues)
                 : Build(preset, adjustmentValues, rect);
 
+        /// <summary>
+        /// 線吹き出しの引き出し線の頂点列(始点=本体側、終点=先端)を返す。線吹き出し以外は false。
+        /// 引き出し線の端の矢印(要件10.18)を描くために使う。
+        /// </summary>
+        public static bool TryGetLeaderPoints(
+            ShapePresetType preset, IReadOnlyList<double> adjustmentValues, SKRect rect, out SKPoint[] points)
+        {
+            if (!TryGetLineCallout(preset, out var callout))
+            {
+                points = Array.Empty<SKPoint>();
+                return false;
+            }
+
+            points = BuildLeaderPoints(rect, callout.Segments, adjustmentValues);
+            return true;
+        }
+
         /// <summary>線吹き出しの種類(折れ数・本体枠線の有無・強調線の有無)。</summary>
         private readonly struct LineCalloutKind
         {

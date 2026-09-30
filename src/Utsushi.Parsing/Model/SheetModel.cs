@@ -12,7 +12,11 @@ namespace Utsushi.Parsing.Model
     /// <param name="MergedRanges">結合セル範囲。</param>
     /// <param name="ColumnWidths">列幅。索引0が列A。単位はExcelの「文字数」単位。</param>
     /// <param name="RowHeights">行高。索引0が行1。単位はポイント。</param>
-    /// <param name="DefaultColumnWidth"><paramref name="ColumnWidths"/> の範囲外の列に適用する既定列幅(文字数単位)。</param>
+    /// <param name="DefaultColumnWidth">
+    /// <paramref name="ColumnWidths"/> の範囲外の列に適用する既定列幅(文字数単位)。<c>sheetFormatPr/@defaultColWidth</c>
+    /// が無い場合は <see cref="double.NaN"/> で、既定列幅は <paramref name="BaseColumnWidth"/> と最大数字幅から
+    /// Layoutレイヤーが求める(<paramref name="ColumnWidths"/> の要素も、幅の指定が無い列は NaN になる)。
+    /// </param>
     /// <param name="DefaultRowHeight"><paramref name="RowHeights"/> の範囲外の行に適用する既定行高(ポイント)。</param>
     /// <param name="HiddenColumns">非表示の列番号(1始まり)。</param>
     /// <param name="HiddenRows">非表示の行番号(1始まり)。</param>
@@ -21,6 +25,7 @@ namespace Utsushi.Parsing.Model
     /// シート上の画像・図形(要件9, 10)。<c>drawing.xml</c> の出現順を保持する
     /// (Excelは画像・図形をこの順で重ねて描画するため)。
     /// </param>
+    /// <param name="BaseColumnWidth"><c>sheetFormatPr/@baseColWidth</c>(文字数。既定8)。既定列幅の算出に使う。</param>
     public sealed record SheetModel(
         string Name,
         IReadOnlyDictionary<CellAddress, CellModel> Cells,
@@ -32,13 +37,17 @@ namespace Utsushi.Parsing.Model
         IReadOnlySet<int> HiddenColumns,
         IReadOnlySet<int> HiddenRows,
         PageSetupModel PageSetup,
-        IReadOnlyList<DrawingObjectModel> DrawingObjects)
+        IReadOnlyList<DrawingObjectModel> DrawingObjects,
+        int BaseColumnWidth = 8)
     {
         /// <summary>指定セルを取得する。存在しない場合は null。</summary>
         public CellModel? GetCell(CellAddress address) =>
             Cells.TryGetValue(address, out var cell) ? cell : null;
 
-        /// <summary>1始まりの列番号に対する列幅(文字数単位)。定義が無い列には既定値を返す。</summary>
+        /// <summary>
+        /// 1始まりの列番号に対する列幅(文字数単位)。定義が無い列には既定値を返す。既定列幅が暗黙
+        /// (<c>defaultColWidth</c> 無し)の場合は <see cref="double.NaN"/> を返す(<see cref="DefaultColumnWidth"/> 参照)。
+        /// </summary>
         public double GetColumnWidth(int column)
         {
             if (column < 1)
