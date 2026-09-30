@@ -2720,7 +2720,8 @@ namespace Utsushi.Parsing.OpenXml
                 var count = 0;
                 while (reader.Read())
                 {
-                    if (reader.NodeType == XmlNodeType.Element && ++count > maxRelationships)
+                    // ルート要素(Relationships)は数えず、子の Relationship だけを数える。
+                    if (reader.NodeType == XmlNodeType.Element && reader.Depth > 0 && ++count > maxRelationships)
                     {
                         throw new InvalidExcelFileException(
                             $"関係パート '{partName}' の関係の数が上限({maxRelationships}件)を超えています。",
@@ -2928,7 +2929,8 @@ namespace Utsushi.Parsing.OpenXml
                 }
             }
 
-            if (ex is InvalidDataException or FileFormatException)
+            // 壊れた関係パート(.rels)は Open の中で XmlException になる。
+            if (ex is InvalidDataException or FileFormatException or XmlException)
             {
                 return InvalidExcelFileReason.Corrupted;
             }

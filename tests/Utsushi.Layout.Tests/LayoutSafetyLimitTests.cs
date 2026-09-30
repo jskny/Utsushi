@@ -73,6 +73,75 @@ namespace Utsushi.Layout.Tests
                     new[] { whole }, ReportLayoutEngine.MaxPrintRangeCells, "report", "シート1"));
         }
 
+        // --- 印刷範囲のセル数に印刷タイトルを含める(ヘルパー。security-reviewer指摘) ----
+        // 印刷タイトルの行・列はすべての印刷範囲で繰り返し走査されるため、
+        // 各印刷範囲について (行数 + タイトル行数) × (列数 + タイトル列数) を合計する。
+
+        public static IEnumerable<object?[]> PrintRangeWithTitlesCasesWithinLimit() => new[]
+        {
+            // 範囲, タイトル先頭行, 末尾行, 先頭列, 末尾列, 上限(合計がちょうど上限)
+            new object?[] { new[] { "A1:A1" }, 1, 9, null, null, 10L }, // (1+9)×1
+            new object?[] { new[] { "A1:A1" }, null, null, 1, 9, 10L }, // 1×(1+9)
+            new object?[] { new[] { "A1:B2" }, 1, 3, 1, 3, 25L }, // (2+3)×(2+3)
+            new object?[] { new[] { "A1:A1", "C1:C1" }, 1, 4, null, null, 10L }, // 範囲ごとに足す: (1+4)×1 + (1+4)×1
+            new object?[] { new[] { "A1:J10" }, null, null, null, null, 100L }, // タイトルなしは従来どおり
+            new object?[] { new[] { "A1:A1" }, 1, 60000, 1, CellAddress.MaxColumn, 60001L * (CellAddress.MaxColumn + 1) },
+        };
+
+        public static IEnumerable<object?[]> PrintRangeWithTitlesCasesOverLimit() => new[]
+        {
+            new object?[] { new[] { "A1:A1" }, 1, 9, null, null, 9L },
+            new object?[] { new[] { "A1:A1" }, null, null, 1, 9, 9L },
+            new object?[] { new[] { "A1:B2" }, 1, 3, 1, 3, 24L },
+            new object?[] { new[] { "A1:A1", "C1:C1" }, 1, 4, null, null, 9L },
+        };
+
+        [Theory]
+        [MemberData(nameof(PrintRangeWithTitlesCasesWithinLimit))]
+        public void 印刷タイトルを含めたセル数の合計が上限以下なら例外にならない(
+            string[] ranges, int? firstRow, int? lastRow, int? firstColumn, int? lastColumn, long maxCells)
+        {
+            ReportLayoutEngine.EnsurePrintRangeCellsWithinLimit(
+                ranges.Select(CellRange.Parse).ToList(),
+                maxCells,
+                "report",
+                "シート1",
+                new PrintTitles(firstRow, lastRow, firstColumn, lastColumn));
+        }
+
+        [Theory]
+        [MemberData(nameof(PrintRangeWithTitlesCasesOverLimit))]
+        public void 印刷タイトルを含めたセル数の合計が上限を1超えるとLayoutComputationExceptionになる(
+            string[] ranges, int? firstRow, int? lastRow, int? firstColumn, int? lastColumn, long maxCells)
+        {
+            var ex = Assert.Throws<LayoutComputationException>(
+                () => ReportLayoutEngine.EnsurePrintRangeCellsWithinLimit(
+                    ranges.Select(CellRange.Parse).ToList(),
+                    maxCells,
+                    "report",
+                    "シート1",
+                    new PrintTitles(firstRow, lastRow, firstColumn, lastColumn)));
+
+            Assert.Equal(ProcessingStage.Layout, ex.Stage);
+            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("シート1", ex.SheetName);
+        }
+
+        [Fact]
+        public void 小さな印刷範囲でも全列と6万行の印刷タイトルがあれば既定の上限を超える()
+        {
+            // 印刷範囲 A1:A1 だけなら1セルだが、タイトル 1:60000 行 × A:XFD 列を足すと約9.8億セル。
+            var titles = new PrintTitles(1, 60000, 1, CellAddress.MaxColumn);
+
+            Assert.Throws<LayoutComputationException>(
+                () => ReportLayoutEngine.EnsurePrintRangeCellsWithinLimit(
+                    new[] { CellRange.Parse("A1:A1") }, ReportLayoutEngine.MaxPrintRangeCells, "report", "シート1", titles));
+
+            // タイトルを渡さなければ(従来の数え方)通ってしまう。
+            ReportLayoutEngine.EnsurePrintRangeCellsWithinLimit(
+                new[] { CellRange.Parse("A1:A1") }, ReportLayoutEngine.MaxPrintRangeCells, "report", "シート1");
+        }
+
         // --- 出力ページ数(ヘルパー) -------------------------------------------------
 
         [Theory]
@@ -141,6 +210,57 @@ namespace Utsushi.Layout.Tests
 
             var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet));
             Assert.Contains("印刷範囲", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void 印刷範囲がA1だけでも巨大な印刷タイトルがあるとComputeでLayoutComputationExceptionになる()
+        {
+            // 印刷範囲 A1:A1 と、タイトル 1:60000 行 × A:XFD 列。SheetGrid を作る前に落ちること。
+            var sheet = SparseSheet(
+                new[] { CellAddress.Parse("A1") },
+                defaultRowHeightPt: 20.0,
+                pageSetup: NoMarginA4(
+                    printAreas: new[] { CellRange.Parse("A1:A1") },
+                    printTitles: new PrintTitles(1, 60000, 1, CellAddress.MaxColumn)));
+
+            var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet));
+
+            Assert.Equal("test-report", ex.ReportCode);
+            Assert.Equal("テストシート", ex.SheetName);
+            Assert.Contains("印刷範囲", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void 上限内の印刷範囲でも印刷タイトルを足して上限を超えるとComputeでLayoutComputationExceptionになる()
+        {
+            // 印刷範囲 1,000行 × 1,000列 = 100万セル(単独では上限200万の内側)。
+            // タイトル 1,001 行を足すと (1000 + 1001) × 1000 = 200.1万セルで上限を超える。
+            var range = CellRange.Parse("A1:ALL1000");
+            Assert.Equal(1000, range.ColumnCount);
+
+            var sheet = SparseSheet(
+                new[] { CellAddress.Parse("A1") },
+                defaultRowHeightPt: 20.0,
+                pageSetup: NoMarginA4(printAreas: new[] { range }, printTitles: new PrintTitles(1, 1001, null, null)));
+
+            var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet));
+            Assert.Contains("印刷範囲", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void 通常の大きさの印刷タイトルはComputeで上限に掛からない()
+        {
+            // 見出し1行・1列を繰り返す一般的な帳票の設定で、誤って上限に掛からないことの確認。
+            var sheet = UniformSheet(
+                rows: 100,
+                columns: 5,
+                pageSetup: NoMarginA4(
+                    printAreas: new[] { CellRange.Parse("A1:E100") },
+                    printTitles: new PrintTitles(1, 1, 1, 1)));
+
+            var layout = Compute(sheet);
+
+            Assert.True(layout.Pages.Count > 1);
         }
 
         [Fact]

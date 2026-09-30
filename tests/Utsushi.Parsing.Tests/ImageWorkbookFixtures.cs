@@ -119,6 +119,74 @@ namespace Utsushi.Parsing.Tests
             return path;
         }
 
+        /// <summary>
+        /// 検証に失敗する画像(ContentType は <c>image/png</c> だがシグネチャが不一致)を参照するアンカーを
+        /// <paramref name="invalidCount"/> 個並べ、その後ろに正しい画像のアンカーを1つ置いた .xlsx を作る
+        /// (画像の上限 <see cref="OpenXmlWorkbookReader.MaxImagesPerSheet"/> を、検証の成否によらず
+        /// 読み取りを試みた数で数えることのテスト用)。<paramref name="invalidInGroups"/> が true なら、不正な画像は
+        /// それぞれ1枚だけを子に持つグループの中に置く。呼び出し側で削除すること。
+        /// </summary>
+        public static string CreateWithInvalidPicturesThenValid(int invalidCount, bool invalidInGroups = false)
+        {
+            var path = Path.Combine(Path.GetTempPath(), "utsushi-image-test-" + Guid.NewGuid().ToString("N") + ".xlsx");
+
+            using (var document = SpreadsheetDocument.Create(path, SpreadsheetDocumentType.Workbook))
+            {
+                var workbookPart = document.AddWorkbookPart();
+                workbookPart.Workbook = new Workbook();
+
+                var worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
+                worksheetPart.Worksheet = new Worksheet(new SheetData());
+
+                var sheets = workbookPart.Workbook.AppendChild(new Sheets());
+                sheets.Append(new Sheet
+                {
+                    Id = workbookPart.GetIdOfPart(worksheetPart),
+                    SheetId = 1U,
+                    Name = "テストシート",
+                });
+
+                var drawingsPart = worksheetPart.AddNewPart<DrawingsPart>();
+                var invalidPart = drawingsPart.AddImagePart(ImagePartType.Png);
+                using (var stream = new MemoryStream(new byte[] { 0x00, 0x01, 0x02, 0x03 }))
+                {
+                    invalidPart.FeedData(stream);
+                }
+
+                var validPart = drawingsPart.AddImagePart(ImagePartType.Png);
+                using (var stream = new MemoryStream(TinyPng()))
+                {
+                    validPart.FeedData(stream);
+                }
+
+                var drawing = new Xdr.WorksheetDrawing();
+                for (var i = 0; i < invalidCount; i++)
+                {
+                    if (invalidInGroups)
+                    {
+                        var picture = ConnectorAndGroupWorkbookFixtures.GroupChildImageElement(
+                            drawingsPart, invalidPart, 0L, 0L, 900000L, 900000L, id: (uint)(1000 + i));
+                        var group = ConnectorAndGroupWorkbookFixtures.GroupShapeElement(new[] { picture }, id: (uint)(5000 + i));
+                        drawing.Append(ConnectorAndGroupWorkbookFixtures.WrapInOneCellAnchor(group, row: i + 1, column: 1));
+                    }
+                    else
+                    {
+                        drawing.Append(BuildOneCellAnchorAt(drawingsPart, invalidPart, i));
+                    }
+                }
+
+                // 正しい画像(Id = invalidCount + 100)。
+                drawing.Append(BuildOneCellAnchorAt(drawingsPart, validPart, invalidCount));
+                drawingsPart.WorksheetDrawing = drawing;
+
+                worksheetPart.Worksheet.Append(new Drawing { Id = worksheetPart.GetIdOfPart(drawingsPart) });
+                worksheetPart.Worksheet.Save();
+                workbookPart.Workbook.Save();
+            }
+
+            return path;
+        }
+
         /// <summary>1x1のPNG(最小の有効なPNGバイト列)。</summary>
         public static byte[] TinyPng() => Convert.FromBase64String(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");

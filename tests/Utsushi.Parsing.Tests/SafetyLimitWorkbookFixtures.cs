@@ -160,6 +160,164 @@ namespace Utsushi.Parsing.Tests
             stream.Write(bytes, 0, bytes.Length);
         }
 
+        /// <summary>.xlsx(ZIP)内の指定エントリの中身(UTF-8のテキスト)を <paramref name="transform"/> で書き換える。</summary>
+        public static void ModifyEntry(string path, string entryName, Func<string, string> transform)
+        {
+            string original;
+            using (var archive = ZipFile.OpenRead(path))
+            {
+                var entry = archive.GetEntry(entryName)
+                    ?? throw new InvalidOperationException($"エントリ '{entryName}' がありません。");
+                using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
+                original = reader.ReadToEnd();
+            }
+
+            var modified = transform(original);
+            if (string.Equals(original, modified, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"エントリ '{entryName}' の書き換えで内容が変わりませんでした。");
+            }
+
+            ReplaceEntry(path, entryName, modified);
+        }
+
+        /// <summary>
+        /// .xlsx(ZIP)内の指定エントリの圧縮データを、中央ディレクトリ(宣言サイズ)はそのままに 0xFF で塗りつぶす。
+        /// deflate の先頭ブロックが予約済みのブロック種別(BTYPE=11)になり、展開時に
+        /// <see cref="InvalidDataException"/> になる(要件6.7。壊れた圧縮データの再現)。
+        /// </summary>
+        public static void CorruptEntryCompressedData(string path, string entryName)
+        {
+            long compressedLength;
+            using (var archive = ZipFile.OpenRead(path))
+            {
+                var entry = archive.GetEntry(entryName)
+                    ?? throw new InvalidOperationException($"エントリ '{entryName}' がありません。");
+                compressedLength = entry.CompressedLength;
+                if (compressedLength == entry.Length)
+                {
+                    throw new InvalidOperationException($"エントリ '{entryName}' が圧縮されていません。");
+                }
+            }
+
+            var bytes = File.ReadAllBytes(path);
+            var name = Encoding.UTF8.GetBytes(entryName);
+            for (var i = 0; i + 30 <= bytes.Length; i++)
+            {
+                // ローカルファイルヘッダー(PK\x03\x04)。ファイル名の長さは26バイト目、拡張フィールドの長さは28バイト目。
+                if (bytes[i] != 0x50 || bytes[i + 1] != 0x4B || bytes[i + 2] != 0x03 || bytes[i + 3] != 0x04)
+                {
+                    continue;
+                }
+
+                var nameLength = bytes[i + 26] | (bytes[i + 27] << 8);
+                var extraLength = bytes[i + 28] | (bytes[i + 29] << 8);
+                if (nameLength != name.Length || !bytes.AsSpan(i + 30, nameLength).SequenceEqual(name))
+                {
+                    continue;
+                }
+
+                var dataStart = i + 30 + nameLength + extraLength;
+                for (var j = 0L; j < compressedLength; j++)
+                {
+                    bytes[dataStart + j] = 0xFF;
+                }
+
+                File.WriteAllBytes(path, bytes);
+                return;
+            }
+
+            throw new InvalidOperationException($"エントリ '{entryName}' のローカルファイルヘッダーが見つかりません。");
+        }
+
+        /// <summary>A1 のインライン文字列を <paramref name="text"/> にした .xlsx を作る(要件6.8)。</summary>
+        public static string CreateWithInlineText(string text) =>
+            CreateWorkbook((_, worksheet) =>
+            {
+                var cell = worksheet.Descendants<Cell>().First();
+                cell.InlineString = new InlineString(new Text(text));
+            });
+
+        /// <summary>
+        /// 共有文字列 <paramref name="items"/> を持ち、A2 が先頭の共有文字列を参照する .xlsx を作る(要件6.8)。
+        /// </summary>
+        public static string CreateWithSharedStrings(params SharedStringItem[] items) =>
+            CreateWorkbook((workbook, worksheet) =>
+            {
+                var sharedStringPart = workbook.WorkbookPart!.AddNewPart<SharedStringTablePart>();
+                sharedStringPart.SharedStringTable = new SharedStringTable(items);
+                sharedStringPart.SharedStringTable.Save();
+
+                worksheet.GetFirstChild<SheetData>()!.Append(
+                    new Row(new Cell { CellReference = "A2", DataType = CellValues.SharedString, CellValue = new CellValue("0") })
+                    {
+                        RowIndex = 2U,
+                    });
+            });
+
+        /// <summary><c>&lt;headerFooter&gt;</c> に <paramref name="element"/>(<c>oddHeader</c> 等)を1つだけ持つ .xlsx を作る(要件6.8)。</summary>
+        public static string CreateWithHeaderFooter(OpenXmlLeafTextElement element) =>
+            CreateWorkbook((_, worksheet) => worksheet.Append(new HeaderFooter(element)));
+
+        /// <summary><c>pageSetup/@scale</c> を指定した .xlsx を作る(要件6.9)。</summary>
+        public static string CreateWithScale(uint scale) =>
+            CreateWorkbook((_, worksheet) => worksheet.Append(new PageSetup { Scale = scale }));
+
+        /// <summary>
+        /// ユーザー定義の数値書式(<c>numFmtId=164</c>)を <paramref name="formatCode"/> とし、A2 の数値 1234.5 に
+        /// 適用した .xlsx を作る(要件6.8)。
+        /// </summary>
+        public static string CreateWithNumberFormat(string formatCode) =>
+            CreateWorkbook((workbook, worksheet) =>
+            {
+                var stylesPart = workbook.WorkbookPart!.AddNewPart<WorkbookStylesPart>();
+                stylesPart.Stylesheet = new Stylesheet(
+                    new NumberingFormats(new NumberingFormat { NumberFormatId = 164U, FormatCode = formatCode }) { Count = 1U },
+                    new Fonts(new Font()) { Count = 1U },
+                    new Fills(new Fill()) { Count = 1U },
+                    new Borders(new Border()) { Count = 1U },
+                    new CellFormats(
+                        new CellFormat(),
+                        new CellFormat { NumberFormatId = 164U, ApplyNumberFormat = true })
+                    { Count = 2U });
+                stylesPart.Stylesheet.Save();
+
+                worksheet.GetFirstChild<SheetData>()!.Append(
+                    new Row(new Cell { CellReference = "A2", StyleIndex = 1U, CellValue = new CellValue("1234.5") })
+                    {
+                        RowIndex = 2U,
+                    });
+            });
+
+        /// <summary>
+        /// ワークブックの関係パート(<c>xl/_rels/workbook.xml.rels</c>)に、外部ハイパーリンクの関係を
+        /// <paramref name="count"/> 件追加する(要件6.7)。既存の関係(ワークシート1件)はそのまま残す。
+        /// </summary>
+        public static void AddExternalRelationships(string path, string relsEntryName, int count) =>
+            ModifyEntry(path, relsEntryName, xml =>
+            {
+                var builder = new StringBuilder(count * 160);
+                for (var i = 0; i < count; i++)
+                {
+                    var n = i.ToString(CultureInfo.InvariantCulture);
+                    builder.Append("<Relationship Id=\"rIdExt").Append(n)
+                        .Append("\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\"")
+                        .Append(" Target=\"https://example.invalid/").Append(n).Append("\" TargetMode=\"External\"/>");
+                }
+
+                var end = xml.LastIndexOf("</Relationships>", StringComparison.Ordinal);
+                return xml.Substring(0, end) + builder + xml.Substring(end);
+            });
+
+        /// <summary>.xlsx(ZIP)内のエントリの中から、名前が <paramref name="suffix"/> で終わる最初のものを返す。</summary>
+        public static string EntryNameEndingWith(string path, string suffix)
+        {
+            using var archive = ZipFile.OpenRead(path);
+            return archive.Entries
+                .Select(e => e.FullName)
+                .First(n => n.EndsWith(suffix, StringComparison.Ordinal));
+        }
+
         /// <summary>最初のワークシートパートのZIPエントリ名を返す。</summary>
         public static string FirstWorksheetEntryName(string path)
         {
