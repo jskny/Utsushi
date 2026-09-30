@@ -1134,11 +1134,17 @@ public sealed record GroupCommand(
 |---|---|---|---|---|
 | Parsing / `OpenXmlWorkbookReader` | `MaxXlsxPackageBytes` | 1 GiB | `InvalidExcelFileException(TooLarge)` | 6.6 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxXmlElementDepth` | 256段(全XMLパートの要素の入れ子) | `InvalidExcelFileException(TooLarge)`(DOM構築前に`XmlReader`で流し読みして検査) | 6.7 |
-| Parsing / `OpenXmlWorkbookReader` | `MaxXmlPartBytes` | 256 MiB/XMLパート(展開後) | `InvalidExcelFileException(TooLarge)`(同上。`OpenSettings.MaxCharactersInPart`にも同じ値を設定) | 6.7 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxXmlPartBytes` | 64 MiB/XMLパート(展開後) | `InvalidExcelFileException(TooLarge)`(同上。`OpenSettings.MaxCharactersInPart`にも同じ値を設定) | 6.7 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxXmlElementsPerPart` | 5,000,000個/XMLパート | `InvalidExcelFileException(TooLarge)`(同上。DOMのメモリを抑える) | 6.7 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxRelationshipsPerPart` | 10,000件/関係パート | `InvalidExcelFileException(TooLarge)`(`SpreadsheetDocument.Open`より前にZIPを直接流し読みして検査) | 6.7 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxCellTextLength` | 32,767文字(共有文字列・インライン文字列。Excel自体の上限) | `InvalidExcelFileException(TooLarge)` | 6.8 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxHeaderFooterTextLength` | 1,024文字/ヘッダー・フッター | `InvalidExcelFileException(TooLarge)` | 6.8 |
+| Parsing / `OpenXmlWorkbookReader` | `MinPrintScalePercent`/`MaxPrintScalePercent` | 10〜400%(Excelと同じ) | 範囲外の拡大縮小率を丸める(例外化なし) | 6.9 |
+| Parsing / `StyleTable` | `MaxNumberFormatCodeLength` | 255文字(Excel自体の上限) | その数値書式を読み取らず既定書式にフォールバック(例外化なし) | 6.8 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxColumnExpansionsPerSheet` | 65,536列(`<col>`の`min`〜`max`の展開の合計) | `InvalidExcelFileException(TooLarge)` | 6.8 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxPageBreaksPerSheet` | 1,026件(行・列それぞれ。Excel自体の上限) | `InvalidExcelFileException(TooLarge)` | 6.8 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxPrintAreasPerSheet` | 1,000個 | `InvalidExcelFileException(TooLarge)` | 6.8 |
-| Layout / `ReportLayoutEngine` | `MaxPrintRangeCells` | 2,000,000(印刷範囲の行数×列数の合計。印刷範囲の外の印刷タイトルは含まない) | `LayoutComputationException`(`SheetGrid`を作る前に判定) | 6.9 |
+| Layout / `ReportLayoutEngine` | `MaxPrintRangeCells` | 2,000,000(印刷範囲ごとの(行数+タイトル行数)×(列数+タイトル列数)の合計) | `LayoutComputationException`(`SheetGrid`を作る前に判定) | 6.9 |
 | Layout / `ReportLayoutEngine` | `MaxPagesPerDocument` | 5,000ページ | `LayoutComputationException`(ページを組み立てる前に判定) | 6.9 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxSharedStringCount` | 200,000件 | `InvalidExcelFileException(TooLarge)` | 6.6 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxCellsPerSheet` | 500,000(シート内セル数、および行番号の上限を兼ねる) | `InvalidExcelFileException(TooLarge)` | 6.6 |
@@ -1352,6 +1358,10 @@ public sealed record GroupCommand(
   タスク25で対応した(要件6.7〜6.10、上の安全弁一覧)。残る制約は次のとおり。`MaxPrintRangeCells`以内でも、
   1ページ内のセルごとに結合範囲を線形に探す(`SheetModel.FindMergedRange`)ため、処理量は
   「印刷範囲のセル数×結合範囲の個数(最大`MaxMergedRangesPerSheet`)」に比例する。自社帳票の規模では問題にならない。
+  その後の security-reviewer の実測で見つかった経路(型として不正な属性値による SDK の例外の漏れ、検証に失敗した
+  画像が枚数に数えられない、印刷タイトルでの上限の迂回、文字列の長さ、DOM の要素数、関係パートの数)も、
+  上の安全弁一覧のとおり対応した(タスク25.6)。属性値の例外は、個々の読み取り箇所ではなく `ReadCore` で
+  `FormatException`/`OverflowException` をまとめて `InvalidExcelFileException(Corrupted)` に読み替える。
 - **図形の色・反転・矢印の未検証事項・既知の差分**(要件10.15〜10.18。layout-fidelity-reviewer指摘):
   (1) 上下反転した図形の文字を180°回す挙動と、矢印の大きさ(線の太さの2/3/5倍、元の太さの最小1pt)は、Excelで保存した
   ファイルのPDF出力との実測での突き合わせが未実施。LibreOfficeの実装では元の太さの最小が約2ptで、開いた矢印(`arrow`)の

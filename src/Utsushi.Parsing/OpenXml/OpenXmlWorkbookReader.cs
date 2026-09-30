@@ -90,6 +90,27 @@ namespace Utsushi.Parsing.OpenXml
 
             using (document)
             {
+                try
+                {
+                    return ReadDocument(document, options);
+                }
+                catch (Exception ex) when (ex is FormatException or OverflowException)
+                {
+                    // OpenXml SDK の型付き属性(.Value)は、不正な文字列(例: flipH="maybe"、r="abc")を読むと
+                    // FormatException/OverflowException を投げる。個々の読み取り箇所で漏れなく扱うのは難しいため、
+                    // ここでまとめて「壊れたファイル」として UtsushiException 階層に読み替える(要件6.4。security-reviewer指摘)。
+                    throw new InvalidExcelFileException(
+                        "入力ファイルに不正な値の属性が含まれているため読み取れません。",
+                        InvalidExcelFileReason.Corrupted,
+                        options.ReportCode,
+                        ex);
+                }
+            }
+        }
+
+        private static WorkbookModel ReadDocument(SpreadsheetDocument document, WorkbookReadOptions options)
+        {
+            {
                 // DOM に触れる前に、全XMLパートの入れ子の深さと大きさを流し読みで検査する(要件6.7)。
                 GuardXmlParts(document, options.ReportCode);
 
@@ -242,7 +263,7 @@ namespace Utsushi.Parsing.OpenXml
                         cellCount++;
                         EnsureCellCountWithinLimit(cellCount, name, options.ReportCode);
 
-                        cells[address] = ReadCell(cell, styles, sharedStrings);
+                        cells[address] = ReadCell(cell, styles, sharedStrings, name, options.ReportCode);
                     }
                 }
             }
@@ -283,7 +304,8 @@ namespace Utsushi.Parsing.OpenXml
             return double.NaN;
         }
 
-        private static CellModel ReadCell(X.Cell cell, StyleTable styles, IReadOnlyList<string> sharedStrings)
+        private static CellModel ReadCell(
+            X.Cell cell, StyleTable styles, IReadOnlyList<string> sharedStrings, string sheetName, string? reportCode)
         {
             var style = styles.GetCellStyle(cell.StyleIndex?.Value is { } s ? (int)s : null);
             var hasFormula = cell.CellFormula is not null;
@@ -294,6 +316,7 @@ namespace Utsushi.Parsing.OpenXml
             if (dataType is not null && dataType == X.CellValues.InlineString)
             {
                 var text = cell.InlineString?.Text?.Text ?? cell.InlineString?.InnerText ?? string.Empty;
+                EnsureTextLengthWithinLimit(text, MaxCellTextLength, $"シート '{sheetName}' のセルの文字列", reportCode);
                 return new CellModel(text, CellValueKind.Text, style, text, hasFormula);
             }
 
@@ -477,6 +500,40 @@ namespace Utsushi.Parsing.OpenXml
         internal const int MaxMergedRangesPerSheet = 1000;
 
         /// <summary>
+        /// セルの文字列(共有文字列・インライン文字列)の長さの上限(要件6.8)。Excel 自体の上限(32,767文字)に合わせる。
+        /// 極端に長い文字列を多数のセルから参照させ、レイアウト計算(文字幅の計測・折り返し)を長時間かけさせるのを防ぐ
+        /// (security-reviewer指摘)。
+        /// </summary>
+        internal const int MaxCellTextLength = 32767;
+
+        /// <summary>
+        /// ヘッダー/フッター1つの文字列(書式コードを含む)の長さの上限(要件6.8)。Excel の画面では255文字までだが、
+        /// 他のツールで作ったファイルを考慮して余裕をもたせる。
+        /// </summary>
+        internal const int MaxHeaderFooterTextLength = 1024;
+
+        /// <summary>拡大縮小率(<c>pageSetup/@scale</c>)の範囲(Excel と同じ 10〜400%。要件6.9)。</summary>
+        internal const int MinPrintScalePercent = 10;
+
+        /// <summary>拡大縮小率の上限(%)。</summary>
+        internal const int MaxPrintScalePercent = 400;
+
+        /// <summary>
+        /// XMLパート1つに含める要素の数の上限(要件6.7)。パートの大きさの上限だけでは、小さな要素(例: <c>&lt;row/&gt;</c>)を
+        /// 大量に並べて DOM に数GBのメモリを使わせられるため(100MiB 分の <c>&lt;row/&gt;</c> で 4.6GB。security-reviewer指摘)。
+        /// <see cref="MaxCellsPerSheet"/> いっぱいのシート(セル1つあたり数要素)でも収まる値にする。
+        /// </summary>
+        internal const long MaxXmlElementsPerPart = 5_000_000;
+
+        /// <summary>
+        /// 関係パート(<c>*.rels</c>)1つに含める関係(<c>Relationship</c>)の数の上限(要件6.7)。関係パートは
+        /// <c>SpreadsheetDocument.Open</c> の中で解析され、関係の数に対して2乗より速く処理時間が増える
+        /// (10万件で139秒。security-reviewer指摘)ため、Open より前に ZIP を直接流し読みして検査する。
+        /// 自社帳票の関係の数は、ハイパーリンクを多用しても数百件程度である。
+        /// </summary>
+        internal const int MaxRelationshipsPerPart = 10_000;
+
+        /// <summary>
         /// XMLパートの要素の入れ子の深さの上限(要件6.7)。OpenXml SDK は DOM を再帰で組み立てるため、
         /// 数千段にネストした要素(例: <c>xdr:grpSp</c>)でスタックオーバーフローし、呼び出し元のプロセスごと
         /// 落ちる(スタック1MBで深さ5,000段・4.2KBのファイルで再現。security-reviewer指摘)。
@@ -486,10 +543,10 @@ namespace Utsushi.Parsing.OpenXml
         internal const int MaxXmlElementDepth = 256;
 
         /// <summary>
-        /// XMLパート1つの展開後の大きさの上限(256MiB。要件6.7)。<see cref="MaxCellsPerSheet"/>いっぱいの
+        /// XMLパート1つの展開後の大きさの上限(64MiB。要件6.7)。<see cref="MaxCellsPerSheet"/>いっぱいの
         /// シートでも数十MBに収まる。<c>OpenSettings.MaxCharactersInPart</c>にも同じ値を設定する。
         /// </summary>
-        internal const long MaxXmlPartBytes = 256L * 1024 * 1024;
+        internal const long MaxXmlPartBytes = 64L * 1024 * 1024;
 
         /// <summary>
         /// 1シートの列定義(<c>&lt;col&gt;</c>)の <c>min</c>〜<c>max</c> を展開する回数の合計の上限(要件6.8)。
@@ -624,6 +681,18 @@ namespace Utsushi.Parsing.OpenXml
         /// </summary>
         private static void EnsureCellCountWithinLimit(int cellCount, string sheetName, string? reportCode) =>
             EnsureCellCountWithinLimit(cellCount, MaxCellsPerSheet, sheetName, reportCode);
+
+        /// <summary>文字列の長さが上限以下か確認する(要件6.8)。</summary>
+        internal static void EnsureTextLengthWithinLimit(string text, int maxLength, string description, string? reportCode)
+        {
+            if (text.Length > maxLength)
+            {
+                throw new InvalidExcelFileException(
+                    $"{description}の長さが上限({maxLength}文字)を超えています。",
+                    InvalidExcelFileReason.TooLarge,
+                    reportCode);
+            }
+        }
 
         /// <summary><c>&lt;col&gt;</c>の展開回数の合計が上限以下か確認する(要件6.8。テスト用に上限を引数に取る)。</summary>
         internal static void EnsureColumnExpansionsWithinLimit(int expansions, int maxExpansions, string sheetName, string? reportCode)
@@ -955,6 +1024,10 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
+            // 読み取りを試みた時点で数える。検証に失敗した画像を数えないと、同じ画像パートを参照する
+            // 壊れたアンカーを大量に並べて、上限に達しないまま画像を何度も展開させられる(security-reviewer指摘)。
+            imageCount++;
+
             // ReadAnchorExtentより先に検証する。壊れたアンカー(ReadAnchorExtentの失敗)は
             // モードによらず常に無言でスキップするため、先に判定すると不正な画像形式/
             // サイズ超過/シグネチャ不一致がErrorモードでも例外化されずに握りつぶされてしまう
@@ -973,7 +1046,6 @@ namespace Utsushi.Parsing.OpenXml
             var id = ReadShapeId(picture.NonVisualPictureProperties?.NonVisualDrawingProperties);
             var rotationDegrees = (picture.ShapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
 
-            imageCount++;
             return new ImageModel(id, data, contentType, rotationDegrees, anchorCell, anchorOffset, extent);
         }
 
@@ -1468,6 +1540,9 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
+            // トップレベルの画像と同じく、読み取りを試みた時点で数える。
+            imageCount++;
+
             if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType))
             {
                 return null;
@@ -1482,7 +1557,6 @@ namespace Utsushi.Parsing.OpenXml
             var id = ReadShapeId(picture.NonVisualPictureProperties?.NonVisualDrawingProperties);
             var rotationDegrees = (picture.ShapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
 
-            imageCount++;
             return new GroupChildImage(id, localRect.Value, data, contentType, rotationDegrees);
         }
 
@@ -2159,7 +2233,7 @@ namespace Utsushi.Parsing.OpenXml
             var printTitles = DefinedNameParser.ParsePrintTitles(
                 sheetNames is not null && sheetNames.TryGetValue(DefinedNameParser.PrintTitlesName, out var titles) ? titles : null);
 
-            var headerFooter = ReadHeaderFooter(worksheet);
+            var headerFooter = ReadHeaderFooter(worksheet, sheetName, reportCode);
 
             return new PageSetupModel(
                 paper, orientation, pageMargins, scaling, printAreas, rowBreaks, columnBreaks,
@@ -2167,12 +2241,22 @@ namespace Utsushi.Parsing.OpenXml
         }
 
         /// <summary>ページヘッダー/フッターの設定を読み取る(要件3.7〜3.9)。</summary>
-        private static HeaderFooterModel ReadHeaderFooter(X.Worksheet worksheet)
+        private static HeaderFooterModel ReadHeaderFooter(X.Worksheet worksheet, string sheetName, string? reportCode)
         {
             var headerFooter = worksheet.GetFirstChild<X.HeaderFooter>();
             if (headerFooter is null)
             {
                 return HeaderFooterModel.None;
+            }
+
+            foreach (var text in new[]
+            {
+                headerFooter.OddHeader?.Text, headerFooter.OddFooter?.Text, headerFooter.EvenHeader?.Text,
+                headerFooter.EvenFooter?.Text, headerFooter.FirstHeader?.Text, headerFooter.FirstFooter?.Text,
+            })
+            {
+                EnsureTextLengthWithinLimit(
+                    text ?? string.Empty, MaxHeaderFooterTextLength, $"シート '{sheetName}' のヘッダー/フッター", reportCode);
             }
 
             return new HeaderFooterModel(
@@ -2190,11 +2274,15 @@ namespace Utsushi.Parsing.OpenXml
 
         private static PageScaling ReadScaling(X.PageSetup? setup, X.SheetProperties? sheetProperties)
         {
-            var scale = (int)(setup?.Scale?.Value ?? 100U);
+            var scale = (int)Math.Min(setup?.Scale?.Value ?? 100U, 1000U);
             if (scale <= 0)
             {
                 scale = 100;
             }
+
+            // Excel の拡大縮小率は 10〜400%。範囲外の値は Excel と同じく丸める(極端な縮小で1ページに
+            // 大量のセルを詰め込ませるのを防ぐ。要件6.9。security-reviewer指摘)。
+            scale = Math.Max(MinPrintScalePercent, Math.Min(MaxPrintScalePercent, scale));
 
             // fitToPage が有効なときだけ fitToWidth/fitToHeight を採用する。
             // 値 0 は「その方向は制限しない」を意味するため null に落とす。
@@ -2406,14 +2494,9 @@ namespace Utsushi.Parsing.OpenXml
                 }
 
                 // リッチテキスト(複数 run)の場合は run を連結する。run 単位の書式差は再現しない。
-                if (item.Text?.Text is { } text)
-                {
-                    result.Add(text);
-                    continue;
-                }
-
-                var runs = item.Elements<X.Run>().Select(r => r.Text?.Text ?? string.Empty);
-                result.Add(string.Concat(runs));
+                var text = item.Text?.Text ?? string.Concat(item.Elements<X.Run>().Select(r => r.Text?.Text ?? string.Empty));
+                EnsureTextLengthWithinLimit(text, MaxCellTextLength, "共有文字列", reportCode);
+                result.Add(text);
             }
 
             return result;
@@ -2594,14 +2677,68 @@ namespace Utsushi.Parsing.OpenXml
                             reportCode);
                     }
                 }
+
+                // 関係パートは SpreadsheetDocument.Open の中で解析されるため、Open より前に件数を検査する(要件6.7)。
+                foreach (var entry in archive.Entries)
+                {
+                    if (entry.FullName.EndsWith(".rels", StringComparison.OrdinalIgnoreCase))
+                    {
+                        using var relsStream = entry.Open();
+                        EnsureRelationshipCountWithinLimit(relsStream, MaxRelationshipsPerPart, entry.FullName, reportCode);
+                    }
+                }
             }
-            catch (InvalidDataException)
+            catch (Exception ex) when (ex is InvalidDataException or IOException)
             {
-                // 不正なZIP構造はSpreadsheetDocument.Open側の失敗分類に委ねる。
+                // 不正なZIP構造・壊れた圧縮データはSpreadsheetDocument.Open側の失敗分類に委ねる。
             }
             finally
             {
                 stream.Position = position;
+            }
+        }
+
+        /// <summary>
+        /// 関係パート(<c>*.rels</c>)の関係の数が上限以下か、流し読みで確認する(要件6.7。テスト用に上限を引数に取る)。
+        /// XMLとして壊れている場合は、ここでは判断せず <c>SpreadsheetDocument.Open</c> 側の失敗分類に委ねる。
+        /// </summary>
+        internal static void EnsureRelationshipCountWithinLimit(Stream rels, int maxRelationships, string partName, string? reportCode)
+        {
+            var settings = new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+                IgnoreComments = true,
+                IgnoreWhitespace = true,
+                IgnoreProcessingInstructions = true,
+            };
+
+            try
+            {
+                using var bounded = new BoundedReadStream(rels, MaxXmlPartBytes);
+                using var reader = XmlReader.Create(bounded, settings);
+                var count = 0;
+                while (reader.Read())
+                {
+                    if (reader.NodeType == XmlNodeType.Element && ++count > maxRelationships)
+                    {
+                        throw new InvalidExcelFileException(
+                            $"関係パート '{partName}' の関係の数が上限({maxRelationships}件)を超えています。",
+                            InvalidExcelFileReason.TooLarge,
+                            reportCode);
+                    }
+                }
+            }
+            catch (BoundedReadStream.LimitExceededException)
+            {
+                throw new InvalidExcelFileException(
+                    $"関係パート '{partName}' の大きさが上限({MaxXmlPartBytes / (1024 * 1024)}MB)を超えています。",
+                    InvalidExcelFileReason.TooLarge,
+                    reportCode);
+            }
+            catch (XmlException)
+            {
+                // 壊れた関係パートは Open 側で Corrupted として分類される。
             }
         }
 
@@ -2631,7 +2768,14 @@ namespace Utsushi.Parsing.OpenXml
         /// <summary>
         /// XMLストリームの要素の入れ子の深さと大きさが上限以下か確認する(要件6.7。テスト用に上限を引数に取る)。
         /// </summary>
-        internal static void EnsureXmlWithinLimits(Stream xml, int maxDepth, long maxBytes, string partName, string? reportCode)
+        internal static void EnsureXmlWithinLimits(Stream xml, int maxDepth, long maxBytes, string partName, string? reportCode) =>
+            EnsureXmlWithinLimits(xml, maxDepth, maxBytes, MaxXmlElementsPerPart, partName, reportCode);
+
+        /// <summary>
+        /// <see cref="EnsureXmlWithinLimits(Stream, int, long, string, string?)"/> の本体。要素の数の上限も引数に取る(テスト用)。
+        /// </summary>
+        internal static void EnsureXmlWithinLimits(
+            Stream xml, int maxDepth, long maxBytes, long maxElements, string partName, string? reportCode)
         {
             var settings = new XmlReaderSettings
             {
@@ -2646,9 +2790,23 @@ namespace Utsushi.Parsing.OpenXml
             {
                 using var bounded = new BoundedReadStream(xml, maxBytes);
                 using var reader = XmlReader.Create(bounded, settings);
+                var elements = 0L;
                 while (reader.Read())
                 {
-                    if (reader.NodeType == XmlNodeType.Element && reader.Depth >= maxDepth)
+                    if (reader.NodeType != XmlNodeType.Element)
+                    {
+                        continue;
+                    }
+
+                    if (++elements > maxElements)
+                    {
+                        throw new InvalidExcelFileException(
+                            $"パート '{partName}' の要素の数が上限({maxElements}個)を超えています。",
+                            InvalidExcelFileReason.TooLarge,
+                            reportCode);
+                    }
+
+                    if (reader.Depth >= maxDepth)
                     {
                         throw new InvalidExcelFileException(
                             $"パート '{partName}' の要素の入れ子が上限({maxDepth}段)を超えています。",

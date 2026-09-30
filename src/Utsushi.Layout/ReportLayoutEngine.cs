@@ -81,7 +81,7 @@ namespace Utsushi.Layout
 
             // 複数の印刷範囲はそれぞれ独立したページ群になる(要件3.6)。
             var printRanges = ResolvePrintRanges(sheet, definition);
-            EnsurePrintRangeCellsWithinLimit(printRanges, MaxPrintRangeCells, definition.ReportCode, sheet.Name);
+            EnsurePrintRangeCellsWithinLimit(printRanges, MaxPrintRangeCells, definition.ReportCode, sheet.Name, pageSetup.PrintTitles);
             ValidateRequiredFieldsAreInPrintRanges(definition, sheet, printRanges, pageSetup.PrintTitles);
             ValidateSubstitutedCellsAreInPrintRanges(report, printRanges, pageSetup.PrintTitles);
 
@@ -166,14 +166,23 @@ namespace Utsushi.Layout
                 report, grid, titleRows, titleColumns, rowBands, columnBands, scale, pageSetup, firstPageNumber);
         }
 
-        /// <summary>印刷範囲の行数×列数の合計が上限以下か確認する(要件6.9。テスト用に上限を引数に取る)。</summary>
+        /// <summary>
+        /// 印刷範囲の行数×列数の合計が上限以下か確認する(要件6.9。テスト用に上限を引数に取る)。
+        /// 印刷タイトルの行・列はすべての印刷範囲・ページで繰り返し走査されるため、各印刷範囲の行数・列数に
+        /// タイトルの行数・列数を足して数える(タイトルだけで上限を迂回されないように。security-reviewer指摘)。
+        /// </summary>
         internal static void EnsurePrintRangeCellsWithinLimit(
-            IReadOnlyList<CellRange> printRanges, long maxCells, string? reportCode, string sheetName)
+            IReadOnlyList<CellRange> printRanges, long maxCells, string? reportCode, string sheetName, PrintTitles? titles = null)
         {
+            var titleRows = titles is { HasRows: true } ? Math.Max(0L, (long)titles.LastRow!.Value - titles.FirstRow!.Value + 1) : 0L;
+            var titleColumns = titles is { HasColumns: true }
+                ? Math.Max(0L, (long)titles.LastColumn!.Value - titles.FirstColumn!.Value + 1)
+                : 0L;
+
             var total = 0L;
             foreach (var range in printRanges)
             {
-                total += (long)range.RowCount * range.ColumnCount;
+                total += (range.RowCount + titleRows) * (range.ColumnCount + titleColumns);
                 if (total > maxCells)
                 {
                     throw new LayoutComputationException(

@@ -117,6 +117,9 @@ namespace Utsushi.Parsing.OpenXml
         private static T ResolveIndexed<T>(IReadOnlyList<T> list, uint? index, T fallback) =>
             index is { } i && i < list.Count ? list[(int)i] : fallback;
 
+        /// <summary>数値書式コード(<c>numFmt/@formatCode</c>)の長さの上限(Excel 自体の上限。要件6.8)。</summary>
+        internal const int MaxNumberFormatCodeLength = 255;
+
         private static Dictionary<int, string> ReadCustomNumberFormats(X.Stylesheet stylesheet, int maxEntries)
         {
             var result = new Dictionary<int, string>();
@@ -127,7 +130,11 @@ namespace Utsushi.Parsing.OpenXml
                     break;
                 }
 
-                if (numFmt.NumberFormatId?.Value is { } id && numFmt.FormatCode?.Value is { } code)
+                // Excel 自体の上限(255文字)を超える書式コードは読み取らず、既定書式(標準)にフォールバックする
+                // (書式はセルごとに解析するため、極端に長い書式を多数のセルに適用させて処理を長引かせるのを防ぐ。
+                // 要件6.8。security-reviewer指摘)。
+                if (numFmt.NumberFormatId?.Value is { } id && numFmt.FormatCode?.Value is { } code
+                    && code.Length <= MaxNumberFormatCodeLength)
                 {
                     result[(int)id] = code;
                 }
