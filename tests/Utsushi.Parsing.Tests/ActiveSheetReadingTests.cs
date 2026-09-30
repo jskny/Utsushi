@@ -50,6 +50,26 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 同じ名前のシートが並ぶ不正なファイルでもActiveSheetOnlyなら1枚だけ読む()
+        {
+            // Excelはシート名の重複を許さないが、OpenXml SDK は検証しない。名前で絞ると同じシートを
+            // 何度も読まされ、ファサードの「1枚だけ」の前提も崩れていた(security-reviewer指摘)。
+            var names = ReadSheetNames(
+                ActiveOnly, 1U, new Spec("S", SheetStateValues.Hidden), new Spec("S"), new Spec("S"));
+
+            Assert.Equal(new[] { "S" }, names);
+        }
+
+        [Fact]
+        public void 同じ名前のシートが並ぶ不正なファイルでもSheetNameFilterなら1枚だけ読む()
+        {
+            var names = ReadSheetNames(
+                new WorkbookReadOptions(SheetNameFilter: "S"), null, new Spec("S"), new Spec("S"), new Spec("S"));
+
+            Assert.Equal(new[] { "S" }, names);
+        }
+
+        [Fact]
         public void activeTabがグラフシートを指すと表示されている最初のワークシートを読む()
         {
             // グラフシートはワークシートとして読めないため候補にしない(code-reviewer等の指摘)。

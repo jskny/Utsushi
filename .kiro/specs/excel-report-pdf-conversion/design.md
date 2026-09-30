@@ -339,7 +339,7 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   後段のレイヤーには分岐を入れない(帳票固有の分岐を共通レイヤーに置かない方針と同じ考え方)。
   - ファサード `ReportPdfConverter` は帳票コードを取らないオーバーロード
     `ConvertWithoutDefinition(Stream, Stream, cellOverrides?, documentName?)` /
-    `ConvertFileWithoutDefinition(string xlsxPath, string outputPath, cellOverrides?)` /
+    `ConvertFileWithoutDefinition(string xlsxPath, string outputPath, cellOverrides?, documentName?)` /
     `ComputeLayoutWithoutDefinition(Stream, cellOverrides?, documentName?)` を持つ。
     メソッド名を分けるのは、既存の `Convert(string reportCode, …)` と引数の並びが似ており、
     オーバーロード解決で意図しない方が選ばれるのを避けるため。置換キーの辞書は受け取らない(要件12.4)。
@@ -1260,11 +1260,16 @@ public sealed record GroupCommand(
   現時点では「登録済み自社帳票のみを対象とする」という製品スコープ上のリスク許容として
   対応を見送る。対象帳票の運用形態が変わり任意のExcelファイルを受け付ける可能性が
   出てきた場合は、実装前に必ず再評価すること。
-  帳票定義なしモード(要件12)の追加時に再評価した: 入力Excelはもともと呼び出し時に渡されるもので、
-  帳票定義の有無は入力ファイルの中身の信頼性を変えない(定義はシート名・セル番地を指定するだけで、
-  ファイルの内容を検証しない)。帳票定義なしモードの想定利用者も社内の担当者であり
-  (`.kiro/steering/product.md`「対象範囲」)、不特定の外部ユーザーからのアップロードは引き続き対象外のため、
-  リスク許容を維持する。公開のアップロード変換として使う計画が出た場合は、この項目を実装前に再評価すること。
+  帳票定義なしモード(要件12)の追加時に再評価し、security-reviewerが実測した: 「数万段」「理論上」という
+  上の見積もりは誤りで、スタック1MB(Windowsのメインスレッドの既定)では**深さ5,000段・4.2KBの`.xlsx`**で
+  `OpenXmlCompositeElement.Populate`の再帰によりスタックオーバーフローし、**呼び出し元のプロセスごと**落ちる
+  (Linux既定の8MBでは落ちないが、処理時間が深さの二乗で増え、200,000段(75KB)で400秒以上応答しない)。
+  また、定義ありモードでは登録済みのシート名に一致するファイルしか事実上通らないのに対し、定義なしモードは
+  任意の`.xlsx`を受け付けるため、社内の担当者が社外から受け取ったファイルをそのまま変換する経路が現実に生じる。
+  このため「帳票定義の有無は入力の信頼性を変えない」とは言えず、リスクは定義なしモードで大きくなる。
+  対策(SDKのDOMに触れる前に`XmlReader`で要素の深さを検査する、`OpenSettings.MaxCharactersInPart`を設定する)は
+  タスク25で行う。それまでは、定義なしモードに社外から受け取ったファイルを渡さない運用とする
+  (`docs/ライブラリの使い方.md`「帳票定義なしでの変換」)。
 - **放射状グラデーションの`a:path`種別**(要件10.6): `a:path type="circle"`のみを
   厳密に扱い、`"rect"`/`"shape"`は同じ放射状近似にフォールバックする。矩形・図形に
   沿った塗りつぶしの厳密な再現は行わない。
@@ -1277,3 +1282,12 @@ public sealed record GroupCommand(
   `public`であり、`SheetNameFilter`を指定しない(全シート読み取り)呼び出し方をする
   将来のコードが現れた場合はシート数倍の積み上げに対する上限が無い。対象帳票で
   実際に必要になった時点でワークブック単位の合算上限を検討する。
+  なお、同じ名前の`<sheet>`を大量に並べると名前での絞り込みを素通りして同じシートを何度も読めてしまう問題は、
+  絞り込んだ1枚を読んだ時点でループを打ち切ることで解消した(タスク24.9)。
+- **ファイルの内容だけで処理量が決まる経路の上限漏れ**(帳票定義なしモード追加時のsecurity-reviewer指摘。タスク25):
+  (1) 1文書あたりのページ数と印刷範囲の個数(`_xlnm.Print_Area`)に上限が無い。セルがA1とXFD500000の2個だけの
+  1KB未満のファイルでメモリを使い果たし、`S!$A$1:$A$1`を30万個並べた8.6KBのファイルで30万ページのPDFが出る。
+  定義なしモードでは`PrintAreaOverride`が常にnullのため影響が大きい。(2) `<col>`の範囲展開(1要素あたり最大16,384回)に
+  要素数の上限が無い。(3) 手動改ページ(`<brk>`)の件数に上限が無い(Excel自体の上限は1,026件)。
+  (4) 画像の`r:embed`の参照先が無い場合、OpenXml SDKの`ArgumentOutOfRangeException`が`UtsushiException`階層の外へ漏れる
+  (シートの`r:id`は対応済み)。

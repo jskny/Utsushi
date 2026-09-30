@@ -189,14 +189,21 @@ namespace Utsushi
 
         /// <summary>
         /// 帳票定義を使わずに変換し、PDFをファイルへ書き出す(要件12。失敗時に不完全なファイルを残さない)。
-        /// 入力ファイル名から拡張子を除いたものを文書名として使う(要件12.5)。
         /// </summary>
+        /// <param name="xlsxPath">入力Excelファイルのパス。</param>
+        /// <param name="outputPath">PDFの出力先パス。</param>
+        /// <param name="cellOverrides">セル番地(A1形式) → 上書き後の文字列(要件2.7)。不要なら null。</param>
+        /// <param name="documentName">
+        /// PDFのタイトル・ヘッダー/フッターのファイル名・エラー情報に使う名前。null の場合は入力ファイル名から
+        /// 拡張子を除いたもの(要件12.5)。ファイル名に取引先名などを含み、PDFのメタデータやログに出したくない場合に指定する。
+        /// </param>
         public void ConvertFileWithoutDefinition(
             string xlsxPath,
             string outputPath,
-            IReadOnlyDictionary<string, string>? cellOverrides = null)
+            IReadOnlyDictionary<string, string>? cellOverrides = null,
+            string? documentName = null)
         {
-            var documentName = Path.GetFileNameWithoutExtension(xlsxPath ?? throw new ArgumentNullException(nameof(xlsxPath)));
+            documentName ??= Path.GetFileNameWithoutExtension(xlsxPath ?? throw new ArgumentNullException(nameof(xlsxPath)));
 
             using var input = OpenInputFile(xlsxPath, documentName);
             var layout = ComputeLayoutWithoutDefinition(input, cellOverrides, documentName);
