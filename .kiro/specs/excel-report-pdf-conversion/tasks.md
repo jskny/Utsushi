@@ -895,17 +895,19 @@
     - _Requirements: 6.4, 12.5, 12.6_
 
 - [x] 25. ファイルの内容だけで処理量が決まる経路の安全弁(帳票定義なしモード追加時のsecurity-reviewer指摘)
-  - [x] 25.1 SDKのDOMに触れる前に、対象シートのworksheet・drawingパートを `XmlReader` で流し読みして要素の深さを検査し、
+  - [x] 25.0 requirements.mdに要件6.7〜6.10を追加し、design.mdの安全弁一覧を更新する
+    - _Requirements: 6.7, 6.8, 6.9, 6.10_
+  - [x] 25.1 SDKのDOMに触れる前に、パッケージ内の全XMLパートを `XmlReader` で流し読みして要素の深さ・大きさを検査し、
         `OpenSettings.MaxCharactersInPart` を設定する(深くネストした `grpSp` によるスタックオーバーフロー対策)
-    - _Requirements: 6.6, 10.8, 12.6_
+    - _Requirements: 6.7, 12.6_
   - [x] 25.2 1文書あたりのページ数と印刷範囲の個数に上限を設け、ページを組み立てる前に判定する
-    - _Requirements: 6.6, 12.6_
+    - _Requirements: 6.8, 6.9, 12.6_
   - [x] 25.3 `<col>` の要素数(または展開の総回数)と手動改ページの件数に上限を設ける
-    - _Requirements: 6.6, 12.6_
+    - _Requirements: 6.8, 12.6_
   - [x] 25.4 画像の `r:embed` の参照先が無い場合を `UtsushiException` 階層で扱う
-    - _Requirements: 6.4_
+    - _Requirements: 6.4, 6.10_
   - [x] 25.5 追加した上限を design.md「信頼できない入力に対する安全弁 一覧」に追記する
-    - _Requirements: 6.6_
+    - _Requirements: 6.6, 6.7, 6.8, 6.9_
 
 - [x] 26. 図形のテーマの色・スタイル参照・反転・矢印への対応
   - [x] 26.1 requirements.mdに要件10.15〜10.18を追加し、design.mdに設計を書く
@@ -928,7 +930,7 @@
     - _Requirements: 3.10, 12.3_
   - [x] 27.2 ReportDefinition/ファサード/CLI: 標準フォントから最大数字幅を見積もる `ReportDefinition.EstimateMaxDigitWidthPx` と、
         呼び出し元が指定する `maxDigitWidthPx`・`--max-digit-width` を追加する
-    - _Requirements: 12.3_
+    - _Requirements: 12.3, 12.7_
   - [x] 27.3 Layout: 印刷範囲が無いシートの使用範囲に、描画オブジェクトが占める範囲を含める(`UsedRangeResolver`)
     - _Requirements: 3.10_
   - [ ] 27.4 テストを追加する
