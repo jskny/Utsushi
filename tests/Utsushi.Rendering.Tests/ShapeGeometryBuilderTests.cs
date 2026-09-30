@@ -412,6 +412,52 @@ namespace Utsushi.Rendering.Tests
             AssertBoundsApproximately(body.Bounds, outline.Bounds);
         }
 
+        // -- 要件10.18: 線吹き出しの引き出し線の頂点(矢印を描く位置) -------------------------------------------------
+
+        [Theory]
+        [MemberData(nameof(LineCallouts))]
+        public void TryGetLeaderPointsは線吹き出しでBuildOutlineの引き出し線と同じ頂点を返す(
+            ShapePresetType preset, int segments, bool hasBorder, bool hasAccentBar)
+        {
+            _ = hasBorder;
+            _ = hasAccentBar;
+            var adj = new[] { 0.5, 0.25, 1.5, -0.5, 2.0, -1.0, 2.5, -1.5 };
+
+            Assert.True(ShapeGeometryBuilder.TryGetLeaderPoints(preset, adj, Rect, out var leader));
+            using var outline = ShapeGeometryBuilder.BuildOutline(preset, adj, Rect);
+
+            // 引き出し線は枠線用ジオメトリの最後の輪郭(本体の枠・強調線の後ろ)。
+            Assert.Equal(segments + 1, leader.Length);
+            var outlinePoints = outline.Points;
+            var offset = outlinePoints.Length - leader.Length;
+            for (var i = 0; i < leader.Length; i++)
+            {
+                AssertPoint(outlinePoints[offset + i].X, outlinePoints[offset + i].Y, leader[i]);
+            }
+
+            // 始点は本体側、終点は先端(adj の最後の組)。
+            AssertPoint(Rect.Left + (Rect.Width * 0.25f), Rect.Top + (Rect.Height * 0.5f), leader[0]);
+        }
+
+        [Fact]
+        public void TryGetLeaderPointsは調整値が無ければ既定値の頂点を返す()
+        {
+            Assert.True(ShapeGeometryBuilder.TryGetLeaderPoints(ShapePresetType.Callout1, Array.Empty<double>(), Rect, out var leader));
+
+            // callout1の既定値: (adj1, adj2) = (18750, -8333)、(adj3, adj4) = (112500, -38333)
+            Assert.Equal(2, leader.Length);
+            AssertPoint(Rect.Left + (Rect.Width * -0.08333f), Rect.Top + (Rect.Height * 0.1875f), leader[0]);
+            AssertPoint(Rect.Left + (Rect.Width * -0.38333f), Rect.Top + (Rect.Height * 1.125f), leader[1]);
+        }
+
+        [Theory]
+        [MemberData(nameof(PresetsOtherThanCallouts))]
+        public void TryGetLeaderPointsは線吹き出し以外ではfalseと空の配列を返す(ShapePresetType preset)
+        {
+            Assert.False(ShapeGeometryBuilder.TryGetLeaderPoints(preset, Array.Empty<double>(), Rect, out var leader));
+            Assert.Empty(leader);
+        }
+
         private static void AssertPoint(float expectedX, float expectedY, SKPoint actual)
         {
             const float tolerance = 0.01f;

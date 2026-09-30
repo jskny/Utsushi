@@ -101,6 +101,10 @@ namespace Utsushi.Rendering
                 IsAntialias = true,
                 Style = style.Type == LineEndType.Arrow ? SKPaintStyle.Stroke : SKPaintStyle.Fill,
                 StrokeWidth = lineWidth,
+
+                // 開いた矢印(arrow)の先端が、角の結合(既定はマイター)で線の太さの倍ほど突き出さないようにする。
+                StrokeJoin = SKStrokeJoin.Round,
+                StrokeCap = SKStrokeCap.Round,
             };
 
             using var path = new SKPath();

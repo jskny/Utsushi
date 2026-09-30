@@ -214,7 +214,7 @@ namespace Utsushi.Layout
                         table[shape.Id] = (rect, shape.Preset, shape.FlipHorizontal, shape.FlipVertical);
                         break;
                     case GroupShapeModel group:
-                        table[group.Id] = (rect, null, false, false);
+                        table[group.Id] = (rect, null, group.FlipHorizontal, group.FlipVertical);
                         CollectGroupChildRects(
                             group.Children, rect, group.ChildOffset, group.ChildExtent, table, group.FlipHorizontal, group.FlipVertical);
                         break;
@@ -261,10 +261,12 @@ namespace Utsushi.Layout
                             childRect, shape.Preset, shape.FlipHorizontal ^ flipHorizontal, shape.FlipVertical ^ flipVertical);
                         break;
                     case GroupChildImage image:
-                        table[image.Id] = (childRect, null, false, false);
+                        // 画像そのものは鏡像にしないが、接続点は反転したグループの中での位置に合わせて鏡映する。
+                        table[image.Id] = (childRect, null, flipHorizontal, flipVertical);
                         break;
                     case GroupChildGroup nestedGroup:
-                        table[nestedGroup.Id] = (childRect, null, false, false);
+                        table[nestedGroup.Id] = (
+                            childRect, null, nestedGroup.FlipHorizontal ^ flipHorizontal, nestedGroup.FlipVertical ^ flipVertical);
                         CollectGroupChildRects(
                             nestedGroup.Children, childRect, nestedGroup.ChildOffset, nestedGroup.ChildExtent, table,
                             nestedGroup.FlipHorizontal ^ flipHorizontal, nestedGroup.FlipVertical ^ flipVertical);

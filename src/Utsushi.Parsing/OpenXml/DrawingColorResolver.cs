@@ -24,8 +24,11 @@ namespace Utsushi.Parsing.OpenXml
         /// <summary>テーマの <c>lnStyleLst</c> から読む線の書式の個数の上限(Excelのテーマは3個)。</summary>
         private const int MaxLineStyles = 8;
 
-        /// <summary>テーマが無い、または <c>lnStyleLst</c> に該当が無い場合の線の太さ(ポイント)。</summary>
+        /// <summary>テーマの <c>lnStyleLst</c> に該当が無い場合の線の太さ(ポイント)。</summary>
         internal const double DefaultLineStyleWidthPt = 0.75;
+
+        /// <summary>テーマが無い場合の <c>lnStyleLst</c> の線の太さ(Office 既定テーマ: 6350/12700/19050 EMU)。</summary>
+        private static readonly IReadOnlyList<double> DefaultLineStyleWidthsPt = new[] { 0.5, 1.0, 1.5 };
 
         /// <summary>
         /// テーマが無い場合の配色(Office 2013〜の既定テーマ「Office」)。
@@ -56,7 +59,7 @@ namespace Utsushi.Parsing.OpenXml
         }
 
         /// <summary>テーマの無いブック用(既定の配色)。</summary>
-        public static DrawingColorResolver Default { get; } = new(DefaultScheme, Array.Empty<double>());
+        public static DrawingColorResolver Default { get; } = new(DefaultScheme, DefaultLineStyleWidthsPt);
 
         /// <summary>ブックのテーマ(<c>theme1.xml</c>)から配色と線の書式を読み込む。</summary>
         public static DrawingColorResolver Create(WorkbookPart workbookPart)
