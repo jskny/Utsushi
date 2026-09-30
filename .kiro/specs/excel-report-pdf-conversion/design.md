@@ -332,6 +332,25 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   }
   ```
 - `Build` 時に、定義が参照するシート名・セル番地が `WorkbookModel` 上に実在するかを検証する(要件1.4)。
+- **帳票定義なしモード(要件12)**: 定義をJSONからロードせず、`ReportDefinition.CreateWithoutDefinition(documentName, sheetName)`
+  で既定値の定義を合成する(`SubstitutionFields`は空、`UnsupportedElements = Ignore`、
+  `MaxDigitWidthPx`/`ToleranceMm`は既定値、`PrintAreaOverride = null`)。合成した定義は以降の
+  `IReportModelBuilder.Build`・Substitution・Layout・Renderingに定義ありと同じ形で渡るため、
+  後段のレイヤーには分岐を入れない(帳票固有の分岐を共通レイヤーに置かない方針と同じ考え方)。
+  - ファサード `ReportPdfConverter` は帳票コードを取らないオーバーロード
+    `ConvertWithoutDefinition(Stream, Stream, cellOverrides?, documentName?)` /
+    `ConvertFileWithoutDefinition(string xlsxPath, string outputPath, cellOverrides?, documentName?)` /
+    `ComputeLayoutWithoutDefinition(Stream, cellOverrides?, documentName?)` を持つ。
+    メソッド名を分けるのは、既存の `Convert(string reportCode, …)` と引数の並びが似ており、
+    オーバーロード解決で意図しない方が選ばれるのを避けるため。置換キーの辞書は受け取らない(要件12.4)。
+    帳票定義を使わない呼び出し元のために、帳票定義ルートを取らない `CreateDefault(fontOptions, renderOptions)` も用意する
+    (このとき帳票コードを指定した変換は `ReportDefinitionNotFoundException` になる)。
+  - 対象シートの決定(要件12.2)はParsingレイヤーの責務とし、`WorkbookReadOptions.ActiveSheetOnly = true` で
+    指定する。`OpenXmlWorkbookReader` は `workbookView/@activeTab` のシート(非表示、またはグラフシート等の
+    ワークシートでない場合は、表示されている最初のワークシート)1枚だけを読み、サポート外要素の検出・安全弁もそのシートにだけ適用する
+    (全シートを読んでから1枚を選ぶと、使わないシートの上限超過で失敗しうるため)。
+  - 文書名(要件12.5)は合成定義の `ReportCode` に入れる。これにより PDF タイトル・`&F`/`&Z`・例外の
+    `ReportCode` に既存の経路のまま反映される。
 
 ### 3. Substitution レイヤー (`Utsushi.Substitution`)
 
@@ -576,10 +595,19 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       `["adj1", "adj2"]`を追加し、`CloudCalloutPath`のシグネチャに`adjustmentValues`を
       追加する)。ECMA-376上も雲形の輪郭自体(バンプ)は固定のパスであり、
       調整ガイドは引き出し位置のみに影響するため、この変更は輪郭の近似精度には影響しない。
-    - `callout1`/`callout2`/`callout3`(引き出し線付き吹き出し): 本体は`rect`、
-      そこから矩形の外側の1点(既定は左下方向)へ向けて1〜3本の線分からなる
-      折れ線(引き出し線)を追加する汎用の「N本引き出し線」生成ロジックとして実装する
-      (N=1,2,3をパラメータ化。三角形の塗りつぶしではなく線のみの点でwedge系と異なる)。
+    - 線吹き出し(要件10.14): `callout1`〜`3`/`borderCallout1`〜`3`/`accentCallout1`〜`3`/
+      `accentBorderCallout1`〜`3`の12種は、折れ数N(1〜3)・本体枠線の有無・強調線の有無の
+      組み合わせとして1つのロジック(`LineCalloutOutlinePath`)で描く。塗りつぶし用の`Build`は
+      本体の`rect`のみ、枠線用の`BuildOutline`は「本体の枠線(`borderCallout`系・
+      `accentBorderCallout`系のみ)」「強調線(accent系のみ。引き出し線の始点のX位置に本体の
+      上端から下端までの縦線)」「引き出し線(N+1個の頂点を結ぶ開いた折れ線)」を持つ。
+      ECMA-376上、`callout`(枠なし)系は本体の枠線を描かない(`stroke="false"`)ため、
+      以前の実装(`callout1`〜`3`にも本体の枠線を描いていた)から改めた。
+      引き出し線の頂点は調整ガイド`(adj1=y1, adj2=x1), (adj3=y2, adj4=x2), …`(本体の高さ・幅に
+      対する比率)で決まり、ファイルに無い位置はECMA-376 presetShapeDefinitionsの既定値
+      (折れ数1: 18750, -8333, 112500, -38333。折れ数2: 18750, -8333, 18750, -16667, 112500, -46667。
+      折れ数3: 18750, -8333, 18750, -16667, 100000, -16667, 112963, -8333。いずれも1/100000単位)を補う。
+      ファイル由来の極端な値はwedge系と同じ`CalloutTipAdjLimit`(±5倍)に収める。
     - `star4`/`star5`/`star6`/`star8`(星形、要件10.12): 外接円の半径`R`(=`min(幅,高さ)/2`)と、
       内側の頂点の半径比(ECMA-376既定の調整ガイド名は単一の`adj`)から、外側の頂点と
       内側の頂点を交互に結ぶ`2 * N`角形を組む(`N`=4/5/6/8)。`adj`の既定値(ファイルに
@@ -829,6 +857,9 @@ public enum ShapePresetType
     RightArrow, LeftArrow, UpArrow, DownArrow, LeftRightArrow, UpDownArrow,
     WedgeRectCallout, WedgeRoundRectCallout, WedgeEllipseCallout,
     CloudCallout, Callout1, Callout2, Callout3,             // 追加(拡張フェーズ)
+    BorderCallout1, BorderCallout2, BorderCallout3,         // 追加(要件10.14)
+    AccentCallout1, AccentCallout2, AccentCallout3,         // 追加(要件10.14)
+    AccentBorderCallout1, AccentBorderCallout2, AccentBorderCallout3, // 追加(要件10.14)
     Star4, Star5, Star6, Star8,                             // 追加(拡張フェーズ)
     FlowChartProcess, FlowChartDecision, FlowChartTerminator, // 追加(拡張フェーズ)
     FlowChartInputOutput, FlowChartDocument,                  // 追加(拡張フェーズ)
@@ -1155,6 +1186,8 @@ public sealed record GroupCommand(
   紐付け規則を確定させたうえで対応する。
   `&F`(ファイル名)は、Utsushi が Stream を入力に取り元のファイル名を持たないため、
   帳票コードを代わりに展開している(`&Z`(ファイルパス)も同様の理由で同じ値を使う)。
+  帳票定義なしモード(要件12.5)では帳票コードの代わりに文書名(ファイル変換では拡張子を除いた入力ファイル名)を
+  展開する。Excelの`&F`は拡張子付きのファイル名を出すため、この点はExcelと異なる。
 - **改ページをまたぐ画像・図形**(要件9, 10): 画像・図形のアンカー左上セルが属するページにのみ
   全体を配置し、他のページには何も描画しない(結合セルのような「見えている部分だけ切り出す」対応は
   行わない)。ページ全体からはみ出す部分は `SKCanvas` が自然にクリップするため見た目が崩れる
@@ -1167,7 +1200,8 @@ public sealed record GroupCommand(
   SkiaSharpが直接デコードできず、対応するには追加の変換ライブラリ(ライセンス確認が必要)か
   自前のパーサが要る。対象帳票で実際に必要になった時点で改めて検討する。
 - **図形プリセットのさらなる拡張**(要件10.1, 10.7): 拡張フェーズで星形4種・
-  フローチャート記号7種・吹き出し4種(雲形・引き出し線1〜3本)・接続線5種を追加したが、
+  フローチャート記号7種・吹き出し4種(雲形・引き出し線1〜3本)・接続線5種を追加し、
+  その後、要件10.14で線吹き出しを12種(`callout`/`borderCallout`/`accentCallout`/`accentBorderCallout`の1〜3)に広げたが、
   フローチャート記号の残り(`flowChartOr`等)・自由曲線(`custGeom`)・より複雑な星形
   (`star10`以上)は引き続き「サポート外要素」である。対象帳票で実際に必要になった時点で
   一覧に追記する。
@@ -1226,14 +1260,34 @@ public sealed record GroupCommand(
   現時点では「登録済み自社帳票のみを対象とする」という製品スコープ上のリスク許容として
   対応を見送る。対象帳票の運用形態が変わり任意のExcelファイルを受け付ける可能性が
   出てきた場合は、実装前に必ず再評価すること。
+  帳票定義なしモード(要件12)の追加時に再評価し、security-reviewerが実測した: 「数万段」「理論上」という
+  上の見積もりは誤りで、スタック1MB(Windowsのメインスレッドの既定)では**深さ5,000段・4.2KBの`.xlsx`**で
+  `OpenXmlCompositeElement.Populate`の再帰によりスタックオーバーフローし、**呼び出し元のプロセスごと**落ちる
+  (Linux既定の8MBでは落ちないが、処理時間が深さの二乗で増え、200,000段(75KB)で400秒以上応答しない)。
+  また、定義ありモードでは登録済みのシート名に一致するファイルしか事実上通らないのに対し、定義なしモードは
+  任意の`.xlsx`を受け付けるため、社内の担当者が社外から受け取ったファイルをそのまま変換する経路が現実に生じる。
+  このため「帳票定義の有無は入力の信頼性を変えない」とは言えず、リスクは定義なしモードで大きくなる。
+  対策(SDKのDOMに触れる前に`XmlReader`で要素の深さを検査する、`OpenSettings.MaxCharactersInPart`を設定する)は
+  タスク25で行う。それまでは、定義なしモードに社外から受け取ったファイルを渡さない運用とする
+  (`docs/ライブラリの使い方.md`「帳票定義なしでの変換」)。
 - **放射状グラデーションの`a:path`種別**(要件10.6): `a:path type="circle"`のみを
   厳密に扱い、`"rect"`/`"shape"`は同じ放射状近似にフォールバックする。矩形・図形に
   沿った塗りつぶしの厳密な再現は行わない。
 - **画像・図形の上限がシート単位でありワークブック単位の合算上限が無い**(security-reviewer指摘):
   `MaxImagesPerSheet`/`MaxShapesPerSheet`はシートごとにリセットされるカウンタであり、
   ワークブック全体でシートをまたいだ合算上限は無い。`ReportPdfConverter.Convert`は
-  常に帳票定義の`sheetName`1枚に処理対象を絞る(`WorkbookReadOptions.SheetNameFilter`)ため
+  常に帳票定義の`sheetName`1枚に処理対象を絞り(`WorkbookReadOptions.SheetNameFilter`)、帳票定義なしモード(要件12)も
+  アクティブシート1枚に絞る(`WorkbookReadOptions.ActiveSheetOnly`)ため
   現状の呼び出し経路では実害は無いが、`IWorkbookReader`/`OpenXmlWorkbookReader`は
   `public`であり、`SheetNameFilter`を指定しない(全シート読み取り)呼び出し方をする
   将来のコードが現れた場合はシート数倍の積み上げに対する上限が無い。対象帳票で
   実際に必要になった時点でワークブック単位の合算上限を検討する。
+  なお、同じ名前の`<sheet>`を大量に並べると名前での絞り込みを素通りして同じシートを何度も読めてしまう問題は、
+  絞り込んだ1枚を読んだ時点でループを打ち切ることで解消した(タスク24.9)。
+- **ファイルの内容だけで処理量が決まる経路の上限漏れ**(帳票定義なしモード追加時のsecurity-reviewer指摘。タスク25):
+  (1) 1文書あたりのページ数と印刷範囲の個数(`_xlnm.Print_Area`)に上限が無い。セルがA1とXFD500000の2個だけの
+  1KB未満のファイルでメモリを使い果たし、`S!$A$1:$A$1`を30万個並べた8.6KBのファイルで30万ページのPDFが出る。
+  定義なしモードでは`PrintAreaOverride`が常にnullのため影響が大きい。(2) `<col>`の範囲展開(1要素あたり最大16,384回)に
+  要素数の上限が無い。(3) 手動改ページ(`<brk>`)の件数に上限が無い(Excel自体の上限は1,026件)。
+  (4) 画像の`r:embed`の参照先が無い場合、OpenXml SDKの`ArgumentOutOfRangeException`が`UtsushiException`階層の外へ漏れる
+  (シートの`r:id`は対応済み)。

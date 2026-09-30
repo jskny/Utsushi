@@ -86,6 +86,24 @@ namespace Utsushi.ReportDefinitions.Model
 
         private Dictionary<string, SubstitutionFieldDefinition>? _fieldsByKey;
 
+        /// <summary>
+        /// 帳票定義なしモード(要件12)で使う、既定値だけからなる帳票定義を合成する。
+        /// 置換対象フィールドは持たず、サポート外要素は無視し、印刷範囲はExcelの設定に従う。
+        /// </summary>
+        /// <param name="documentName">
+        /// 帳票コードの代わりに使う文書名(PDFタイトル・ヘッダー/フッターの <c>&amp;F</c>・エラー情報に使われる。要件12.5)。
+        /// </param>
+        /// <param name="sheetName">変換対象のシート名。</param>
+        public static ReportDefinition CreateWithoutDefinition(string documentName, string sheetName) =>
+            new(
+                documentName ?? throw new ArgumentNullException(nameof(documentName)),
+                sheetName ?? throw new ArgumentNullException(nameof(sheetName)),
+                Array.Empty<SubstitutionFieldDefinition>(),
+                DefaultToleranceMm,
+                UnsupportedElementPolicy.Ignore,
+                DefaultMaxDigitWidthPx,
+                PrintAreaOverride: null);
+
         /// <summary>置換キーからフィールド定義を引く。</summary>
         public bool TryGetField(string key, out SubstitutionFieldDefinition field)
         {

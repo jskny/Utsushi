@@ -47,10 +47,19 @@ namespace Utsushi.Cli
                     renderOptions = renderOptions with { MissingGlyphs = MissingGlyphPolicy.Render };
                 }
 
-                using var converter = ReportPdfConverter.CreateDefault(
-                    options.DefinitionRoot, fontOptions, renderOptions);
-                converter.ConvertToFile(
-                    options.ReportCode, options.InputPath, options.Values, options.OutputPath, options.CellOverrides);
+                if (options.ReportCode is null)
+                {
+                    // --report 省略時は帳票定義なしで変換する(要件12.7)。
+                    using var converter = ReportPdfConverter.CreateDefault(fontOptions, renderOptions);
+                    converter.ConvertFileWithoutDefinition(options.InputPath, options.OutputPath, options.CellOverrides);
+                }
+                else
+                {
+                    using var converter = ReportPdfConverter.CreateDefault(
+                        options.DefinitionRoot, fontOptions, renderOptions);
+                    converter.ConvertToFile(
+                        options.ReportCode, options.InputPath, options.Values, options.OutputPath, options.CellOverrides);
+                }
 
                 Console.WriteLine($"PDFを出力しました: {options.OutputPath}");
                 return ExitSuccess;
@@ -83,15 +92,18 @@ namespace Utsushi.Cli
             Console.Error.WriteLine("          [--definitions <帳票定義ルート>] [--set <キー>=<値> ...]");
             Console.Error.WriteLine("          [--override <セル番地>=<値> ...]");
             Console.Error.WriteLine("          [--allow-font-fallback [<代替フォント名>]] [--allow-missing-glyphs] [--outline-text]");
+            Console.Error.WriteLine("  utsushi --input <xlsxパス> --output <pdfパス> [--override <セル番地>=<値> ...] [上記の出力オプション]");
+            Console.Error.WriteLine("          (帳票定義なしで変換する。アクティブシートを変換し、未対応の要素は無視する)");
             Console.Error.WriteLine();
             Console.Error.WriteLine("オプション:");
-            Console.Error.WriteLine("  --report, -r        帳票コード(帳票定義のディレクトリ名)");
+            Console.Error.WriteLine("  --report, -r        帳票コード(帳票定義のディレクトリ名)。省略すると帳票定義なしで変換する");
+            Console.Error.WriteLine("                      (差し込みの --set は使えない。見た目の一致は保証しない)");
             Console.Error.WriteLine("  --input, -i         入力するExcelテンプレート(.xlsx)のパス");
             Console.Error.WriteLine("  --output, -o        出力するPDFのパス");
             Console.Error.WriteLine("  --definitions, -d   帳票定義のルートディレクトリ(既定: ./reports)");
             Console.Error.WriteLine("  --set, -s           置換キーと値。複数指定可(例: --set InvoiceNo=A-001)");
             Console.Error.WriteLine("  --override          セル番地と値。帳票定義への登録有無に関わらず直接上書きする。");
-            Console.Error.WriteLine("                      複数指定可(例: --override B5=INV-0001)。結合セルは");
+            Console.Error.WriteLine("                      複数指定可(例: --override A1=請求書(控))。結合セルは");
             Console.Error.WriteLine("                      先頭(アンカー)セルの番地を指定すること");
             Console.Error.WriteLine("  --allow-font-fallback");
             Console.Error.WriteLine("                      フォント未検出時に代替フォントを使う(見た目が崩れる可能性あり)");
@@ -107,7 +119,7 @@ namespace Utsushi.Cli
         private sealed class CommandLineOptions
         {
             private CommandLineOptions(
-                string reportCode,
+                string? reportCode,
                 string inputPath,
                 string outputPath,
                 string definitionRoot,
@@ -130,7 +142,8 @@ namespace Utsushi.Cli
                 OutlineText = outlineText;
             }
 
-            public string ReportCode { get; }
+            /// <summary>帳票コード。null の場合は帳票定義なしで変換する(要件12.7)。</summary>
+            public string? ReportCode { get; }
 
             public string InputPath { get; }
 
@@ -157,6 +170,7 @@ namespace Utsushi.Cli
 
                 string? reportCode = null, inputPath = null, outputPath = null;
                 var definitionRoot = Path.Combine(Directory.GetCurrentDirectory(), "reports");
+                var definitionRootSpecified = false;
                 var values = new Dictionary<string, string>(StringComparer.Ordinal);
                 var cellOverrides = new Dictionary<string, string>(StringComparer.Ordinal);
                 var allowFallback = false;
@@ -191,6 +205,7 @@ namespace Utsushi.Cli
                         case "--definitions" or "-d":
                             if (!TryTakeValue(args, ref i, "--definitions", out var root, out error)) { return null; }
                             definitionRoot = root!;
+                            definitionRootSpecified = true;
                             break;
 
                         case "--set" or "-s":
@@ -232,9 +247,22 @@ namespace Utsushi.Cli
                     }
                 }
 
-                if (string.IsNullOrWhiteSpace(reportCode))
+                if (reportCode is not null && string.IsNullOrWhiteSpace(reportCode))
                 {
-                    error = "--report は必須です。";
+                    error = "--report の値が空です。帳票定義なしで変換する場合は --report 自体を省略してください。";
+                    return null;
+                }
+
+                if (reportCode is null && values.Count > 0)
+                {
+                    error = "--set(置換キーによる差し込み)は --report と併用してください。"
+                        + "帳票定義なしで変換する場合は --override <セル番地>=<値> を使ってください。";
+                    return null;
+                }
+
+                if (reportCode is null && definitionRootSpecified)
+                {
+                    error = "--definitions は --report と併用してください。";
                     return null;
                 }
 
@@ -251,7 +279,7 @@ namespace Utsushi.Cli
                 }
 
                 return new CommandLineOptions(
-                    reportCode!, inputPath!, outputPath!, definitionRoot, values, cellOverrides,
+                    reportCode, inputPath!, outputPath!, definitionRoot, values, cellOverrides,
                     allowFallback, fallbackFont, allowMissingGlyphs, outlineText);
             }
 

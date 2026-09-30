@@ -39,6 +39,15 @@ namespace Utsushi.Rendering
         private const double CalloutTipAdjLimit = 5.0;
 
         /// <summary>
+        /// 線吹き出しの引き出し線の頂点の調整値(本体の幅・高さに対する比率)の絶対値の上限。
+        /// 線吹き出しは小さな本体から離れたセルを指す使い方が多く、wedge系と同じ±5倍では
+        /// 実在する配置(例: 高さ20ptの本体から150pt下のセル = 7.5倍)の先端が動いてしまうため、
+        /// 座標の発散を防ぐ目的に足りる範囲で大きめにとる(描画オブジェクトの寸法はLayout側で
+        /// <c>MaxDrawingObjectDimensionPt</c>に抑えられているため、座標は有限に収まる)。
+        /// </summary>
+        private const double LineCalloutAdjLimit = 1000.0;
+
+        /// <summary>
         /// star4/5/6/8の内側頂点の半径比(外接円半径に対する比率)の既定値。ECMA-376は
         /// この既定値を単一の調整ガイド<c>adj</c>の既定値(0〜50000。ここでは
         /// <c>既定値 ÷ 50000</c>で比率化したもの)としてプリセットごとに定義しており、
@@ -66,13 +75,18 @@ namespace Utsushi.Rendering
         /// <summary>cloudCalloutのバンプ1つの半径(矩形の短辺に対する比率)。</summary>
         private const double CloudBumpRadiusRatio = 0.16;
 
-        /// <summary>callout1/2/3の引き出し線の始点(本体の幅に対する左端からの比率)。</summary>
-        private const double LeaderStartXRatio = 0.25;
+        /// <summary>
+        /// 線吹き出し(折れ数1)の引き出し線の頂点の既定値。(y1, x1, y2, x2) の順で、本体の高さ・幅に
+        /// 対する比率。ECMA-376 presetShapeDefinitions の callout1/borderCallout1/accentCallout1/
+        /// accentBorderCallout1 の avLst 既定値(18750, -8333, 112500, -38333)。
+        /// </summary>
+        private static readonly double[] LineCallout1DefaultAdj = { 0.1875, -0.08333, 1.125, -0.38333 };
 
-        /// <summary>callout1/2/3の引き出し線の先端(本体の幅・高さに対する比率。0〜1の外側)。</summary>
-        private const double LeaderTipXRatio = -0.25;
+        /// <summary>線吹き出し(折れ数2)の既定値(18750, -8333, 18750, -16667, 112500, -46667)。</summary>
+        private static readonly double[] LineCallout2DefaultAdj = { 0.1875, -0.08333, 0.1875, -0.16667, 1.125, -0.46667 };
 
-        private const double LeaderTipYRatio = 1.75;
+        /// <summary>線吹き出し(折れ数3)の既定値(18750, -8333, 18750, -16667, 100000, -16667, 112963, -8333)。</summary>
+        private static readonly double[] LineCallout3DefaultAdj = { 0.1875, -0.08333, 0.1875, -0.16667, 1.0, -0.16667, 1.12963, -0.08333 };
 
         public static SKPath Build(ShapePresetType preset, IReadOnlyList<double> adjustmentValues, SKRect rect) =>
             preset switch
@@ -91,9 +105,7 @@ namespace Utsushi.Rendering
                 ShapePresetType.WedgeRoundRectCallout => WedgeCalloutPath(rect, BodyKind.RoundRect, adjustmentValues),
                 ShapePresetType.WedgeEllipseCallout => WedgeCalloutPath(rect, BodyKind.Ellipse, adjustmentValues),
                 ShapePresetType.CloudCallout => CloudCalloutPath(rect, adjustmentValues),
-                ShapePresetType.Callout1 => RectPath(rect),
-                ShapePresetType.Callout2 => RectPath(rect),
-                ShapePresetType.Callout3 => RectPath(rect),
+                _ when TryGetLineCallout(preset, out _) => RectPath(rect),
                 ShapePresetType.Star4 => StarPath(rect, 4, StarInnerRadiusRatio(adjustmentValues, Star4DefaultInnerRadiusRatio)),
                 ShapePresetType.Star5 => StarPath(rect, 5, StarInnerRadiusRatio(adjustmentValues, Star5DefaultInnerRadiusRatio)),
                 ShapePresetType.Star6 => StarPath(rect, 6, StarInnerRadiusRatio(adjustmentValues, Star6DefaultInnerRadiusRatio)),
@@ -109,19 +121,58 @@ namespace Utsushi.Rendering
             };
 
         /// <summary>
-        /// 塗りつぶし用のジオメトリとは別に、枠線用のジオメトリを返す。callout1/2/3は本体(矩形)に
-        /// 加えて塗りつぶしを持たない引き出し線(開いた折れ線)を枠線側にのみ追加するため、
+        /// 塗りつぶし用のジオメトリとは別に、枠線用のジオメトリを返す。線吹き出し
+        /// (callout/borderCallout/accentCallout/accentBorderCallout の1〜3)は、塗りつぶしを持たない
+        /// 引き出し線(開いた折れ線)を枠線側にのみ持ち、本体(矩形)の枠線の有無も種類ごとに異なるため、
         /// <see cref="Build"/>(本体のみ)とは異なるパスが必要になる。それ以外のプリセットは
         /// <see cref="Build"/>と同じジオメトリを枠線にも使う。
         /// </summary>
         public static SKPath BuildOutline(ShapePresetType preset, IReadOnlyList<double> adjustmentValues, SKRect rect) =>
-            preset switch
+            TryGetLineCallout(preset, out var callout)
+                ? LineCalloutOutlinePath(rect, callout, adjustmentValues)
+                : Build(preset, adjustmentValues, rect);
+
+        /// <summary>線吹き出しの種類(折れ数・本体枠線の有無・強調線の有無)。</summary>
+        private readonly struct LineCalloutKind
+        {
+            public LineCalloutKind(int segments, bool hasBorder, bool hasAccentBar)
             {
-                ShapePresetType.Callout1 => CalloutOutlinePath(rect, 1),
-                ShapePresetType.Callout2 => CalloutOutlinePath(rect, 2),
-                ShapePresetType.Callout3 => CalloutOutlinePath(rect, 3),
-                _ => Build(preset, adjustmentValues, rect),
-            };
+                Segments = segments;
+                HasBorder = hasBorder;
+                HasAccentBar = hasAccentBar;
+            }
+
+            public int Segments { get; }
+
+            public bool HasBorder { get; }
+
+            public bool HasAccentBar { get; }
+        }
+
+        /// <summary>
+        /// 線吹き出しの種類を返す。ECMA-376上、callout(「枠なし」)は本体の枠線を描かず、
+        /// borderCallout は本体の枠線を描く。accent系は引き出し線の始点のX位置に本体の上端から
+        /// 下端までの縦線(強調線)を加える。
+        /// </summary>
+        private static bool TryGetLineCallout(ShapePresetType preset, out LineCalloutKind kind)
+        {
+            switch (preset)
+            {
+                case ShapePresetType.Callout1: kind = new LineCalloutKind(1, hasBorder: false, hasAccentBar: false); return true;
+                case ShapePresetType.Callout2: kind = new LineCalloutKind(2, hasBorder: false, hasAccentBar: false); return true;
+                case ShapePresetType.Callout3: kind = new LineCalloutKind(3, hasBorder: false, hasAccentBar: false); return true;
+                case ShapePresetType.BorderCallout1: kind = new LineCalloutKind(1, hasBorder: true, hasAccentBar: false); return true;
+                case ShapePresetType.BorderCallout2: kind = new LineCalloutKind(2, hasBorder: true, hasAccentBar: false); return true;
+                case ShapePresetType.BorderCallout3: kind = new LineCalloutKind(3, hasBorder: true, hasAccentBar: false); return true;
+                case ShapePresetType.AccentCallout1: kind = new LineCalloutKind(1, hasBorder: false, hasAccentBar: true); return true;
+                case ShapePresetType.AccentCallout2: kind = new LineCalloutKind(2, hasBorder: false, hasAccentBar: true); return true;
+                case ShapePresetType.AccentCallout3: kind = new LineCalloutKind(3, hasBorder: false, hasAccentBar: true); return true;
+                case ShapePresetType.AccentBorderCallout1: kind = new LineCalloutKind(1, hasBorder: true, hasAccentBar: true); return true;
+                case ShapePresetType.AccentBorderCallout2: kind = new LineCalloutKind(2, hasBorder: true, hasAccentBar: true); return true;
+                case ShapePresetType.AccentBorderCallout3: kind = new LineCalloutKind(3, hasBorder: true, hasAccentBar: true); return true;
+                default: kind = default; return false;
+            }
+        }
 
         private static double StarInnerRadiusRatio(IReadOnlyList<double> values, double defaultValue) => Adj(values, 0, defaultValue);
 
@@ -493,11 +544,20 @@ namespace Utsushi.Rendering
             return path;
         }
 
-        /// <summary>callout1/2/3の枠線用ジオメトリ。本体(矩形)に、塗りつぶしを持たないN本の引き出し折れ線を加える。</summary>
-        private static SKPath CalloutOutlinePath(SKRect rect, int segments)
+        /// <summary>
+        /// 線吹き出しの枠線用ジオメトリ。本体の枠線(borderCallout系のみ)・強調線(accent系のみ)・
+        /// 塗りつぶしを持たない引き出し折れ線からなる。
+        /// </summary>
+        private static SKPath LineCalloutOutlinePath(SKRect rect, LineCalloutKind kind, IReadOnlyList<double> adjustmentValues)
         {
-            var path = RectPath(rect);
-            var points = BuildLeaderPoints(rect, segments);
+            var path = kind.HasBorder ? RectPath(rect) : new SKPath();
+            var points = BuildLeaderPoints(rect, kind.Segments, adjustmentValues);
+
+            if (kind.HasAccentBar)
+            {
+                path.MoveTo(points[0].X, rect.Top);
+                path.LineTo(points[0].X, rect.Bottom);
+            }
 
             path.MoveTo(points[0]);
             for (var i = 1; i < points.Length; i++)
@@ -509,33 +569,34 @@ namespace Utsushi.Rendering
         }
 
         /// <summary>
-        /// callout1/2/3の引き出し線の頂点列(本体上の始点 → <paramref name="segments"/> - 1個の
-        /// 折れ点 → 本体外側の先端)。既定で左下方向へ引き出す(wedge系の既定方向と同じ慣習)。
+        /// 線吹き出しの引き出し線の頂点列(<paramref name="segments"/> + 1 個)。i番目の頂点は
+        /// 調整ガイド (adj(2i+1)=y, adj(2i+2)=x) の組(本体の高さ・幅に対する比率)で決まり、
+        /// ファイルに指定が無い位置はECMA-376の既定値を使う。ファイル由来の極端な値で座標が
+        /// 発散しないよう、<see cref="LineCalloutAdjLimit"/>の範囲に収める。
         /// </summary>
-        private static SKPoint[] BuildLeaderPoints(SKRect rect, int segments)
+        private static SKPoint[] BuildLeaderPoints(SKRect rect, int segments, IReadOnlyList<double> adjustmentValues)
         {
-            var startX = rect.Left + (rect.Width * (float)LeaderStartXRatio);
-            var startY = rect.Bottom;
-            var tipX = rect.Left + (rect.Width * (float)LeaderTipXRatio);
-            var tipY = rect.Top + (rect.Height * (float)LeaderTipYRatio);
+            var defaults = segments switch
+            {
+                1 => LineCallout1DefaultAdj,
+                2 => LineCallout2DefaultAdj,
+                _ => LineCallout3DefaultAdj,
+            };
 
             var points = new SKPoint[segments + 1];
-            points[0] = new SKPoint(startX, startY);
-            points[segments] = new SKPoint(tipX, tipY);
-
-            for (var i = 1; i < segments; i++)
+            for (var i = 0; i < points.Length; i++)
             {
-                var t = (float)i / segments;
-                var bendX = startX + ((tipX - startX) * t);
-                var bendY = startY + ((tipY - startY) * t);
-
-                // 直線的な等分点のままだと折れ線に見えないため、偶奇でわずかにずらす。
-                bendY += (i % 2 == 0 ? -1f : 1f) * (float)(rect.Height * 0.05);
-                points[i] = new SKPoint(bendX, bendY);
+                var yAdj = ClampCalloutAdj(Adj(adjustmentValues, 2 * i, defaults[2 * i]));
+                var xAdj = ClampCalloutAdj(Adj(adjustmentValues, (2 * i) + 1, defaults[(2 * i) + 1]));
+                points[i] = new SKPoint(
+                    rect.Left + (rect.Width * (float)xAdj),
+                    rect.Top + (rect.Height * (float)yAdj));
             }
 
             return points;
         }
+
+        private static double ClampCalloutAdj(double value) => Math.Max(-LineCalloutAdjLimit, Math.Min(LineCalloutAdjLimit, value));
 
         private static float Clamp(float value, float min, float max) => Math.Max(min, Math.Min(max, value));
     }

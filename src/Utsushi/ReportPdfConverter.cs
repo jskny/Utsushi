@@ -86,6 +86,39 @@ namespace Utsushi
         }
 
         /// <summary>
+        /// 帳票定義を使わない構成(OpenXml解析 + SkiaSharp描画)でコンバータを組み立てる(要件12)。
+        /// </summary>
+        /// <remarks>
+        /// 帳票定義なしの変換(<see cref="ConvertWithoutDefinition"/> 等)だけを使う呼び出し元向け。
+        /// この構成で帳票コードを指定して変換すると <see cref="ReportDefinitionNotFoundException"/> になる。
+        /// </remarks>
+        /// <param name="fontOptions">フォント解決の設定。null の場合は厳格モード。</param>
+        /// <param name="renderOptions">PDF出力の設定。null の場合は既定(フォント埋め込み)。</param>
+        public static ReportPdfConverter CreateDefault(
+            FontResolverOptions? fontOptions = null,
+            PdfRenderOptions? renderOptions = null)
+        {
+            var fontResolver = new FontResolver(fontOptions);
+            try
+            {
+                var fontMetrics = new SkiaFontMetricsProvider(fontResolver);
+                return new ReportPdfConverter(
+                    new Utsushi.Parsing.OpenXml.OpenXmlWorkbookReader(),
+                    new NoReportDefinitionRepository(),
+                    new ReportModelBuilder(),
+                    new Substitution.CellSubstitutor(),
+                    new ReportLayoutEngine(fontMetrics),
+                    new SkiaPdfRenderer(fontMetrics, renderOptions),
+                    fontResolver);
+            }
+            catch
+            {
+                fontResolver.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>
         /// 変換を実行し、PDFを <paramref name="output"/> へ書き出す。
         /// </summary>
         /// <param name="reportCode">帳票コード。</param>
@@ -121,7 +154,64 @@ namespace Utsushi
         {
             using var input = OpenInputFile(xlsxPath, reportCode);
             var layout = ComputeLayout(reportCode, input, values, cellOverrides);
+            RenderToFile(layout, outputPath);
+        }
 
+        /// <summary>
+        /// 帳票定義を使わずに変換し、PDFを <paramref name="output"/> へ書き出す(要件12)。
+        /// </summary>
+        /// <remarks>
+        /// ブックのアクティブシート(非表示なら表示されている最初のシート)1枚を、既定値の帳票定義
+        /// (置換キーなし・サポート外要素は無視・印刷範囲はExcelの設定)で変換する。
+        /// 見た目の一致を保証しないベストエフォートの変換である(<c>.kiro/steering/product.md</c>)。
+        /// </remarks>
+        /// <param name="xlsxStream">入力となるExcelファイルのストリーム。</param>
+        /// <param name="output">PDFの出力先。</param>
+        /// <param name="cellOverrides">セル番地(A1形式) → 上書き後の文字列(要件2.7)。不要なら null。</param>
+        /// <param name="documentName">
+        /// PDFのタイトル・ヘッダー/フッターのファイル名(<c>&amp;F</c>)・エラー情報に使う名前。null の場合は空文字列。
+        /// </param>
+        /// <exception cref="UtsushiException">入力ファイル・レイアウト・描画のいずれかで失敗した場合。</exception>
+        public void ConvertWithoutDefinition(
+            Stream xlsxStream,
+            Stream output,
+            IReadOnlyDictionary<string, string>? cellOverrides = null,
+            string? documentName = null)
+        {
+            if (output is null)
+            {
+                throw new ArgumentNullException(nameof(output));
+            }
+
+            var layout = ComputeLayoutWithoutDefinition(xlsxStream, cellOverrides, documentName);
+            _renderer.Render(layout, output);
+        }
+
+        /// <summary>
+        /// 帳票定義を使わずに変換し、PDFをファイルへ書き出す(要件12。失敗時に不完全なファイルを残さない)。
+        /// </summary>
+        /// <param name="xlsxPath">入力Excelファイルのパス。</param>
+        /// <param name="outputPath">PDFの出力先パス。</param>
+        /// <param name="cellOverrides">セル番地(A1形式) → 上書き後の文字列(要件2.7)。不要なら null。</param>
+        /// <param name="documentName">
+        /// PDFのタイトル・ヘッダー/フッターのファイル名・エラー情報に使う名前。null の場合は入力ファイル名から
+        /// 拡張子を除いたもの(要件12.5)。ファイル名に取引先名などを含み、PDFのメタデータやログに出したくない場合に指定する。
+        /// </param>
+        public void ConvertFileWithoutDefinition(
+            string xlsxPath,
+            string outputPath,
+            IReadOnlyDictionary<string, string>? cellOverrides = null,
+            string? documentName = null)
+        {
+            documentName ??= Path.GetFileNameWithoutExtension(xlsxPath ?? throw new ArgumentNullException(nameof(xlsxPath)));
+
+            using var input = OpenInputFile(xlsxPath, documentName);
+            var layout = ComputeLayoutWithoutDefinition(input, cellOverrides, documentName);
+            RenderToFile(layout, outputPath);
+        }
+
+        private void RenderToFile(PagedLayout layout, string outputPath)
+        {
             if (_renderer is SkiaPdfRenderer skia)
             {
                 skia.RenderToFile(layout, outputPath);
@@ -173,6 +263,52 @@ namespace Utsushi
                 definition.SheetName);
 
             var workbook = ReadWorkbook(xlsxStream, readOptions, definition);
+            return BuildLayout(workbook, definition, values, cellOverrides);
+        }
+
+        /// <summary>
+        /// 帳票定義を使わずに、PDF描画の手前まで(Parsing → 既定値の帳票定義 → Substitution → Layout)を実行する(要件12)。
+        /// </summary>
+        public PagedLayout ComputeLayoutWithoutDefinition(
+            Stream xlsxStream,
+            IReadOnlyDictionary<string, string>? cellOverrides = null,
+            string? documentName = null)
+        {
+            if (xlsxStream is null)
+            {
+                throw new ArgumentNullException(nameof(xlsxStream));
+            }
+
+            var name = documentName ?? string.Empty;
+            var readOptions = new WorkbookReadOptions(
+                UnsupportedElementBehavior.Ignore,
+                name,
+                SheetNameFilter: null,
+                ActiveSheetOnly: true);
+
+            var workbook = _workbookReader.Read(xlsxStream, readOptions);
+            if (workbook.Sheets.Count != 1)
+            {
+                // IWorkbookReader の契約(ActiveSheetOnly なら1枚だけ返す)に反する実装が差し替えられた場合に、
+                // アクティブでないシートを黙って変換しないよう止める。
+                throw new InvalidOperationException(
+                    $"{nameof(IWorkbookReader)} が {nameof(WorkbookReadOptions.ActiveSheetOnly)} を指定したのに "
+                    + $"{workbook.Sheets.Count} 枚のシートを返しました。");
+            }
+
+            var definition = ReportDefinition.CreateWithoutDefinition(name, workbook.Sheets[0].Name);
+
+            return BuildLayout(workbook, definition, NoValues, cellOverrides);
+        }
+
+        private static readonly IReadOnlyDictionary<string, string> NoValues = new Dictionary<string, string>();
+
+        private PagedLayout BuildLayout(
+            WorkbookModel workbook,
+            ReportDefinition definition,
+            IReadOnlyDictionary<string, string> values,
+            IReadOnlyDictionary<string, string>? cellOverrides)
+        {
             var report = _modelBuilder.Build(workbook, definition);
             var substituted = _substitutor.Apply(report, values);
 
@@ -228,5 +364,20 @@ namespace Utsushi
         }
 
         public void Dispose() => _ownedResources?.Dispose();
+
+        /// <summary>
+        /// 帳票定義ルートを持たない構成(<see cref="CreateDefault(FontResolverOptions?, PdfRenderOptions?)"/>)で使う。
+        /// 帳票コードを指定した変換は常に「帳票定義が見つからない」エラーにする(要件1.4)。
+        /// </summary>
+        private sealed class NoReportDefinitionRepository : IReportDefinitionRepository
+        {
+            public ReportDefinition Load(string reportCode) =>
+                throw new ReportDefinitionNotFoundException(
+                    reportCode,
+                    $"帳票コード '{reportCode}' の帳票定義が見つかりません"
+                    + "(帳票定義のルートディレクトリを指定せずに作成したコンバータです)。");
+
+            public IReadOnlyCollection<string> ListReportCodes() => Array.Empty<string>();
+        }
     }
 }

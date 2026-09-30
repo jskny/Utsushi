@@ -36,7 +36,7 @@
 ## 必ず守る制約
 
 - **商用ライブラリ禁止・Office Interop禁止**(`.kiro/steering/tech.md`)。新規依存ライブラリを追加する前にライセンスを確認する。
-- 対象は登録済みの自社帳票のみ。任意のExcelファイルを汎用的に扱う機能は追加しない。
+- 対象は登録済みの自社帳票が主。帳票定義なしモード(要件12)は社内のExcelをベストエフォートでPDF化する補助経路であり、これを足がかりに任意のExcelファイルを汎用的に扱うための機能(汎用レンダラ化)は追加しない。
 - レイヤー間の依存は一方向(`Parsing → ReportDefinition → Substitution → Layout → Rendering`)。上位レイヤーが下位レイヤーの実装詳細を直接参照しない。
 - 帳票固有の分岐は帳票定義データ側に置き、共通レイヤーのコードにハードコードしない。
 
@@ -75,6 +75,10 @@ dotnet run --project src/Utsushi.Cli -- \
   --report invoice --input samples/reports/invoice/template.xlsx \
   --output /tmp/invoice.pdf --definitions samples/reports \
   --set CustomerName="株式会社サンプル 御中" --set InvoiceNo="INV-0001" --set TotalAmount="¥1,000"
+
+# 帳票定義なしで変換する(--report を省略。--set・--definitions は使えない。アクティブシートを変換し、未対応の要素は無視する)
+dotnet run --project src/Utsushi.Cli -- \
+  --input samples/reports/invoice/template.xlsx --output /tmp/no-definition.pdf --allow-font-fallback
 ```
 
 > 開発環境に対象フォント(MS PGothic等)が無い場合、既定の厳格モードでは `FontNotAvailableException` になる。
