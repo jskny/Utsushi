@@ -151,6 +151,44 @@ internal static class Program
             png: PlaceholderPng.CreateSolidColor(30, 30, r: 0xC0, g: 0x00, b: 0x00),
             rotationDegrees: 20.0);
 
+        // 線吹き出し・図形のスタイル参照・反転・矢印の見本(要件10.13, 10.16〜10.18)。小計〜合計の行(25〜27行目)の
+        // 左側(A〜C列。幅 21 + 147 + 42 = 210pt、合計の見出しの D 列より左)と28行目は空いているため、ここに並べる。
+        // すべて A25 を起点に offsetXPt で横に並べる。
+        //
+        // 線吹き出し(borderCallout2): 枠の右辺の中央から右へ折れ、右下へ伸びる引き出し線の先端に矢印(tailEnd)を付ける。
+        // 調整値は枠の高さ・幅に対する比率(1/100000 単位): 始点(y, x) = (50%, 100%)、折れ点 = (50%, 125%)、
+        // 終点 = (150%, 160%)。枠(30〜110pt)に対し、終点は x = 30 + 80×1.6 = 158pt、y = 4 + 18×1.5 = 31pt。
+        builder.SetShape(
+            row: 25, column: 1, offsetXPt: 30.0, offsetYPt: 4.0, widthPt: 80.0, heightPt: 18.0,
+            preset: A.ShapeTypeValues.BorderCallout2,
+            fillHex: "FFFFFF", outlineHex: "C00000", text: "要確認",
+            options: new SpreadsheetBuilder.ShapeOptions
+            {
+                Adjustments = new[]
+                {
+                    ("adj1", 50000), ("adj2", 100000),
+                    ("adj3", 50000), ("adj4", 125000),
+                    ("adj5", 150000), ("adj6", 160000),
+                },
+                TailEnd = A.LineEndValues.Triangle,
+            });
+
+        // Excel で図形を挿入しただけの状態(spPr に色の指定が無く、xdr:style の lnRef/fillRef/fontRef で色が決まる)の楕円。
+        // サンプルのブックはテーマを持たないため、Office 既定の配色(accent1 = 4472C4、lt1 = 白)で解決される。
+        // 吹き出しの矢印の先端(158pt, 31pt)がこの楕円の左端に届く。
+        builder.SetShape(
+            row: 25, column: 1, offsetXPt: 160.0, offsetYPt: 18.0, widthPt: 28.0, heightPt: 28.0,
+            preset: A.ShapeTypeValues.Ellipse,
+            fillHex: null, outlineHex: null, text: "済",
+            options: new SpreadsheetBuilder.ShapeOptions { UseExcelDefaultStyle = true });
+
+        // 左右反転した右矢印(左向きに描かれる)。楕円の右側から楕円を指す。
+        builder.SetShape(
+            row: 25, column: 1, offsetXPt: 191.0, offsetYPt: 26.0, widthPt: 17.0, heightPt: 12.0,
+            preset: A.ShapeTypeValues.RightArrow,
+            fillHex: "2E8B57", outlineHex: null,
+            options: new SpreadsheetBuilder.ShapeOptions { FlipHorizontal = true });
+
         // 宛先・発行情報
         builder.Merge("A3:C3");
         builder.SetText(3, 1, "株式会社サンプル商事 御中", Style.CustomerName);

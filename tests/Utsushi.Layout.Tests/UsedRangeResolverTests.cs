@@ -49,9 +49,11 @@ namespace Utsushi.Layout.Tests
                 drawingObjects);
 
         /// <summary><paramref name="rows"/>×<paramref name="columns"/>(A1起点)にセルを持つシート。</summary>
-        private static SheetModel SheetWithCells(int rows, int columns, params DrawingObjectModel[] drawingObjects) =>
-            UniformSheet(rows, columns, columnWidth: 10.0, rowHeightPt: RowHeightPt, pageSetup: NoMarginA4())
-                with { DrawingObjects = drawingObjects };
+        private static SheetModel SheetWithCells(int rows, int columns, params DrawingObjectModel[] drawingObjects)
+        {
+            var sheet = UniformSheet(rows, columns, columnWidth: 10.0, rowHeightPt: RowHeightPt, pageSetup: NoMarginA4());
+            return sheet with { DrawingObjects = drawingObjects };
+        }
 
         private static ShapeModel Shape(string anchorCell, PointPt anchorOffset, AnchorExtent extent) =>
             new(
@@ -143,6 +145,97 @@ namespace Utsushi.Layout.Tests
             Assert.Equal(
                 CellRange.Parse("A1:B2"),
                 UsedRangeResolver.GetOccupiedRange(sheet, FixedShape("A1", colA + 1.0, 11.0), 7.0));
+        }
+
+        // -- 非表示の列・行(幅・高さ0として扱い、描画時の配置と一致させる) ---------------------------------
+
+        [Fact]
+        public void 固定サイズの図形の右側に非表示の列が挟まると非表示の列を幅0としてたどる()
+        {
+            // B2 に幅200ptの図形、C〜F列が非表示。表示される列は B(52.5)・G・H・I(各52.5)で、
+            // 200 = 52.5×3 + 42.5 なので I 列に掛かる(非表示の列を幅52.5とみなすと E 列で止まってしまう)。
+            var sheet = EmptySheet() with { HiddenColumns = new HashSet<int> { 3, 4, 5, 6 } };
+
+            var range = UsedRangeResolver.GetOccupiedRange(sheet, FixedShape("B2", 200.0, 10.0), 7.0);
+
+            Assert.Equal(CellRange.Parse("B2:I2"), range);
+        }
+
+        [Fact]
+        public void 固定サイズの図形の下側に非表示の行が挟まると非表示の行を高さ0としてたどる()
+        {
+            // B2 に高さ50ptの図形、3〜5行目が非表示。表示される行は 2(20)・6(20)・7(20)で、50 = 20×2 + 10 → 7行目。
+            var sheet = EmptySheet() with { HiddenRows = new HashSet<int> { 3, 4, 5 } };
+
+            var range = UsedRangeResolver.GetOccupiedRange(sheet, FixedShape("B2", 10.0, 50.0), 7.0);
+
+            Assert.Equal(CellRange.Parse("B2:B7"), range);
+        }
+
+        [Fact]
+        public void 起点のセル自体が非表示の列や行でも幅0としてたどる()
+        {
+            // 起点 B2 の列Bと行2が非表示。描画時は C 列・3行目の左上に置かれる。
+            var sheet = EmptySheet() with
+            {
+                HiddenColumns = new HashSet<int> { 2 },
+                HiddenRows = new HashSet<int> { 2 },
+            };
+
+            var range = UsedRangeResolver.GetOccupiedRange(sheet, FixedShape("B2", 60.0, 30.0), 7.0);
+
+            // C(52.5) → D に掛かる。3行目(20) → 4行目に掛かる。
+            Assert.Equal(CellRange.Parse("B2:D4"), range);
+        }
+
+        [Fact]
+        public void 非表示の列が続いても4096回で打ち切られる()
+        {
+            var sheet = EmptySheet() with { HiddenColumns = new HashSet<int>(Enumerable.Range(1, 5000)) };
+
+            var range = UsedRangeResolver.GetOccupiedRange(sheet, FixedShape("A1", 10.0, 10.0), 7.0);
+
+            Assert.Equal(1 + 4096, range.LastColumn);
+        }
+
+        [Fact]
+        public void 非表示の列と行を挟む図形の終端のセルは描画時の配置と一致する()
+        {
+            // 図形の終端(描画時の配置 = PageCommandBuilder)が、使用範囲の最後の列・行の内側に入ること。
+            var sheet = EmptySheet(null, FixedShape("B2", 200.0, 50.0)) with
+            {
+                HiddenColumns = new HashSet<int> { 3, 4, 5, 6 },
+                HiddenRows = new HashSet<int> { 3, 4, 5 },
+            };
+
+            var page = Assert.Single(_engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+
+            Assert.Equal((2, 9), page.ColumnRange);
+            Assert.Equal((2, 7), page.RowRange);
+
+            // 印刷範囲 B2:I7 の表示される列は B・G・H・I(4×52.5 = 210pt)、行は 2・6・7(3×20 = 60pt)。
+            var shape = Assert.Single(Shapes(page));
+            Assert.Equal(0.0, shape.Rect.Left, 3);
+            Assert.Equal(0.0, shape.Rect.Top, 3);
+            Assert.Equal(200.0, shape.Rect.Right, 3);
+            Assert.Equal(50.0, shape.Rect.Bottom, 3);
+            Assert.InRange(shape.Rect.Right, ColumnWidthPt * 3, ColumnWidthPt * 4);
+            Assert.InRange(shape.Rect.Bottom, RowHeightPt * 2, RowHeightPt * 3);
+        }
+
+        [Fact]
+        public void 二セルアンカーの終端は非表示の列や行があっても番地のまま()
+        {
+            // 二セルアンカーは終端のセルが明示されているため、列幅・行高をたどらない。
+            var sheet = EmptySheet() with
+            {
+                HiddenColumns = new HashSet<int> { 3, 4 },
+                HiddenRows = new HashSet<int> { 3 },
+            };
+
+            var range = UsedRangeResolver.GetOccupiedRange(sheet, SpanShape("B2", "E5", 5.0, 5.0), 7.0);
+
+            Assert.Equal(CellRange.Parse("B2:E5"), range);
         }
 
         [Theory]

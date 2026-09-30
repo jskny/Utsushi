@@ -74,7 +74,7 @@ internal sealed class SpreadsheetBuilder
         public ShapeSpec(
             int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
             A.ShapeTypeValues preset, string? fillHex, string? outlineHex, double rotationDegrees, string? text,
-            GradientSpec? gradient = null)
+            GradientSpec? gradient = null, ShapeOptions? options = null)
         {
             Row = row;
             Column = column;
@@ -88,6 +88,7 @@ internal sealed class SpreadsheetBuilder
             RotationDegrees = rotationDegrees;
             Text = text;
             Gradient = gradient;
+            Options = options ?? new ShapeOptions();
         }
 
         public int Row { get; }
@@ -113,6 +114,33 @@ internal sealed class SpreadsheetBuilder
         public string? Text { get; }
 
         public GradientSpec? Gradient { get; }
+
+        public ShapeOptions Options { get; }
+    }
+
+    /// <summary>
+    /// 図形(<see cref="SetShape"/>)の追加指定。既定値はすべて「指定なし」で、既存のサンプルの出力を変えない。
+    /// </summary>
+    internal sealed class ShapeOptions
+    {
+        /// <summary>
+        /// 調整値(<c>a:avLst/a:gd</c>。名前と <c>val</c> の値の組。例: <c>("adj1", 18750)</c>)。
+        /// 線吹き出しの引き出し線の位置など、プリセットの形を決める(要件10.13)。
+        /// </summary>
+        public IReadOnlyList<(string Name, int Value)> Adjustments { get; set; } = Array.Empty<(string, int)>();
+
+        /// <summary>枠線の終端の矢印(<c>a:ln/a:tailEnd/@type</c>。要件10.18)。null なら矢印なし。</summary>
+        public A.LineEndValues? TailEnd { get; set; }
+
+        /// <summary>左右反転(<c>a:xfrm/@flipH</c>。要件10.17)。</summary>
+        public bool FlipHorizontal { get; set; }
+
+        /// <summary>
+        /// Excel が挿入した図形に付ける既定のスタイル(<c>xdr:style</c> の <c>lnRef</c>/<c>fillRef</c>/<c>fontRef</c>。要件10.16)
+        /// を付ける。true の場合、<c>fillHex</c>/<c>outlineHex</c> が null なら <c>spPr</c> に塗りつぶし・枠線を書かず、
+        /// 色をスタイルから決めさせる(Excel で図形を挿入しただけの状態を再現する)。
+        /// </summary>
+        public bool UseExcelDefaultStyle { get; set; }
     }
 
     /// <summary>グラデーション塗り(要件10.6)1つぶんの指定。</summary>
@@ -318,17 +346,20 @@ internal sealed class SpreadsheetBuilder
     /// <param name="outlineHex">枠線色(6桁16進)。nullは枠線無し。</param>
     /// <param name="rotationDegrees">回転角(度、時計回り)。</param>
     /// <param name="text">図形内テキスト。nullはテキスト無し。</param>
+    /// <param name="options">調整値・矢印・反転・既定のスタイルの指定(<see cref="ShapeOptions"/>)。nullは指定なし。</param>
     /// <returns>
     /// この図形のハンドル(<see cref="SetConnector"/>の接続先指定に使う。要件10.11)。
     /// 実際の<c>NonVisualDrawingProperties/@id</c>とは異なり、このビルダー内でだけ意味を持つ通し番号。
     /// </returns>
     public int SetShape(
         int row, int column, double offsetXPt, double offsetYPt, double widthPt, double heightPt,
-        A.ShapeTypeValues preset, string? fillHex, string? outlineHex, double rotationDegrees = 0, string? text = null)
+        A.ShapeTypeValues preset, string? fillHex, string? outlineHex, double rotationDegrees = 0, string? text = null,
+        ShapeOptions? options = null)
     {
         var handle = _shapes.Count;
         _shapes.Add(new ShapeSpec(
-            row, column, offsetXPt, offsetYPt, widthPt, heightPt, preset, fillHex, outlineHex, rotationDegrees, text));
+            row, column, offsetXPt, offsetYPt, widthPt, heightPt, preset, fillHex, outlineHex, rotationDegrees, text,
+            options: options));
         return handle;
     }
 
@@ -761,25 +792,58 @@ internal sealed class SpreadsheetBuilder
         var heightEmu = (long)Math.Round(shape.HeightPt * EmusPerPoint);
         var rotationEmu = (int)Math.Round(shape.RotationDegrees * 60000.0);
 
-        OpenXmlElement fill = shape.Gradient is { } gradient
+        var options = shape.Options;
+
+        // 既定のスタイルを付ける図形は、色の指定が無ければ spPr に塗りつぶしを書かない(スタイルの fillRef で決まる)。
+        OpenXmlElement? fill = shape.Gradient is { } gradient
             ? BuildGradientFill(gradient)
             : shape.FillHex is { } fillHex
                 ? new A.SolidFill(new A.RgbColorModelHex { Val = fillHex })
-                : new A.NoFill();
+                : options.UseExcelDefaultStyle ? null : new A.NoFill();
+
+        var transform = new A.Transform2D(
+            new A.Offset { X = 0L, Y = 0L },
+            new A.Extents { Cx = widthEmu, Cy = heightEmu })
+        {
+            Rotation = rotationEmu,
+        };
+        if (options.FlipHorizontal)
+        {
+            transform.HorizontalFlip = true;
+        }
+
+        var adjustValueList = new A.AdjustValueList();
+        foreach (var (name, value) in options.Adjustments)
+        {
+            adjustValueList.Append(new A.ShapeGuide
+            {
+                Name = name,
+                Formula = "val " + value.ToString(CultureInfo.InvariantCulture),
+            });
+        }
 
         var shapeProperties = new Xdr.ShapeProperties(
-            new A.Transform2D(
-                new A.Offset { X = 0L, Y = 0L },
-                new A.Extents { Cx = widthEmu, Cy = heightEmu })
-            {
-                Rotation = rotationEmu,
-            },
-            new A.PresetGeometry(new A.AdjustValueList()) { Preset = shape.Preset },
-            fill);
+            transform,
+            new A.PresetGeometry(adjustValueList) { Preset = shape.Preset });
+        if (fill is not null)
+        {
+            shapeProperties.Append(fill);
+        }
 
         if (shape.OutlineHex is { } outlineHex)
         {
-            shapeProperties.Append(new A.Outline(new A.SolidFill(new A.RgbColorModelHex { Val = outlineHex })) { Width = 12700 });
+            var outline = new A.Outline(new A.SolidFill(new A.RgbColorModelHex { Val = outlineHex })) { Width = 12700 };
+            if (options.TailEnd is { } tailEnd)
+            {
+                outline.Append(new A.TailEnd { Type = tailEnd });
+            }
+
+            shapeProperties.Append(outline);
+        }
+        else if (options.TailEnd is { } tailEnd)
+        {
+            // 色はスタイルの lnRef から決めさせ、矢印だけを指定する。
+            shapeProperties.Append(new A.Outline(new A.TailEnd { Type = tailEnd }));
         }
 
         var visualShape = new Xdr.Shape(
@@ -787,6 +851,11 @@ internal sealed class SpreadsheetBuilder
                 new Xdr.NonVisualDrawingProperties { Id = id, Name = "Shape" + id.ToString(CultureInfo.InvariantCulture) },
                 new Xdr.NonVisualShapeDrawingProperties()),
             shapeProperties);
+
+        if (options.UseExcelDefaultStyle)
+        {
+            visualShape.Append(BuildExcelDefaultShapeStyle());
+        }
 
         if (shape.Text is { } text)
         {
@@ -810,6 +879,21 @@ internal sealed class SpreadsheetBuilder
             visualShape,
             new Xdr.ClientData());
     }
+
+    /// <summary>
+    /// Excel が挿入した図形に付ける既定のスタイル(<c>xdr:style</c>、要件10.16)を組み立てる。
+    /// 枠線は accent1 を50%暗くした色・テーマの2番目の線の太さ、塗りつぶしは accent1、文字色は lt1(白)。
+    /// </summary>
+    private static Xdr.ShapeStyle BuildExcelDefaultShapeStyle() =>
+        new(
+            new A.LineReference(
+                new A.SchemeColor(new A.Shade { Val = 50000 }) { Val = A.SchemeColorValues.Accent1 })
+            {
+                Index = 2U,
+            },
+            new A.FillReference(new A.SchemeColor { Val = A.SchemeColorValues.Accent1 }) { Index = 1U },
+            new A.EffectReference(new A.SchemeColor { Val = A.SchemeColorValues.Accent1 }) { Index = 0U },
+            new A.FontReference(new A.SchemeColor { Val = A.SchemeColorValues.Light1 }) { Index = A.FontCollectionIndexValues.Minor });
 
     /// <summary>グラデーション塗り(<c>a:gradFill</c>、要件10.6)を組み立てる。</summary>
     private static A.GradientFill BuildGradientFill(GradientSpec gradient)

@@ -286,6 +286,113 @@ namespace Utsushi.Parsing.Tests
             Assert.Equal(2.0, connector.Outline.WidthPt, 6);
         }
 
+        // -- 要件10.16: 接続線の線を明示的に消した場合 -------------------------------------------------
+        // 接続線は Outline が null のとき Rendering が既定の黒い線(1pt)を補うため、線を明示的に消した場合は
+        // 透明・0pt の線にして区別する。a:ln も xdr:style も無い場合だけが null(既定の黒い線)になる。
+
+        /// <summary>線の番号(lnRef/@idx)が0の、線を持たない接続線のスタイル。</summary>
+        private const string ConnectorStyleWithoutLine =
+            "<xdr:style>"
+            + "<a:lnRef idx=\"0\"><a:schemeClr val=\"accent1\"/></a:lnRef>"
+            + "<a:fillRef idx=\"0\"><a:schemeClr val=\"accent1\"/></a:fillRef>"
+            + "<a:effectRef idx=\"0\"><a:schemeClr val=\"accent1\"/></a:effectRef>"
+            + "<a:fontRef idx=\"minor\"><a:schemeClr val=\"tx1\"/></a:fontRef>"
+            + "</xdr:style>";
+
+        private static void AssertTransparentLine(ShapeOutline? outline)
+        {
+            Assert.NotNull(outline);
+            Assert.Equal(ArgbColor.Transparent, outline!.Color);
+            Assert.True(outline.Color.IsTransparent);
+            Assert.Equal(0.0, outline.WidthPt);
+            Assert.Null(outline.HeadEnd);
+            Assert.Null(outline.TailEnd);
+        }
+
+        [Fact]
+        public void 接続線の線のnoFillは透明の線になる()
+        {
+            var connector = ReadConnector(ConnectorAnchor(spPrExtra: "<a:ln w=\"12700\"><a:noFill/></a:ln>"));
+
+            AssertTransparentLine(connector.Outline);
+        }
+
+        [Fact]
+        public void 接続線の線のnoFillはスタイルの線より優先して透明の線になる()
+        {
+            var connector = ReadConnector(
+                ConnectorAnchor(spPrExtra: "<a:ln w=\"12700\"><a:noFill/></a:ln>", style: ExcelDefaultConnectorStyle),
+                OfficeThemeXml());
+
+            AssertTransparentLine(connector.Outline);
+        }
+
+        [Fact]
+        public void 接続線のスタイルのlnRefの番号が0なら透明の線になる()
+        {
+            var connector = ReadConnector(ConnectorAnchor(style: ConnectorStyleWithoutLine), OfficeThemeXml());
+
+            AssertTransparentLine(connector.Outline);
+        }
+
+        [Fact]
+        public void 接続線のスタイルの線の番号が0でもspPrに線の色があればその線になる()
+        {
+            var connector = ReadConnector(
+                ConnectorAnchor(
+                    spPrExtra: "<a:ln><a:solidFill><a:srgbClr val=\"00FF00\"/></a:solidFill></a:ln>",
+                    style: ConnectorStyleWithoutLine),
+                OfficeThemeXml());
+
+            Assert.Equal(Hex("00FF00"), connector.Outline!.Color);
+            Assert.Equal(1.0, connector.Outline.WidthPt, 6);
+        }
+
+        [Fact]
+        public void 接続線に線の指定もスタイルも無ければnullになり描画時に既定の線が補われる()
+        {
+            var connector = ReadConnector(ConnectorAnchor());
+
+            Assert.Null(connector.Outline);
+        }
+
+        [Fact]
+        public void 接続線の線に色が無くスタイルも無ければnullになる()
+        {
+            // 太さだけの a:ln は線を消す指定ではない。
+            var connector = ReadConnector(ConnectorAnchor(spPrExtra: "<a:ln w=\"25400\"/>"));
+
+            Assert.Null(connector.Outline);
+        }
+
+        [Fact]
+        public void 図形の線のnoFillは透明の線ではなくnullのまま()
+        {
+            // 図形は Outline が null なら枠線を描かない(既定の線を補うのは接続線だけ)。
+            var shape = ReadShape(ShapeAnchor(spPrExtra: "<a:ln w=\"12700\"><a:noFill/></a:ln>"));
+
+            Assert.Null(shape.Outline);
+        }
+
+        [Fact]
+        public void グループ内の接続線も線を消した場合は透明の線になる()
+        {
+            var sheet = Read(
+                GroupAnchor(
+                    ConnectorElement(spPrExtra: "<a:ln w=\"12700\"><a:noFill/></a:ln>", id: 11U)
+                    + ConnectorElement(style: ConnectorStyleWithoutLine, id: 12U)
+                    + ConnectorElement(id: 13U)),
+                OfficeThemeXml());
+
+            var group = Assert.Single(sheet.DrawingObjects.OfType<GroupShapeModel>());
+            var connectors = group.Children.OfType<GroupChildConnector>().ToList();
+            Assert.Equal(3, connectors.Count);
+
+            AssertTransparentLine(connectors[0].Outline);
+            AssertTransparentLine(connectors[1].Outline);
+            Assert.Null(connectors[2].Outline);
+        }
+
         // -- グループ内の図形・接続線 -------------------------------------------------
 
         [Fact]

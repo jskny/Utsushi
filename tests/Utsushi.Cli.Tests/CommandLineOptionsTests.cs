@@ -207,6 +207,7 @@ namespace Utsushi.Cli.Tests
         [InlineData("8px")]
         [InlineData("7,5")]        // 小数点はカルチャによらず '.'
         [InlineData("Infinity")]
+        [InlineData("NaN")]        // 回帰テスト: double.TryParse は NaN を受け付けるため、以前はファサードで未処理例外になった
         [InlineData("1e400")]      // double の範囲を超えて無限大になる
         public void maxDigitWidthが0や負や数値でなければエラー(string text)
         {
@@ -283,12 +284,12 @@ namespace Utsushi.Cli.Tests
         // -- 必須の --input / --output ---------------------------------------------------------------
 
         [Theory]
-        [InlineData("--input", "-i")]
+        [InlineData("--input", "--output")]
+        [InlineData("-i", "-o")]
         [InlineData("-i", "--output")]
         public void inputとoutputは短い形式でも指定できる(string inputOption, string outputOption)
         {
-            var normalizedOutput = outputOption == "--output" ? "--output" : "-o";
-            var options = Parse(inputOption == "-i" ? "-i" : "--input", Input, normalizedOutput, Output);
+            var options = Parse(inputOption, Input, outputOption, Output);
 
             Assert.Equal(Input, options.InputPath);
             Assert.Equal(Output, options.OutputPath);

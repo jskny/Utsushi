@@ -255,7 +255,7 @@ namespace Utsushi.Cli
                             {
                                 if (!TryTakeValue(args, ref i, "--max-digit-width", out var text, out error)) { return null; }
                                 if (!double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var mdw)
-                                    || mdw <= 0 || double.IsInfinity(mdw))
+                                    || double.IsNaN(mdw) || mdw <= 0 || double.IsInfinity(mdw))
                                 {
                                     error = $"--max-digit-width には正の数を指定してください: '{text}'";
                                     return null;

@@ -42,6 +42,7 @@ namespace Utsushi.ReportDefinition.Tests
         [InlineData("MS PGothic", 0.0)]
         [InlineData("MS PGothic", -11.0)]
         [InlineData("MS PGothic", double.PositiveInfinity)]
+        [InlineData("MS PGothic", double.NaN)] // 回帰テスト: 以前は NaN の比較が false になり 8 を返していた
         // 表に無い名前(等幅の ＭＳ ゴシック、メイリオ、空文字列)
         [InlineData("ＭＳ ゴシック", 11.0)]
         [InlineData("メイリオ", 11.0)]
@@ -52,6 +53,16 @@ namespace Utsushi.ReportDefinition.Tests
         {
             Assert.Equal(Definition.DefaultMaxDigitWidthPx, Definition.EstimateMaxDigitWidthPx(fontName, sizePt));
             Assert.Equal(7.0, Definition.EstimateMaxDigitWidthPx(fontName, sizePt));
+        }
+
+        [Theory]
+        [InlineData("calibri", 7.0)]
+        [InlineData("CALIBRI", 7.0)]
+        [InlineData("ms pgothic", 8.0)]
+        [InlineData("yu gothic", 8.0)]
+        public void フォント名の大文字小文字は区別しない(string fontName, double expected)
+        {
+            Assert.Equal(expected, Definition.EstimateMaxDigitWidthPx(fontName, 11.0));
         }
 
         [Theory]
@@ -78,7 +89,6 @@ namespace Utsushi.ReportDefinition.Tests
 
         [Theory]
         [InlineData(0.0)]
-        [InlineData(-0.0)]
         [InlineData(-1.0)]
         [InlineData(-7.0)]
         [InlineData(double.NaN)]

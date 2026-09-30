@@ -121,15 +121,18 @@ namespace Utsushi.ReportDefinitions.Model
         /// </remarks>
         public static double EstimateMaxDigitWidthPx(string? fontName, double sizePt)
         {
-            if (Math.Abs(sizePt - 11.0) > 0.01 || fontName is null)
+            // NaN のサイズも表の対象外として既定値にする(比較が常に false になるため、否定形で判定する)。
+            if (!(Math.Abs(sizePt - 11.0) <= 0.01) || fontName is null)
             {
                 return DefaultMaxDigitWidthPx;
             }
 
-            return fontName.Trim() switch
+            // Excel のフォント名は大文字小文字を区別しない。
+            var name = fontName.Trim().ToUpperInvariant();
+            return name switch
             {
-                "Calibri" => 7.0,
-                "ＭＳ Ｐゴシック" or "MS PGothic" or "游ゴシック" or "Yu Gothic" => 8.0,
+                "CALIBRI" => 7.0,
+                "ＭＳ Ｐゴシック" or "MS PGOTHIC" or "游ゴシック" or "YU GOTHIC" => 8.0,
                 _ => DefaultMaxDigitWidthPx,
             };
         }

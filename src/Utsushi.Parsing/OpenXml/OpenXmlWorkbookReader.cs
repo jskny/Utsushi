@@ -357,15 +357,15 @@ namespace Utsushi.Parsing.OpenXml
 
             foreach (var column in columns.Elements<X.Column>())
             {
-                var min = (int)(column.Min?.Value ?? 0U);
-                var max = (int)(column.Max?.Value ?? 0U);
-                if (min < 1 || max < min)
+                // uint のまま最大列で丸めてから int にする(int の範囲を超える値がキャストで負にならないように)。
+                var min = (int)Math.Min(column.Min?.Value ?? 0U, (uint)CellAddress.MaxColumn + 1);
+                var max = (int)Math.Min(column.Max?.Value ?? 0U, (uint)CellAddress.MaxColumn);
+                if (min < 1)
                 {
                     continue;
                 }
 
-                // Excel は未使用の右端まで Column 要素を伸ばすことがある。使用範囲を超える定義は既定幅と同じなので無視する。
-                max = Math.Min(max, CellAddress.MaxColumn);
+                // Excel は未使用の右端まで Column 要素を伸ばすことがある。最大列を超える部分は丸めた。
 
                 // min が最大列を超える定義は範囲が空になる。そのまま数えると展開回数の合計が負になり、
                 // 上限(MaxColumnExpansionsPerSheet)をすり抜けられるため読み飛ばす(spec-compliance-reviewer指摘)。

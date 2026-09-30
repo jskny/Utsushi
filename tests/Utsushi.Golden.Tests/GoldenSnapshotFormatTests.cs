@@ -7,7 +7,7 @@ using Xunit;
 namespace Utsushi.Golden.Tests
 {
     /// <summary>
-    /// ゴールデンスナップショットのフォーマッタが、反転(要件10.17)と矢印(要件10.18)を出力することの検証。
+    /// ゴールデンスナップショットのフォーマッタが、反転(要件10.17)・矢印(要件10.18)・調整値(要件10.13)を出力することの検証。
     /// </summary>
     /// <remarks>
     /// docs/実装設計失敗事例集.md 5.1(フォーマッタが回転角を出力せず、回転のバグをゴールデンテストが検出できなかった)の再発防止。
@@ -26,11 +26,12 @@ namespace Utsushi.Golden.Tests
                 "test-report",
                 "テストシート"));
 
-        private static ShapeCommand Shape(bool flipH = false, bool flipV = false, ShapeOutline? outline = null) =>
+        private static ShapeCommand Shape(
+            bool flipH = false, bool flipV = false, ShapeOutline? outline = null, double[]? adjustments = null) =>
             new(
                 new RectPt(10, 10, 40, 20),
                 ShapePresetType.Rect,
-                Array.Empty<double>(),
+                adjustments ?? Array.Empty<double>(),
                 0,
                 null,
                 outline,
@@ -97,6 +98,29 @@ namespace Utsushi.Golden.Tests
             Assert.NotEqual(
                 Snapshot(Shape(outline: Outline(LineEndType.Triangle))),
                 Snapshot(Shape(outline: Outline(LineEndType.Stealth))));
+        }
+
+        [Fact]
+        public void 調整値が無いか全て未指定の図形の行は調整値を出力しない()
+        {
+            Assert.DoesNotContain("adj=", Snapshot(Shape()));
+            Assert.DoesNotContain("adj=", Snapshot(Shape(adjustments: new[] { double.NaN, double.NaN, double.NaN, double.NaN })));
+        }
+
+        [Fact]
+        public void 調整値の指定がある図形の行は未指定を含めて調整値を出力する()
+        {
+            var snapshot = Snapshot(Shape(adjustments: new[] { 0.5, 1.0, double.NaN, 1.6 }));
+
+            Assert.Contains(" adj=[0.5,1,-,1.6]", snapshot);
+        }
+
+        [Fact]
+        public void 調整値が違う図形は異なる行になる()
+        {
+            Assert.NotEqual(
+                Snapshot(Shape(adjustments: new[] { 0.1875, -0.08333, 1.125, -0.38333 })),
+                Snapshot(Shape(adjustments: new[] { 0.5, 1.0, 1.5, 1.6 })));
         }
     }
 }

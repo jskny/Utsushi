@@ -342,6 +342,70 @@ namespace Utsushi.Parsing.Tests
             }
         }
 
+        [Fact]
+        public void intの範囲を超えるmaxの列定義も最大列に丸めて列幅を反映する()
+        {
+            // 回帰テスト: 以前は max を int にキャストしてから丸めていたため、4294967295 が負になり定義ごと読み飛ばされていた。
+            var path = SafetyLimitWorkbookFixtures.CreateWithColumns(new[] { (3U, uint.MaxValue) });
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+                Assert.Equal(sheet.GetColumnWidth(3), sheet.GetColumnWidth(CellAddress.MaxColumn));
+                Assert.NotEqual(sheet.GetColumnWidth(1), sheet.GetColumnWidth(3));
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Theory]
+        [InlineData(1_000_000_000U, 1_000_000_000U)]
+        [InlineData((uint)CellAddress.MaxColumn + 1U, (uint)CellAddress.MaxColumn + 1U)]
+        [InlineData((uint)CellAddress.MaxColumn + 1U, 20000U)]
+        public void minが最大列を超える列定義の後に全列を覆う列定義を並べても上限をすり抜けない(uint min, uint max)
+        {
+            // min が最大列を超える定義は max を最大列に丸めると範囲が空(max < min)になる。これをそのまま数えると
+            // 展開回数の合計が大きく負になり、後続の <col> が上限を超えても検出されなくなる。読み飛ばしていれば、
+            // 後続の全列を覆う定義だけで上限を1超えた時点で TooLarge になる。
+            var repeat = OpenXmlWorkbookReader.MaxColumnExpansionsPerSheet / CellAddress.MaxColumn;
+            var columns = new[] { (min, max) }
+                .Concat(Enumerable.Repeat((1U, (uint)CellAddress.MaxColumn), repeat))
+                .Append((1U, 1U));
+            var path = SafetyLimitWorkbookFixtures.CreateWithColumns(columns);
+            try
+            {
+                var ex = Assert.Throws<InvalidExcelFileException>(() => _reader.ReadFile(path));
+                Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void minが最大列を超える列定義は読み飛ばし展開回数にも数えない()
+        {
+            // 読み飛ばした定義を数えていなければ、後続の全列を覆う定義を上限ちょうどまで並べても読み取れる。
+            var repeat = OpenXmlWorkbookReader.MaxColumnExpansionsPerSheet / CellAddress.MaxColumn;
+            var columns = new[] { (1_000_000_000U, 1_000_000_000U) }
+                .Concat(Enumerable.Repeat((1U, (uint)CellAddress.MaxColumn), repeat));
+            var path = SafetyLimitWorkbookFixtures.CreateWithColumns(columns);
+            try
+            {
+                var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
+
+                // 列幅は後続の全列を覆う定義(幅12)で決まり、範囲外の定義で列が増えることもない。
+                Assert.Equal(CellAddress.MaxColumn, sheet.ColumnWidths.Count);
+                Assert.All(sheet.ColumnWidths, width => Assert.Equal(12.0, width));
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         // --- 要件6.8: 改ページの件数 --------------------------------------------------
 
         [Fact]
