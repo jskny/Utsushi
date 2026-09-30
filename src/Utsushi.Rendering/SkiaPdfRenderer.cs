@@ -286,6 +286,18 @@ namespace Utsushi.Rendering
                 canvas.RotateDegrees((float)shape.RotationDegrees, centerX, centerY);
             }
 
+            // 反転(要件10.17)は形状(塗りつぶし・枠線・矢印)にだけかけ、文字は鏡像にしない。
+            var hasFlip = shape.FlipHorizontal || shape.FlipVertical;
+            if (hasFlip)
+            {
+                canvas.Save();
+                canvas.Scale(
+                    shape.FlipHorizontal ? -1f : 1f,
+                    shape.FlipVertical ? -1f : 1f,
+                    (skRect.Left + skRect.Right) / 2f,
+                    (skRect.Top + skRect.Bottom) / 2f);
+            }
+
             try
             {
                 if (shape.Fill is { } fill)
@@ -310,6 +322,20 @@ namespace Utsushi.Rendering
                         IsAntialias = true,
                     };
                     canvas.DrawPath(outlinePath, outlinePaint);
+
+                    // 線吹き出しの引き出し線の端の矢印(要件10.18)。
+                    if ((outline.HeadEnd is not null || outline.TailEnd is not null)
+                        && ShapeGeometryBuilder.TryGetLeaderPoints(shape.Preset, shape.AdjustmentValues, skRect, out var leader))
+                    {
+                        LineEndRenderer.DrawOnPolyline(
+                            canvas, leader, outline.HeadEnd, outline.TailEnd, ToSkColor(outline.Color), (float)outline.WidthPt);
+                    }
+                }
+
+                if (hasFlip)
+                {
+                    canvas.Restore();
+                    hasFlip = false;
                 }
 
                 // テキストは図形本体と同じ回転変換の内側で描画することで、回転が正しく反映される
@@ -325,6 +351,11 @@ namespace Utsushi.Rendering
             }
             finally
             {
+                if (hasFlip)
+                {
+                    canvas.Restore();
+                }
+
                 if (hasRotation)
                 {
                     canvas.Restore();
@@ -368,6 +399,10 @@ namespace Utsushi.Rendering
                     IsAntialias = true,
                 };
                 canvas.DrawPath(path, paint);
+
+                // 線の端の矢印(要件10.18)。
+                LineEndRenderer.DrawOnPath(
+                    canvas, path, outline.HeadEnd, outline.TailEnd, ToSkColor(outline.Color), (float)outline.WidthPt);
             }
             finally
             {

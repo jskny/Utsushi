@@ -21,7 +21,19 @@ namespace Utsushi.Layout
         /// (4方向の範囲外の値は<c>% 4</c>で丸める)を解決する。<paramref name="preset"/>が
         /// <c>null</c>(画像・グループ、または非対応プリセット)の場合は既定の4方向近似を返す。
         /// </summary>
-        public static PointPt Resolve(RectPt rect, ShapePresetType? preset, uint siteIndex)
+        /// <remarks>
+        /// 反転した図形(要件10.17)では、反転前の図形上の接続点を配置矩形の中心を軸に鏡映した位置になる。
+        /// </remarks>
+        public static PointPt Resolve(
+            RectPt rect, ShapePresetType? preset, uint siteIndex, bool flipHorizontal = false, bool flipVertical = false)
+        {
+            var point = ResolveUnflipped(rect, preset, siteIndex);
+            return new PointPt(
+                flipHorizontal ? rect.Left + rect.Right - point.X : point.X,
+                flipVertical ? rect.Top + rect.Bottom - point.Y : point.Y);
+        }
+
+        private static PointPt ResolveUnflipped(RectPt rect, ShapePresetType? preset, uint siteIndex)
         {
             var index = (int)(siteIndex % 4);
             var midX = rect.Left + (rect.Width / 2.0);

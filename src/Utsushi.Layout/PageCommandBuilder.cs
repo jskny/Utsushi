@@ -168,7 +168,9 @@ namespace Utsushi.Layout
                             connector.Outline, resolvedStart, resolvedEnd));
                         break;
                     case GroupShapeModel group:
-                        var children = BuildGroupChildren(group.Children, rect, group.ChildOffset, group.ChildExtent, connectionTargets);
+                        var children = BuildGroupChildren(
+                            group.Children, rect, group.ChildOffset, group.ChildExtent, connectionTargets,
+                            group.FlipHorizontal, group.FlipVertical);
                         _drawingObjects.Add(new GroupCommand(RectCenter(rect), group.RotationDegrees, children));
                         break;
                 }
@@ -188,13 +190,13 @@ namespace Utsushi.Layout
         /// 図形の座標で上書きする(先勝ちでも後勝ちでもどちらかの図形を選ぶしかなく、
         /// 「解決しない」よりは実害が小さいための割り切り。code-reviewer指摘)。
         /// </remarks>
-        private Dictionary<uint, (RectPt Rect, ShapePresetType? Preset)> BuildConnectionTargetTable(
+        private Dictionary<uint, (RectPt Rect, ShapePresetType? Preset, bool FlipHorizontal, bool FlipVertical)> BuildConnectionTargetTable(
             IReadOnlyDictionary<int, int> rowIndex,
             IReadOnlyDictionary<int, int> columnIndex,
             double[] rowOffsets,
             double[] columnOffsets)
         {
-            var table = new Dictionary<uint, (RectPt Rect, ShapePresetType? Preset)>();
+            var table = new Dictionary<uint, (RectPt Rect, ShapePresetType? Preset, bool FlipHorizontal, bool FlipVertical)>();
 
             foreach (var drawingObject in _sheet.DrawingObjects)
             {
@@ -206,14 +208,15 @@ namespace Utsushi.Layout
                 switch (drawingObject)
                 {
                     case ImageModel image:
-                        table[image.Id] = (rect, null);
+                        table[image.Id] = (rect, null, false, false);
                         break;
                     case ShapeModel shape:
-                        table[shape.Id] = (rect, shape.Preset);
+                        table[shape.Id] = (rect, shape.Preset, shape.FlipHorizontal, shape.FlipVertical);
                         break;
                     case GroupShapeModel group:
-                        table[group.Id] = (rect, null);
-                        CollectGroupChildRects(group.Children, rect, group.ChildOffset, group.ChildExtent, table);
+                        table[group.Id] = (rect, null, false, false);
+                        CollectGroupChildRects(
+                            group.Children, rect, group.ChildOffset, group.ChildExtent, table, group.FlipHorizontal, group.FlipVertical);
                         break;
                 }
             }
@@ -230,7 +233,9 @@ namespace Utsushi.Layout
             RectPt groupRect,
             PointPt childOffset,
             PointPt childExtent,
-            Dictionary<uint, (RectPt Rect, ShapePresetType? Preset)> table)
+            Dictionary<uint, (RectPt Rect, ShapePresetType? Preset, bool FlipHorizontal, bool FlipVertical)> table,
+            bool flipHorizontal,
+            bool flipVertical)
         {
             if (childExtent.X <= 0 || childExtent.Y <= 0)
             {
@@ -242,7 +247,8 @@ namespace Utsushi.Layout
 
             foreach (var child in children)
             {
-                var childRect = ToGroupChildRect(child.LocalRect, groupRect, childOffset, scaleX, scaleY);
+                var childRect = MirrorInGroup(
+                    ToGroupChildRect(child.LocalRect, groupRect, childOffset, scaleX, scaleY), groupRect, flipHorizontal, flipVertical);
                 if (childRect.IsEmpty)
                 {
                     continue;
@@ -251,14 +257,17 @@ namespace Utsushi.Layout
                 switch (child)
                 {
                     case GroupChildShape shape:
-                        table[shape.Id] = (childRect, shape.Preset);
+                        table[shape.Id] = (
+                            childRect, shape.Preset, shape.FlipHorizontal ^ flipHorizontal, shape.FlipVertical ^ flipVertical);
                         break;
                     case GroupChildImage image:
-                        table[image.Id] = (childRect, null);
+                        table[image.Id] = (childRect, null, false, false);
                         break;
                     case GroupChildGroup nestedGroup:
-                        table[nestedGroup.Id] = (childRect, null);
-                        CollectGroupChildRects(nestedGroup.Children, childRect, nestedGroup.ChildOffset, nestedGroup.ChildExtent, table);
+                        table[nestedGroup.Id] = (childRect, null, false, false);
+                        CollectGroupChildRects(
+                            nestedGroup.Children, childRect, nestedGroup.ChildOffset, nestedGroup.ChildExtent, table,
+                            nestedGroup.FlipHorizontal ^ flipHorizontal, nestedGroup.FlipVertical ^ flipVertical);
                         break;
                 }
             }
@@ -273,18 +282,19 @@ namespace Utsushi.Layout
         private static (PointPt? Start, PointPt? End) ResolveConnectorEndpoints(
             ConnectionRef? startConnection,
             ConnectionRef? endConnection,
-            IReadOnlyDictionary<uint, (RectPt Rect, ShapePresetType? Preset)> connectionTargets) =>
+            IReadOnlyDictionary<uint, (RectPt Rect, ShapePresetType? Preset, bool FlipHorizontal, bool FlipVertical)> connectionTargets) =>
             (ResolveConnectionPoint(startConnection, connectionTargets), ResolveConnectionPoint(endConnection, connectionTargets));
 
         private static PointPt? ResolveConnectionPoint(
-            ConnectionRef? connection, IReadOnlyDictionary<uint, (RectPt Rect, ShapePresetType? Preset)> connectionTargets)
+            ConnectionRef? connection, IReadOnlyDictionary<uint, (RectPt Rect, ShapePresetType? Preset, bool FlipHorizontal, bool FlipVertical)> connectionTargets)
         {
             if (connection is not { } reference || !connectionTargets.TryGetValue(reference.ShapeId, out var target))
             {
                 return null;
             }
 
-            return ConnectionSiteResolver.Resolve(target.Rect, target.Preset, reference.SiteIndex);
+            return ConnectionSiteResolver.Resolve(
+                target.Rect, target.Preset, reference.SiteIndex, target.FlipHorizontal, target.FlipVertical);
         }
 
         /// <summary>
@@ -298,9 +308,16 @@ namespace Utsushi.Layout
             RectPt groupRect,
             PointPt childOffset,
             PointPt childExtent,
-            IReadOnlyDictionary<uint, (RectPt Rect, ShapePresetType? Preset)> connectionTargets)
+            IReadOnlyDictionary<uint, (RectPt Rect, ShapePresetType? Preset, bool FlipHorizontal, bool FlipVertical)> connectionTargets,
+            bool flipHorizontal,
+            bool flipVertical)
         {
             var result = new List<DrawCommand>(children.Count);
+
+            // グループの反転(要件10.17)は、子要素の配置矩形をグループの矩形内で鏡映し、子要素自身の反転を
+            // 切り替えることで畳み込む。片方向だけの鏡映は回転の向きも逆にする(時計回り θ の鏡像は -θ)。
+            var mirrorsRotation = flipHorizontal ^ flipVertical;
+            double Rotation(double degrees) => mirrorsRotation ? -degrees : degrees;
 
             // 子座標空間の大きさが0以下では比例変換できないため、このグループの子要素は
             // 何も描画しない(壊れたジオメトリに対する安全弁)。
@@ -314,7 +331,8 @@ namespace Utsushi.Layout
 
             foreach (var child in children)
             {
-                var childRect = ToGroupChildRect(child.LocalRect, groupRect, childOffset, scaleX, scaleY);
+                var childRect = MirrorInGroup(
+                    ToGroupChildRect(child.LocalRect, groupRect, childOffset, scaleX, scaleY), groupRect, flipHorizontal, flipVertical);
                 if (childRect.IsEmpty)
                 {
                     continue;
@@ -329,22 +347,27 @@ namespace Utsushi.Layout
                         // グループが大きく縮小されている場合に余白がシェイプ本体ほど縮まらず、
                         // 縮小率次第ではテキストが矩形からはみ出す/消える境界に達しうる)。
                         var groupScale = Math.Sqrt(Math.Abs(scaleX * scaleY));
-                        result.Add(BuildGroupChildShapeCommand(shape, childRect, groupScale));
+                        result.Add(BuildGroupChildShapeCommand(
+                            shape, childRect, groupScale, Rotation(shape.RotationDegrees),
+                            shape.FlipHorizontal ^ flipHorizontal, shape.FlipVertical ^ flipVertical));
                         break;
                     case GroupChildImage image:
-                        result.Add(new ImageCommand(childRect, image.Data, image.ContentType, image.RotationDegrees));
+                        // 画像の中身の鏡像化には対応しない(配置と回転の向きだけを反映する)。
+                        result.Add(new ImageCommand(childRect, image.Data, image.ContentType, Rotation(image.RotationDegrees)));
                         break;
                     case GroupChildConnector connector:
                         var (resolvedStart, resolvedEnd) = ResolveConnectorEndpoints(
                             connector.StartConnection, connector.EndConnection, connectionTargets);
                         result.Add(new ConnectorCommand(
-                            childRect, connector.Preset, connector.RotationDegrees, connector.FlipHorizontal, connector.FlipVertical,
+                            childRect, connector.Preset, Rotation(connector.RotationDegrees),
+                            connector.FlipHorizontal ^ flipHorizontal, connector.FlipVertical ^ flipVertical,
                             connector.Outline, resolvedStart, resolvedEnd));
                         break;
                     case GroupChildGroup nestedGroup:
                         var nestedChildren = BuildGroupChildren(
-                            nestedGroup.Children, childRect, nestedGroup.ChildOffset, nestedGroup.ChildExtent, connectionTargets);
-                        result.Add(new GroupCommand(RectCenter(childRect), nestedGroup.RotationDegrees, nestedChildren));
+                            nestedGroup.Children, childRect, nestedGroup.ChildOffset, nestedGroup.ChildExtent, connectionTargets,
+                            nestedGroup.FlipHorizontal ^ flipHorizontal, nestedGroup.FlipVertical ^ flipVertical);
+                        result.Add(new GroupCommand(RectCenter(childRect), Rotation(nestedGroup.RotationDegrees), nestedChildren));
                         break;
                 }
             }
@@ -378,13 +401,31 @@ namespace Utsushi.Layout
         /// 同じロジックを再利用するが、<paramref name="groupScale"/>でグループ自身のリサイズ比率を
         /// 追加で反映する(トップレベルの図形は既定の1.0のまま、<see cref="BuildShapeCommand"/>参照)。
         /// </summary>
-        private ShapeCommand BuildGroupChildShapeCommand(GroupChildShape shape, RectPt rect, double groupScale)
+        private ShapeCommand BuildGroupChildShapeCommand(
+            GroupChildShape shape, RectPt rect, double groupScale, double rotationDegrees, bool flipHorizontal, bool flipVertical)
         {
             var textLines = shape.Text is { } text
                 ? BuildShapeTextLines(text, rect, groupScale)
                 : Array.Empty<ShapeTextLine>();
 
-            return new ShapeCommand(rect, shape.Preset, shape.AdjustmentValues, shape.RotationDegrees, shape.Fill, shape.Outline, textLines);
+            return new ShapeCommand(
+                rect, shape.Preset, shape.AdjustmentValues, rotationDegrees, shape.Fill, shape.Outline, textLines,
+                flipHorizontal, flipVertical);
+        }
+
+        /// <summary>
+        /// 反転したグループ(要件10.17)の子要素の矩形を、グループの矩形の中心を軸に鏡映する。
+        /// </summary>
+        private static RectPt MirrorInGroup(RectPt childRect, RectPt groupRect, bool flipHorizontal, bool flipVertical)
+        {
+            if (childRect.IsEmpty || (!flipHorizontal && !flipVertical))
+            {
+                return childRect;
+            }
+
+            var left = flipHorizontal ? groupRect.Left + groupRect.Right - childRect.Right : childRect.Left;
+            var top = flipVertical ? groupRect.Top + groupRect.Bottom - childRect.Bottom : childRect.Top;
+            return RectPt.FromBounds(left, top, left + childRect.Width, top + childRect.Height);
         }
 
         private static PointPt RectCenter(RectPt rect) => new(rect.Left + (rect.Width / 2.0), rect.Top + (rect.Height / 2.0));
@@ -447,7 +488,9 @@ namespace Utsushi.Layout
                 ? BuildShapeTextLines(text, rect)
                 : Array.Empty<ShapeTextLine>();
 
-            return new ShapeCommand(rect, shape.Preset, shape.AdjustmentValues, shape.RotationDegrees, shape.Fill, shape.Outline, textLines);
+            return new ShapeCommand(
+                rect, shape.Preset, shape.AdjustmentValues, shape.RotationDegrees, shape.Fill, shape.Outline, textLines,
+                shape.FlipHorizontal, shape.FlipVertical);
         }
 
         /// <summary>

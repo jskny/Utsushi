@@ -259,7 +259,7 @@ namespace Utsushi.Parsing.OpenXml
             return result;
         }
 
-        private static ArgbColor ReadSchemeColor(Color2Type? color)
+        internal static ArgbColor ReadSchemeColor(Color2Type? color)
         {
             if (color is null)
             {

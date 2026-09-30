@@ -906,3 +906,30 @@
     - _Requirements: 6.4_
   - [ ] 25.5 追加した上限を design.md「信頼できない入力に対する安全弁 一覧」に追記する
     - _Requirements: 6.6_
+
+- [ ] 26. 図形のテーマの色・スタイル参照・反転・矢印への対応
+  - [ ] 26.1 requirements.mdに要件10.15〜10.18を追加し、design.mdに設計を書く
+    - _Requirements: 10.15, 10.16, 10.17, 10.18_
+  - [ ] 26.2 Parsing: テーマの色(`schemeClr`/`sysClr`)と色の修飾を解決する `DrawingColorResolver` を追加し、
+        図形・グループ内図形・接続線の塗りつぶし・枠線・文字色の読み取りに使う
+    - _Requirements: 10.15_
+  - [ ] 26.3 Parsing: 図形のスタイル(`fillRef`/`lnRef`/`fontRef`)とテーマの `lnStyleLst` の太さを読み、
+        `spPr`・`a:rPr`に指定が無い場合の塗りつぶし・枠線・文字色にする
+    - _Requirements: 10.16_
+  - [ ] 26.4 Parsing/Layout/Rendering: 図形・グループの反転を読み取り、描画と接続点の解決に反映する
+    - _Requirements: 10.11, 10.17_
+  - [ ] 26.5 Parsing/Rendering: 線の端の矢印(`headEnd`/`tailEnd`)を読み取り、接続線と線吹き出しに描く
+    - _Requirements: 10.18_
+  - [ ] 26.6 テスト(ユニット・ゴールデン)を追加・更新し、テンプレート作成ガイドの「再現しない」表を更新する
+    - _Requirements: 10.15, 10.16, 10.17, 10.18_
+
+- [ ] 27. 帳票定義なしモードの列幅と、印刷範囲が無いシートの描画オブジェクト
+  - [x] 27.1 requirements.mdに要件3.10を追加し、要件12.3(最大数字幅の見積もり)を改め、design.mdに設計を書く
+    - _Requirements: 3.10, 12.3_
+  - [x] 27.2 ReportDefinition/ファサード/CLI: 標準フォントから最大数字幅を見積もる `ReportDefinition.EstimateMaxDigitWidthPx` と、
+        呼び出し元が指定する `maxDigitWidthPx`・`--max-digit-width` を追加する
+    - _Requirements: 12.3_
+  - [x] 27.3 Layout: 印刷範囲が無いシートの使用範囲に、描画オブジェクトが占める範囲を含める(`UsedRangeResolver`)
+    - _Requirements: 3.10_
+  - [ ] 27.4 テストを追加する
+    - _Requirements: 3.10, 12.3_

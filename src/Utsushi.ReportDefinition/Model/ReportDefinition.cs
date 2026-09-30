@@ -94,15 +94,45 @@ namespace Utsushi.ReportDefinitions.Model
         /// 帳票コードの代わりに使う文書名(PDFタイトル・ヘッダー/フッターの <c>&amp;F</c>・エラー情報に使われる。要件12.5)。
         /// </param>
         /// <param name="sheetName">変換対象のシート名。</param>
-        public static ReportDefinition CreateWithoutDefinition(string documentName, string sheetName) =>
+        /// <param name="maxDigitWidthPx">
+        /// 列幅の換算に使う最大数字幅(ピクセル)。通常は <see cref="EstimateMaxDigitWidthPx"/> でブックの標準フォントから求める。
+        /// </param>
+        public static ReportDefinition CreateWithoutDefinition(
+            string documentName, string sheetName, double maxDigitWidthPx = DefaultMaxDigitWidthPx) =>
             new(
                 documentName ?? throw new ArgumentNullException(nameof(documentName)),
                 sheetName ?? throw new ArgumentNullException(nameof(sheetName)),
                 Array.Empty<SubstitutionFieldDefinition>(),
                 DefaultToleranceMm,
                 UnsupportedElementPolicy.Ignore,
-                DefaultMaxDigitWidthPx,
+                maxDigitWidthPx > 0 && !double.IsNaN(maxDigitWidthPx) && !double.IsInfinity(maxDigitWidthPx)
+                    ? maxDigitWidthPx
+                    : throw new ArgumentOutOfRangeException(nameof(maxDigitWidthPx), maxDigitWidthPx, "最大数字幅は正の数である必要があります。"),
                 PrintAreaOverride: null);
+
+        /// <summary>
+        /// ブックの標準フォント(名前・サイズ)から、Excelが列幅の換算に使う最大数字幅(96dpiのピクセル)を見積もる
+        /// (帳票定義なしモード、要件12.3)。
+        /// </summary>
+        /// <remarks>
+        /// Excelの既定の標準フォントについて、既定の列幅の表示(英語版 Calibri 11 の「8.43(64ピクセル)」、日本語版
+        /// ＭＳ Ｐゴシック/游ゴシック 11 の「8.38(72ピクセル)」)と列幅の換算式から逆算した値を持つ。表に無いフォント・サイズは
+        /// <see cref="DefaultMaxDigitWidthPx"/> を返す。帳票定義ありの変換では使わない(定義の <c>maxDigitWidthPx</c> を使う)。
+        /// </remarks>
+        public static double EstimateMaxDigitWidthPx(string? fontName, double sizePt)
+        {
+            if (Math.Abs(sizePt - 11.0) > 0.01 || fontName is null)
+            {
+                return DefaultMaxDigitWidthPx;
+            }
+
+            return fontName.Trim() switch
+            {
+                "Calibri" => 7.0,
+                "ＭＳ Ｐゴシック" or "MS PGothic" or "游ゴシック" or "Yu Gothic" => 8.0,
+                _ => DefaultMaxDigitWidthPx,
+            };
+        }
 
         /// <summary>置換キーからフィールド定義を引く。</summary>
         public bool TryGetField(string key, out SubstitutionFieldDefinition field)
