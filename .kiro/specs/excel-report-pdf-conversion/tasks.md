@@ -862,19 +862,19 @@
   - [x] 23.4 Parsing・Renderingのユニットテストを追加・更新する
     - _Requirements: 10.14_
 
-- [ ] 24. 帳票定義なしでの変換
+- [x] 24. 帳票定義なしでの変換
   - [x] 24.1 product.md・requirements.md(要件12)・design.mdを更新する
     - _Requirements: 12.1〜12.7_
-  - [ ] 24.2 Parsing: `WorkbookReadOptions.ActiveSheetOnly` を追加し、アクティブシート(非表示なら表示されている最初のシート)1枚だけを読む
+  - [x] 24.2 Parsing: `WorkbookReadOptions.ActiveSheetOnly` を追加し、アクティブシート(非表示なら表示されている最初のシート)1枚だけを読む
     - _Requirements: 12.2, 12.6_
-  - [ ] 24.3 ReportDefinition: 既定値の定義を合成する `ReportDefinition.CreateWithoutDefinition` を追加する
+  - [x] 24.3 ReportDefinition: 既定値の定義を合成する `ReportDefinition.CreateWithoutDefinition` を追加する
     - _Requirements: 12.1, 12.3, 12.5_
-  - [ ] 24.4 ファサード: `ConvertWithoutDefinition` / `ConvertFileWithoutDefinition` / `ComputeLayoutWithoutDefinition`、
+  - [x] 24.4 ファサード: `ConvertWithoutDefinition` / `ConvertFileWithoutDefinition` / `ComputeLayoutWithoutDefinition`、
         帳票定義ルートを取らない `CreateDefault` を追加する
     - _Requirements: 12.1, 12.4, 12.5_
-  - [ ] 24.5 CLI: `--report` を省略可能にし、省略時は帳票定義なしで変換する。`--set` との併用は使い方エラーにする
+  - [x] 24.5 CLI: `--report` を省略可能にし、省略時は帳票定義なしで変換する。`--set` との併用は使い方エラーにする
     - _Requirements: 12.7_
-  - [ ] 24.6 テストを追加する(Parsingのシート選択、ファサードの定義なし変換、上書き、文書名)
+  - [x] 24.6 テストを追加する(Parsingのシート選択、ファサードの定義なし変換、上書き、文書名)
     - _Requirements: 12.1〜12.6_
-  - [ ] 24.7 CLAUDE.md・README・docs(ライブラリの使い方・テンプレート作成ガイド)を更新する
+  - [x] 24.7 CLAUDE.md・README・docs(ライブラリの使い方・テンプレート作成ガイド)を更新する
     - _Requirements: 12.1〜12.7_
