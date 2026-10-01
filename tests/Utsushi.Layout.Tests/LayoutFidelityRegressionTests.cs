@@ -475,7 +475,7 @@ namespace Utsushi.Layout.Tests
             var sheet = UniformSheet(rows: 1, columns: 1) with { MergedRanges = ranges };
             var rows = Enumerable.Range(1, 12).ToList();
 
-            var index = MergedCellIndex.Create(ranges, rows);
+            var index = MergedCellIndex.Create(ranges);
 
             foreach (var row in rows)
             {
@@ -488,14 +488,29 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void 索引に登録していない行は結合なしとして扱う()
+        public void 検索する列にかからない結合範囲は登録しない()
         {
-            var ranges = new[] { new MergedRange(CellRange.Parse("A1:A100")) };
+            var ranges = new[] { new MergedRange(CellRange.Parse("A1:A100")), new MergedRange(CellRange.Parse("C1:D100")) };
 
-            var index = MergedCellIndex.Create(ranges, new[] { 1, 50 });
+            var index = MergedCellIndex.Create(ranges, new[] { 3, 4 });
 
-            Assert.NotNull(index.Find(new CellAddress(50, 1)));
-            Assert.Null(index.Find(new CellAddress(2, 1)));
+            Assert.NotNull(index.Find(new CellAddress(50, 3)));
+            Assert.Null(index.Find(new CellAddress(50, 1)));
+            Assert.Null(index.Find(new CellAddress(101, 3)));
+        }
+
+        [Fact]
+        public void 全行にわたる縦長の結合範囲が多数あっても区間の数は結合範囲の数に比例する()
+        {
+            // 1列ずつの全行の結合範囲を1000個(行ごとに登録すると 1000×1048576 要素になる入力)。
+            var ranges = Enumerable.Range(1, 1000)
+                .Select(c => new MergedRange(new CellRange(1, c, CellAddress.MaxRow, c)))
+                .ToList();
+
+            var index = MergedCellIndex.Create(ranges, new[] { 500 });
+
+            Assert.Equal(ranges[499], index.Find(new CellAddress(CellAddress.MaxRow, 500)));
+            Assert.Null(index.Find(new CellAddress(1, 501)));
         }
     }
 }

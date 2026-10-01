@@ -252,7 +252,7 @@ namespace Utsushi.Layout
                 rowBands,
                 columnBands,
                 resolvedScale,
-                MergedCellIndex.Create(sheet.MergedRanges, grid.Rows));
+                MergedCellIndex.Create(sheet.MergedRanges, grid.Columns));
         }
 
         /// <summary>
@@ -522,7 +522,8 @@ namespace Utsushi.Layout
         /// <remarks>
         /// ページ数に合わせる場合、Excel と同じく倍率は整数%に切り捨て、100%を超えて拡大しない。
         /// 行/列の区切り位置によっては、合計の大きさから求めた倍率でも指定のページ数に収まらないため、
-        /// 実際に帯へ分割してページ数を数え、指定を超える間は1%ずつ下げる(下限は <see cref="MinFitScalePercent"/>)。
+        /// 実際に帯へ分割してページ数を数え、指定のページ数に収まる最大の整数%を求める(下限は <see cref="MinFitScalePercent"/>)。
+        /// 倍率を下げても帯の数は増えないため二分探索する(1%ずつ下げると、大きなシートで最大90回の分割になる)。
         /// </remarks>
         private static double ResolveScale(
             PageScaling scaling,
@@ -557,20 +558,30 @@ namespace Utsushi.Layout
 
             percent = Math.Max(MinFitScalePercent, percent);
 
-            while (percent > MinFitScalePercent)
+            bool Fits(int candidate)
             {
-                var scale = percent / 100.0;
-                var fits = (fitWidth is not { } width || splitColumns(scale).Count <= width)
+                var scale = candidate / 100.0;
+                return (fitWidth is not { } width || splitColumns(scale).Count <= width)
                     && (fitHeight is not { } height || splitRows(scale).Count <= height);
-                if (fits)
-                {
-                    break;
-                }
-
-                percent--;
             }
 
-            return percent / 100.0;
+            // [MinFitScalePercent, percent] のうち収まる最大の値。どれも収まらなければ下限。
+            var low = MinFitScalePercent;
+            var high = percent;
+            while (low < high)
+            {
+                var mid = low + ((high - low + 1) / 2);
+                if (Fits(mid))
+                {
+                    low = mid;
+                }
+                else
+                {
+                    high = mid - 1;
+                }
+            }
+
+            return low / 100.0;
         }
 
         /// <summary>

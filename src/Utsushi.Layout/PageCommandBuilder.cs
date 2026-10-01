@@ -106,9 +106,9 @@ namespace Utsushi.Layout
 
             _pageBodyRect = ResolvePageBodyRect(rowOffsets, columnOffsets);
 
-            // セルごとに結合範囲を線形探索しないよう、行ごとの索引を引く(格子の全行を登録した索引を
-            // 呼び出し側で使い回すのが既定。無ければこのページの行だけで作る)。
-            var mergedIndex = _mergedIndex ?? MergedCellIndex.Create(_sheet.MergedRanges, SortedCopy(rows));
+            // セルごとに結合範囲を線形探索しないよう、索引を引く(印刷範囲ごとに作った索引を
+            // 呼び出し側で使い回すのが既定。無ければこのページの列について作る)。
+            var mergedIndex = _mergedIndex ?? MergedCellIndex.Create(_sheet.MergedRanges, columns);
 
             // 同一ページ上で同じ結合範囲を二重に描かないための記録。
             var emittedMergedRanges = new HashSet<CellRange>();
@@ -177,13 +177,6 @@ namespace Utsushi.Layout
                 top,
                 Math.Max(left, Math.Min(body.Right, area.Right)),
                 Math.Max(top, Math.Min(body.Bottom, area.Bottom)));
-        }
-
-        private static List<int> SortedCopy(IReadOnlyList<int> values)
-        {
-            var sorted = new List<int>(values);
-            sorted.Sort();
-            return sorted;
         }
 
         /// <summary>
