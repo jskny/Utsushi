@@ -368,6 +368,42 @@ namespace Utsushi.Parsing.Tests
             Assert.Equal(FontStyle.Default.SizePt, shape.Text!.Paragraphs[0].Runs[0].Font.SizePt);
         }
 
+        [Fact]
+        public void 図形テキストの段落の区切りも文字数の上限に数える()
+        {
+            // 文字の無い段落だけを大量に並べても上限(2000文字)を迂回できない(Ignore モードでは図形ごと読み飛ばす)。
+            var textBody = "<xdr:txBody><a:bodyPr/><a:lstStyle/>"
+                + string.Concat(Enumerable.Repeat("<a:p/>", 2000))
+                + "<a:p><a:r><a:t>x</a:t></a:r></a:p></xdr:txBody>";
+            var path = Dsf.CreateWorkbook(Dsf.ShapeAnchor(textBody: textBody));
+            try
+            {
+                Assert.Empty(Assert.Single(_reader.ReadFile(path).Sheets).DrawingObjects.OfType<ShapeModel>());
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 同じ画像パートを参照する画像はバイト列を共有する()
+        {
+            var path = ImageWorkbookFixtures.CreateWithManyPictures(3);
+            try
+            {
+                var images = Assert.Single(_reader.ReadFile(path).Sheets).DrawingObjects.OfType<ImageModel>().ToList();
+
+                Assert.Equal(3, images.Count);
+                Assert.Same(images[0].Data, images[1].Data);
+                Assert.Same(images[0].Data, images[2].Data);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         // --- 図形テキストの内側の余白(a:bodyPr の lIns 等) -------------------------------
 
         [Fact]

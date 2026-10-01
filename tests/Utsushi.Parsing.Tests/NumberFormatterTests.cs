@@ -314,7 +314,7 @@ namespace Utsushi.Parsing.Tests
         [Fact]
         public void 上限を超える数の書式コードでも正しく整形する()
         {
-            // キャッシュの件数上限を超えても、都度解析して同じ結果を返す。
+            // キャッシュの件数上限を超えても(キャッシュを空にして登録し直しても)同じ結果を返す。
             for (var i = 0; i < 1100; i++)
             {
                 var format = "#,##0\"" + i.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\"";

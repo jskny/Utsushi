@@ -36,7 +36,10 @@ namespace Utsushi.Parsing.OpenXml
         /// <summary>Excel の書式コードの最大長。これを超える書式コードは解析結果をキャッシュしない。</summary>
         private const int MaxCacheableFormatLength = 255;
 
-        /// <summary>解析結果キャッシュの件数上限。上限に達した後の新しい書式コードは都度解析する。</summary>
+        /// <summary>
+        /// 解析結果キャッシュの件数上限。上限に達したらキャッシュを空にして登録し直す(先着の書式で埋まったままだと、
+        /// 常駐プロセスでは1回の入力で埋められた後、以降の変換の書式がすべて都度解析になる。security-reviewer指摘)。
+        /// </summary>
         private const int MaxCacheEntries = 1024;
 
         /// <summary>書式コードごとの解析結果。数値セルごとの再解析を避ける。</summary>
@@ -183,8 +186,13 @@ namespace Utsushi.Parsing.OpenXml
             }
 
             var parsed = ParsedFormat.Parse(formatCode);
-            if (formatCode.Length <= MaxCacheableFormatLength && ParsedFormats.Count < MaxCacheEntries)
+            if (formatCode.Length <= MaxCacheableFormatLength)
             {
+                if (ParsedFormats.Count >= MaxCacheEntries)
+                {
+                    ParsedFormats.Clear();
+                }
+
                 // 並行して同じ書式を解析した場合はどちらか一方が登録される(内容は同一)。
                 ParsedFormats.TryAdd(formatCode, parsed);
             }

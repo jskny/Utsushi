@@ -71,6 +71,27 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Theory]
+        [InlineData("[CONTENT_TYPES].XML")]
+        [InlineData("[Content_Type\u017F].xml")]
+        public void 大文字にするとContentTypesと一致する名前のエントリも検査する(string entryName)
+        {
+            // System.IO.Packaging は ToUpperInvariant した名前で [Content_Types].xml を探す。ſ(U+017F)は大文字にすると S になる。
+            var path = SafetyLimitWorkbookFixtures.CreateWorkbook();
+            try
+            {
+                AddOverrides(path, OpenXmlWorkbookReader.MaxContentTypesEntries);
+                RenameEntry(path, ContentTypesEntry, entryName);
+
+                var ex = Assert.Throws<InvalidExcelFileException>(() => _reader.ReadFile(path));
+                Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Theory]
         [InlineData(3, 3, false)]
         [InlineData(4, 3, true)]
         public void ContentTypesの要素数は上限ちょうどまで通る(int elements, int max, bool throws)
@@ -274,6 +295,24 @@ namespace Utsushi.Parsing.Tests
                 var end = xml.LastIndexOf("</Types>", StringComparison.Ordinal);
                 return xml.Substring(0, end) + builder + xml.Substring(end);
             });
+
+        /// <summary>ZIP のエントリの名前を変える。</summary>
+        private static void RenameEntry(string path, string from, string to)
+        {
+            using var archive = ZipFile.Open(path, ZipArchiveMode.Update);
+            var source = archive.GetEntry(from)!;
+            byte[] content;
+            using (var stream = source.Open())
+            using (var buffer = new MemoryStream())
+            {
+                stream.CopyTo(buffer);
+                content = buffer.ToArray();
+            }
+
+            source.Delete();
+            using var destination = archive.CreateEntry(to).Open();
+            destination.Write(content, 0, content.Length);
+        }
 
         /// <summary>ZIP の先頭にエントリを追加する(既存のエントリをすべて後ろへ書き直す)。</summary>
         private static void AddEntryFirst(string path, string entryName, string content)

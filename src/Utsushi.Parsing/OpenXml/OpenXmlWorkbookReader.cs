@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Xml;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
@@ -608,6 +609,11 @@ namespace Utsushi.Parsing.OpenXml
         private const string ContentTypesEntryName = "[Content_Types].xml";
 
         /// <summary>
+        /// 画像パートごとの、読み取り・検証済みのバイト列。パッケージ(パートのオブジェクト)が回収されれば一緒に消える。
+        /// </summary>
+        private static readonly ConditionalWeakTable<ImagePart, byte[]> ValidatedImageData = new();
+
+        /// <summary>
         /// <c>[Content_Types].xml</c> の展開後の大きさの上限(4MiB。要件6.7)。パートではないため <see cref="GuardXmlParts(SpreadsheetDocument, string?)"/>
         /// の対象にならず、Open の中で DOM として読まれる(100万件の Override で処理時間・メモリが極端に増えた。security-reviewer指摘)。
         /// </summary>
@@ -944,7 +950,7 @@ namespace Utsushi.Parsing.OpenXml
         internal const int MaxShapesPerSheet = 50;
 
         /// <summary>
-        /// 図形1つに含まれる全テキスト(段落・ランを連結した文字数)の上限。極端に長い文字列に
+        /// 図形1つに含まれる全テキスト(段落・ランを連結した文字数。段落の区切りも1文字と数える)の上限。極端に長い文字列に
         /// 対する折り返し計算量を避けるための安全弁(要件10.8)。
         /// </summary>
         private const int MaxShapeTextLength = 2000;
@@ -1210,6 +1216,16 @@ namespace Utsushi.Parsing.OpenXml
                 return false;
             }
 
+            // 同じ画像パートを参照する画像(同じロゴを複数箇所に貼った場合など)は、読み取り・検証済みのバイト列を共有する。
+            // 参照ごとに読み直すと、圧縮後は小さい画像を多数の xdr:pic から参照させるだけで、展開後の大きさ×参照数の
+            // メモリを確保させられる(security-reviewer指摘)。同じ配列を共有するため、Rendering 側のデコード結果のキャッシュも効く。
+            if (ValidatedImageData.TryGetValue(imagePart, out var cachedData))
+            {
+                data = cachedData;
+                contentType = imagePart.ContentType;
+                return true;
+            }
+
             using (var stream = imagePart.GetStream())
             {
                 if (!TryReadBounded(stream, MaxImageDataBytes, out data))
@@ -1248,8 +1264,16 @@ namespace Utsushi.Parsing.OpenXml
             }
 
             contentType = imagePart.ContentType;
+            ValidatedImageData.AddOrUpdate(imagePart, data);
             return true;
         }
+
+        /// <summary>
+        /// ZIPのエントリ名が <c>[Content_Types].xml</c> かどうか。System.IO.Packaging と同じく、
+        /// <see cref="string.ToUpperInvariant"/> した名前どうしで比べる。
+        /// </summary>
+        private static bool IsContentTypesEntryName(string entryName) =>
+            string.Equals(entryName.ToUpperInvariant(), ContentTypesEntryName.ToUpperInvariant(), StringComparison.Ordinal);
 
         /// <summary>1つの<c>xdr:sp</c>アンカーを<see cref="ShapeModel"/>として読み取る(要件10)。</summary>
         private static ShapeModel? ReadShape(
@@ -2170,6 +2194,15 @@ namespace Utsushi.Parsing.OpenXml
                     runs.Add(new ShapeTextRun(text!, ReadShapeRunFont(runProperties, defaultColor, colors)));
                 }
 
+                // 段落の区切りも1文字として数える(Excel でも段落の区切りは改行1文字に当たる)。数えないと、文字の無い
+                // 段落を大量に並べるだけで上限を迂回し、Layout の折り返し計算を段落数に応じて重くできる(security-reviewer指摘)。
+                totalLength++;
+                if (totalLength > MaxShapeTextLength)
+                {
+                    textTooLong = true;
+                    return null;
+                }
+
                 // ランの無い段落(空行)も、行を占める空の段落として残す(Runs が空)。
                 var hAlign = MapHorizontalAlignment(paragraph.ParagraphProperties?.Alignment?.Value);
                 paragraphs.Add(new ShapeTextParagraph(runs, hAlign));
@@ -2960,7 +2993,10 @@ namespace Utsushi.Parsing.OpenXml
                     // 読まれる。Open より前に大きさ・要素数・深さを検査する(要件6.7)。
                     foreach (var entry in entries)
                     {
-                        if (string.Equals(entry.FullName, ContentTypesEntryName, StringComparison.OrdinalIgnoreCase))
+                        // System.IO.Packaging と同じ比較(ToUpperInvariant)で判定する。OrdinalIgnoreCase では
+                        // "[Content_Typeſ].xml"(ſ は大文字にすると S)を見逃し、検査を通らないまま Open に読まれる
+                        // (security-reviewer指摘)。
+                        if (IsContentTypesEntryName(entry.FullName))
                         {
                             GuardZipEntry(entry, reportCode, s => EnsureContentTypesWithinLimits(
                                 s, MaxContentTypesBytes, MaxContentTypesEntries, entry.FullName, reportCode));
