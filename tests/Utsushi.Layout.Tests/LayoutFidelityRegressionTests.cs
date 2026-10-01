@@ -284,6 +284,69 @@ namespace Utsushi.Layout.Tests
             Assert.Equal(0.75, lines[0].WidthPt, 10);
         }
 
+        // -- 罫線の継ぎ目 -----------------------------------------------------------
+
+        [Fact]
+        public void 太い罫線の角では接する罫線の線幅の半分だけ端を延ばす()
+        {
+            var thick = new BorderEdge(BorderLineStyle.Thick, ArgbColor.Black);
+            var style = CellStyle.Default with
+            {
+                Borders = new BorderSet(thick, thick, thick, thick, BorderEdge.None, BorderEdge.None),
+            };
+            var sheet = UniformSheet(rows: 1, columns: 1, pageSetup: NoMarginA4(), style: style);
+
+            var lines = Lines(Assert.Single(Compute(sheet).Pages)).ToList();
+            var horizontal = lines.Where(l => l.From.Y == l.To.Y).ToList();
+            var vertical = lines.Where(l => l.From.X == l.To.X).OrderBy(l => l.From.X).ToList();
+            var half = vertical[0].WidthPt / 2.0;
+
+            Assert.Equal(2, horizontal.Count);
+            Assert.All(horizontal, l =>
+            {
+                Assert.Equal(vertical[0].From.X - half, l.From.X, 10);
+                Assert.Equal(vertical[1].From.X + half, l.To.X, 10);
+            });
+            Assert.All(vertical, l => Assert.Equal(l.To.Y - l.From.Y, horizontal.Max(h => h.From.Y) - horizontal.Min(h => h.From.Y) + (2 * half), 10));
+        }
+
+        [Fact]
+        public void 継ぎ目の無い罫線の端は延ばさない()
+        {
+            var thick = new BorderEdge(BorderLineStyle.Thick, ArgbColor.Black);
+            var style = CellStyle.Default with
+            {
+                Borders = new BorderSet(BorderEdge.None, BorderEdge.None, BorderEdge.None, thick, BorderEdge.None, BorderEdge.None),
+            };
+            var sheet = UniformSheet(rows: 1, columns: 2, pageSetup: NoMarginA4(), style: style);
+
+            var lines = Lines(Assert.Single(Compute(sheet).Pages)).OrderBy(l => l.From.X).ToList();
+
+            // 隣どうしの下罫線は端どうしが接するだけで(同じ向き)、延ばさない。
+            Assert.Equal(2, lines.Count);
+            Assert.Equal(0.0, lines[0].From.X, 10);
+            Assert.Equal(lines[0].To.X, lines[1].From.X, 10);
+        }
+
+        [Fact]
+        public void 破線の罫線は継ぎ目でも延ばさない()
+        {
+            var dashed = new BorderEdge(BorderLineStyle.MediumDashed, ArgbColor.Black);
+            var thick = new BorderEdge(BorderLineStyle.Thick, ArgbColor.Black);
+            var style = CellStyle.Default with
+            {
+                Borders = new BorderSet(thick, BorderEdge.None, dashed, BorderEdge.None, BorderEdge.None, BorderEdge.None),
+            };
+            var sheet = UniformSheet(rows: 1, columns: 1, pageSetup: NoMarginA4(), style: style);
+
+            var lines = Lines(Assert.Single(Compute(sheet).Pages)).ToList();
+            var top = Assert.Single(lines, l => l.Dash != LineDashStyle.Solid);
+            var left = Assert.Single(lines, l => l.Dash == LineDashStyle.Solid);
+
+            Assert.Equal(0.0, top.From.X, 10);
+            Assert.Equal(-top.WidthPt / 2.0, left.From.Y, 10);
+        }
+
         // -- ページ中央 -------------------------------------------------------------
 
         [Fact]

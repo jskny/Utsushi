@@ -50,6 +50,9 @@ namespace Utsushi.Layout
 
         private readonly List<DrawCommand> _fills = new();
         private readonly List<DrawCommand> _borders = new();
+
+        /// <summary><see cref="_borders"/> の各罫線が、セル境界上の一重の水平・垂直の罫線(角の継ぎ目の調整の対象)かどうか。</summary>
+        private readonly List<bool> _borderOnGridLine = new();
         private readonly List<DrawCommand> _texts = new();
         private readonly List<DrawCommand> _drawingObjects = new();
         private readonly HashSet<BorderLineKey> _emittedBorders = new();
@@ -157,6 +160,8 @@ namespace Utsushi.Layout
             }
 
             EmitDrawingObjects(rowIndex, columnIndex, rowOffsets, columnOffsets);
+
+            ExtendBorderEndsAtJunctions();
 
             var commands = new List<DrawCommand>(_fills.Count + _borders.Count + _texts.Count + _drawingObjects.Count);
             commands.AddRange(_fills);
@@ -890,12 +895,13 @@ namespace Utsushi.Layout
                 // 二重線は細線2本で表現する。罫線が属するセル境界の内外へ等距離に振り分ける。
                 var offset = BorderMetrics.DoubleLineCenterSpacingPt * _scale / 2.0;
                 var (dx, dy) = horizontal ? (0.0, offset) : (offset, 0.0);
-                AddLine(Offset(from, -dx, -dy), Offset(to, -dx, -dy), edge.Color, width, dash);
-                AddLine(Offset(from, dx, dy), Offset(to, dx, dy), edge.Color, width, dash);
+                AddLine(Offset(from, -dx, -dy), Offset(to, -dx, -dy), edge.Color, width, dash, onGridLine: false);
+                AddLine(Offset(from, dx, dy), Offset(to, dx, dy), edge.Color, width, dash, onGridLine: false);
                 return;
             }
 
-            AddLine(from, to, edge.Color, width, dash);
+            var axisAligned = from.X == to.X || from.Y == to.Y;
+            AddLine(from, to, edge.Color, width, dash, onGridLine: axisAligned);
         }
 
         private static PointPt Offset(PointPt point, double dx, double dy) => new(point.X + dx, point.Y + dy);
@@ -903,7 +909,7 @@ namespace Utsushi.Layout
         /// <summary>
         /// 罫線を追加する。隣接セルが同じ境界に同一の罫線を持つ場合、描画命令が重複するため取り除く。
         /// </summary>
-        private void AddLine(PointPt from, PointPt to, ArgbColor color, double widthPt, LineDashStyle dash)
+        private void AddLine(PointPt from, PointPt to, ArgbColor color, double widthPt, LineDashStyle dash, bool onGridLine)
         {
             if (!_emittedBorders.Add(new BorderLineKey(from, to, color, widthPt, dash)))
             {
@@ -911,7 +917,78 @@ namespace Utsushi.Layout
             }
 
             _borders.Add(new LineCommand(from, to, color, widthPt, dash));
+            _borderOnGridLine.Add(onGridLine);
         }
+
+        /// <summary>
+        /// 実線の水平・垂直の罫線の端に、垂直・水平の罫線の端が接している(角・T字の継ぎ目)場合、接している罫線の
+        /// 線幅の半分だけ端を延ばす(継ぎ目の外側の欠けがちょうど埋まる)。端をそろえたままだと、太い罫線(2.25pt など)が角で交わるところの外側に欠けができる。
+        /// </summary>
+        /// <remarks>
+        /// 罫線の端を一律に延ばす(線端を四角くする)と、垂直の罫線が無い端(合計欄の下罫線だけを引いた場合など)でも
+        /// 隣のセルへ突き出すため、継ぎ目のある端だけを延ばす(layout-fidelity-reviewer指摘)。
+        /// 罫線はセルの辺ごとに出力するため、継ぎ目は端点どうしの一致で判定できる。破線は延ばすと破線の周期がずれるため、
+        /// 二重線・斜線はセル境界の上に無いため、延ばす対象にしない(継ぎ目の相手としては、破線も数える)。
+        /// </remarks>
+        private void ExtendBorderEndsAtJunctions()
+        {
+            if (_borders.Count < 2)
+            {
+                return;
+            }
+
+            // 端点 → その点に端を持つ水平/垂直の罫線の線幅の半分の最大値。
+            var horizontalEnds = new Dictionary<(long X, long Y), double>();
+            var verticalEnds = new Dictionary<(long X, long Y), double>();
+            for (var i = 0; i < _borders.Count; i++)
+            {
+                if (!_borderOnGridLine[i] || _borders[i] is not LineCommand line)
+                {
+                    continue;
+                }
+
+                var ends = line.From.Y == line.To.Y ? horizontalEnds : verticalEnds;
+                var half = line.WidthPt / 2.0;
+                foreach (var point in new[] { line.From, line.To })
+                {
+                    var key = PointKey(point);
+                    ends[key] = ends.TryGetValue(key, out var existing) ? Math.Max(existing, half) : half;
+                }
+            }
+
+            for (var i = 0; i < _borders.Count; i++)
+            {
+                if (!_borderOnGridLine[i] || _borders[i] is not LineCommand line || line.Dash != LineDashStyle.Solid)
+                {
+                    continue;
+                }
+
+                var horizontal = line.From.Y == line.To.Y;
+                var perpendicularEnds = horizontal ? verticalEnds : horizontalEnds;
+                var fromExtension = perpendicularEnds.TryGetValue(PointKey(line.From), out var f) ? f : 0.0;
+                var toExtension = perpendicularEnds.TryGetValue(PointKey(line.To), out var t) ? t : 0.0;
+                if (fromExtension == 0.0 && toExtension == 0.0)
+                {
+                    continue;
+                }
+
+                // 罫線は左→右・上→下の向きで出力している(EmitBorders)。
+                _borders[i] = horizontal
+                    ? line with
+                    {
+                        From = new PointPt(line.From.X - fromExtension, line.From.Y),
+                        To = new PointPt(line.To.X + toExtension, line.To.Y),
+                    }
+                    : line with
+                    {
+                        From = new PointPt(line.From.X, line.From.Y - fromExtension),
+                        To = new PointPt(line.To.X, line.To.Y + toExtension),
+                    };
+            }
+        }
+
+        private static (long X, long Y) PointKey(PointPt point) =>
+            ((long)Math.Round(point.X * 1000.0), (long)Math.Round(point.Y * 1000.0));
 
         // ---------------------------------------------------------------------
         // テキスト(要件4.1, 4.4, 2.5)

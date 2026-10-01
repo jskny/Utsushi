@@ -451,7 +451,9 @@ namespace Utsushi.Layout.Tests
             // 右端(C1のRight)。アンカーA1だけを見ていると欠落する。
             Assert.Contains(lines, l => l.From.X == columnWidthPt * 3 && l.To.X == columnWidthPt * 3);
             // 下端(C1のBottom)。3列ぶんの幅で1本になる。アンカーA1だけを見ていると欠落する。
-            Assert.Contains(lines, l => l.From.Y == rowHeightPt && l.To.Y == rowHeightPt && l.To.X - l.From.X == columnWidthPt * 3);
+            // 両端は左右の罫線との角の継ぎ目として、左右の罫線の線幅の半分ずつ延びる。
+            Assert.Contains(lines, l => l.From.Y == rowHeightPt && l.To.Y == rowHeightPt
+                && l.To.X - l.From.X == (columnWidthPt * 3) + l.WidthPt);
             // 上端はどのセルにも設定していないため出力されない
             Assert.DoesNotContain(lines, l => l.From.Y == 0.0 && l.To.Y == 0.0);
         }

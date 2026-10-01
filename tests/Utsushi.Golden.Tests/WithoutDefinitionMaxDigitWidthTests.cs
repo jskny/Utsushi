@@ -195,7 +195,8 @@ namespace Utsushi.Golden.Tests
         {
             var page = Assert.Single(layout.Pages);
             Assert.Equal(1.0, page.ScaleFactor, 6);
-            var xs = page.Commands.OfType<LineCommand>().SelectMany(l => new[] { l.From.X, l.To.X }).ToList();
+            // 垂直の罫線の位置で測る(水平の罫線は、角の継ぎ目で端が垂直の罫線の線幅の半分だけ延びる)。
+            var xs = page.Commands.OfType<LineCommand>().Where(l => l.From.X == l.To.X).Select(l => l.From.X).ToList();
             return xs.Max() - xs.Min();
         }
 

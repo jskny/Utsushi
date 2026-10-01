@@ -549,7 +549,9 @@ namespace Utsushi.Rendering
             paint.Color = ToSkColor(line.Color);
             paint.Style = SKPaintStyle.Stroke;
             paint.StrokeWidth = (float)line.WidthPt;
-            paint.StrokeCap = ResolveLineCap(line);
+
+            // 罫線の角・T字の継ぎ目は、Layout が継ぎ目のある端だけを接する罫線の線幅の半分延ばして埋める(PageCommandBuilder)。
+            paint.StrokeCap = SKStrokeCap.Butt;
             paint.IsAntialias = true;
             paint.PathEffect = context.GetDashEffect(line.Dash, line.WidthPt, CreateDashEffect);
 
@@ -794,22 +796,6 @@ namespace Utsushi.Rendering
         /// <summary>
         /// 破線パターンを作る。間隔は線幅に比例させ、太い罫線でも破線に見えるようにする。
         /// </summary>
-        /// <summary>
-        /// 罫線の端の形。実線の水平・垂直の罫線は、端を線幅の半分だけ四角く延ばす(<see cref="SKStrokeCap.Square"/>)。
-        /// 端をそろえたまま(<see cref="SKStrokeCap.Butt"/>)だと、太い罫線(2.25pt など)が角で交わるところの
-        /// 外側に、線幅の半分四方の欠けができる。延ばす量は線幅の半分なので、隣のセルの罫線と重なるのは
-        /// 交点の線幅の範囲に限られる。
-        /// </summary>
-        /// <remarks>
-        /// 破線は延ばすと破線の周期がずれ、斜めの罫線は延ばすとセルの角から外へ突き出すため、
-        /// これらは端をそろえたままにする。
-        /// </remarks>
-        internal static SKStrokeCap ResolveLineCap(LineCommand line)
-        {
-            var axisAligned = line.From.X == line.To.X || line.From.Y == line.To.Y;
-            return line.Dash == LineDashStyle.Solid && axisAligned ? SKStrokeCap.Square : SKStrokeCap.Butt;
-        }
-
         private static SKPathEffect? CreateDashEffect(LineDashStyle dash, double widthPt)
         {
             var unit = (float)Math.Max(widthPt, 0.5);
@@ -839,12 +825,13 @@ namespace Utsushi.Rendering
     /// </summary>
     /// <remarks>
     /// <para>
-    /// SkiaSharp の PDF バックエンド(NuGet で配布されるネイティブビルド)はフォントの
-    /// <b>サブセット化を行わず、使用フォントを丸ごと埋め込む</b>。日本語フォントは数MBあるため、
-    /// 1ページの帳票でも出力PDFが数MBになる。SkiaSharp 2.88 / 3.x のいずれでも同じ挙動を確認している。
+    /// 既定(<see cref="EmbedFont"/>)では、帳票で使った字形だけのサブセットフォントを作って埋め込む(要件11.5、
+    /// <c>RenderContext</c> / <c>TrueTypeSubsetter</c>)。SkiaSharp の PDF バックエンド自体はサブセット化を行わないため、
+    /// Utsushi 側で作り直している。ただし CFF 形式(.otf)のフォントや、埋め込み許可がサブセット化を禁止しているフォントは
+    /// サブセットを作れず、フォント全体を埋め込む(日本語フォントでは数MBになる)。
     /// </para>
     /// <para>
-    /// 帳票の配布サイズが問題になる場合は <see cref="Outline"/> を選ぶ。
+    /// それでも配布サイズが問題になる場合は <see cref="Outline"/> を選ぶ。
     /// 見た目は <see cref="EmbedFont"/> と同一だが、PDF内の文字列検索・コピー・
     /// テキスト抽出ができなくなる点に注意すること。
     /// </para>
