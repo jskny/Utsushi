@@ -222,12 +222,13 @@ namespace Utsushi.Rendering
 
         /// <summary>画像を描画する(要件9)。他のセル内容より最前面に描画される。</summary>
         /// <remarks>
-        /// デコードした画像は出力全体で使い回す(<see cref="RenderContext.GetImage"/>)。印刷タイトルの行にある画像のように
-        /// 全ページに現れる画像も、デコードは1回で済み、PDFには1回だけ埋め込まれる。
+        /// 2回以上描く画像はデコード結果を出力全体で使い回す(<see cref="RenderContext.GetImage"/>)。印刷タイトルの行にある
+        /// 画像のように全ページに現れる画像も、デコードは1回で済み、PDFには1回だけ埋め込まれる。1回しか描かない画像は
+        /// 描画後すぐに解放する。
         /// </remarks>
         private static void DrawImage(SKCanvas canvas, ImageCommand image, RenderContext context)
         {
-            var skImage = context.GetImage(image.Data, data => DecodeImage(data, image.ContentType, context));
+            var skImage = context.GetImage(image.Data, data => DecodeImage(data, image.ContentType, context), out var owned);
             var skRect = ToSkRect(image.Rect);
             var hasRotation = Math.Abs(image.RotationDegrees) > double.Epsilon;
 
@@ -248,6 +249,11 @@ namespace Utsushi.Rendering
                 if (hasRotation)
                 {
                     canvas.Restore();
+                }
+
+                if (owned)
+                {
+                    skImage.Dispose();
                 }
             }
         }

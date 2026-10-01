@@ -2194,10 +2194,10 @@ namespace Utsushi.Parsing.OpenXml
                     runs.Add(new ShapeTextRun(text!, ReadShapeRunFont(runProperties, defaultColor, colors)));
                 }
 
-                // 段落の区切りも1文字として数える(Excel でも段落の区切りは改行1文字に当たる)。数えないと、文字の無い
-                // 段落を大量に並べるだけで上限を迂回し、Layout の折り返し計算を段落数に応じて重くできる(security-reviewer指摘)。
-                totalLength++;
-                if (totalLength > MaxShapeTextLength)
+                // 段落の区切り(2つ目以降の段落の前)も1文字として数える(Excel でも段落の区切りは改行1文字に当たる)。
+                // 数えないと、文字の無い段落を大量に並べるだけで上限を迂回し、Layout の折り返し計算を段落数に応じて
+                // 重くできる(security-reviewer指摘)。
+                if (paragraphs.Count > 0 && ++totalLength > MaxShapeTextLength)
                 {
                     textTooLong = true;
                     return null;

@@ -39,18 +39,27 @@ namespace Utsushi.Rendering
         /// </summary>
         private readonly Dictionary<byte[], SKImage> _images = new(ReferenceEqualityComparer.Instance);
 
+        /// <summary>
+        /// 2回以上描く画像のバイナリ。これらだけを <see cref="_images"/> に残す。1回しか描かない画像まで残すと、
+        /// 出力を終えるまで全画像のデコード結果を抱え、画像1枚ごとのピクセル数の上限(ピクセル爆弾対策)が
+        /// 「画像の枚数×上限」に膨らむ(code-reviewer指摘)。
+        /// </summary>
+        private readonly HashSet<byte[]> _repeatedImages;
+
         private SKPaint? _linePaint;
 
         private RenderContext(
             string reportCode,
             string sheetName,
             Dictionary<(FontStyle, string), ShapedText> shaped,
-            Dictionary<SKTypeface, SubsetGroup> subsets)
+            Dictionary<SKTypeface, SubsetGroup> subsets,
+            HashSet<byte[]> repeatedImages)
         {
             ReportCode = reportCode;
             SheetName = sheetName;
             _shaped = shaped;
             _subsets = subsets;
+            _repeatedImages = repeatedImages;
         }
 
         public string ReportCode { get; }
@@ -97,7 +106,46 @@ namespace Utsushi.Rendering
                 }
             }
 
-            return new RenderContext(layout.ReportCode, layout.SheetName, shaped, subsets);
+            return new RenderContext(layout.ReportCode, layout.SheetName, shaped, subsets, FindRepeatedImages(layout));
+        }
+
+        /// <summary>全ページを通して2回以上描く画像のバイナリ(同じ配列かどうかで比べる)。</summary>
+        private static HashSet<byte[]> FindRepeatedImages(PagedLayout layout)
+        {
+            var seen = new HashSet<byte[]>(ReferenceEqualityComparer.Instance);
+            var repeated = new HashSet<byte[]>(ReferenceEqualityComparer.Instance);
+            foreach (var page in layout.Pages)
+            {
+                foreach (var data in EnumerateImageData(page.Commands))
+                {
+                    if (!seen.Add(data))
+                    {
+                        repeated.Add(data);
+                    }
+                }
+            }
+
+            return repeated;
+        }
+
+        private static IEnumerable<byte[]> EnumerateImageData(IReadOnlyList<DrawCommand> commands)
+        {
+            foreach (var command in commands)
+            {
+                switch (command)
+                {
+                    case ImageCommand image:
+                        yield return image.Data;
+                        break;
+                    case GroupCommand group:
+                        foreach (var child in EnumerateImageData(group.Children))
+                        {
+                            yield return child;
+                        }
+
+                        break;
+                }
+            }
         }
 
         /// <summary><see cref="Prepare"/> で変換済みの字形の並びを返す。</summary>
@@ -176,15 +224,27 @@ namespace Utsushi.Rendering
         }
 
         /// <summary>
-        /// デコード済みの画像を返す。初めての画像は <paramref name="decode"/> でデコードして記録する。
-        /// 呼び出し側で解放しないこと。
+        /// デコード済みの画像を返す。2回以上描く画像は初回に <paramref name="decode"/> でデコードして記録し、以降は使い回す
+        /// (<paramref name="owned"/> は false。呼び出し側で解放しないこと)。1回しか描かない画像は記録せず、
+        /// <paramref name="owned"/> を true にして返す(呼び出し側が描画後に解放する)。
         /// </summary>
-        public SKImage GetImage(byte[] data, Func<byte[], SKImage> decode)
+        public SKImage GetImage(byte[] data, Func<byte[], SKImage> decode, out bool owned)
         {
-            if (!_images.TryGetValue(data, out var image))
+            if (_images.TryGetValue(data, out var image))
             {
-                image = decode(data);
+                owned = false;
+                return image;
+            }
+
+            image = decode(data);
+            if (_repeatedImages.Contains(data))
+            {
                 _images[data] = image;
+                owned = false;
+            }
+            else
+            {
+                owned = true;
             }
 
             return image;

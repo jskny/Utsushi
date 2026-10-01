@@ -718,9 +718,10 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   これらは他のセル内容と重なる場合に最前面へ来るようにする(要件9.3, 10.3)。
 - **画像の描画(要件9)**: `ImageCommand` は `SKBitmap.Decode(byte[])`でデコードして`SKImage`に変換し、
   `SKCanvas.DrawImage(image, destRect)` で `ImageCommand.Rect` へ描画する
-  (SkiaSharp 2.88.8で利用可能な標準API)。デコードした画像は1回の出力の間`RenderContext`に記録し、
-  同じバイナリ(配列の同一性で比べる)の画像では使い回す。印刷タイトルの行にある画像のように全ページに現れる画像も、
-  デコードは1回で済み、PDFには1回だけ埋め込まれる。既存の `ToSkRect(RectPt)` をそのまま使う。
+  (SkiaSharp 2.88.8で利用可能な標準API)。全ページを通して2回以上描く画像(同じバイナリの配列を
+  参照する画像)だけは、デコード結果を1回の出力の間`RenderContext`に記録して使い回す。印刷タイトルの行にある画像のように
+  全ページに現れる画像も、デコードは1回で済み、PDFには1回だけ埋め込まれる。1回しか描かない画像は描画後すぐに解放する
+  (全画像を記録すると、出力を終えるまで「画像の枚数×1枚のピクセル数の上限」のメモリを抱えるため)。既存の `ToSkRect(RectPt)` をそのまま使う。
   ページ境界外にはみ出す部分は `SKCanvas` が自然にクリップするため、追加のクリップ処理は不要。
   `SKBitmap.Decode` で実際に展開する前に `SKBitmap.DecodeBounds` で宣言上のピクセル寸法を確認し、
   上限(既定4096px)を超える場合はデコードせず `PdfRenderingException` とする(要件9.6。

@@ -387,6 +387,17 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 段落1つで上限ちょうどの文字数の図形テキストは読む()
+        {
+            var textBody = "<xdr:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>"
+                + new string('x', 2000) + "</a:t></a:r></a:p></xdr:txBody>";
+
+            var shape = ReadSingleShape(Dsf.ShapeAnchor(textBody: textBody));
+
+            Assert.Equal(2000, shape.Text!.Paragraphs[0].Runs[0].Text.Length);
+        }
+
+        [Fact]
         public void 同じ画像パートを参照する画像はバイト列を共有する()
         {
             var path = ImageWorkbookFixtures.CreateWithManyPictures(3);

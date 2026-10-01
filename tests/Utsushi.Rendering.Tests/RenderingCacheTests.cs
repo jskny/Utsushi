@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using SkiaSharp;
 using Utsushi.Core;
 using Utsushi.Layout.Model;
@@ -97,10 +98,25 @@ namespace Utsushi.Rendering.Tests
         }
 
         [Fact]
-        public void 画像は同じバイナリならデコードを1回で済ませる()
+        public void 複数回描く画像はデコードを1回で済ませ1回だけの画像は記録しない()
         {
-            using var context = RenderContext.Prepare(Layout(1, Array.Empty<DrawCommand>()), _metrics.Shaper, PdfRenderOptions.Default);
-            var png = SolidPng(8, 8);
+            var repeated = SolidPng(8, 8);
+            var single = SolidPng(4, 4);
+            var commands = new DrawCommand[] { new ImageCommand(new RectPt(0, 0, 10, 10), repeated, "image/png", 0) };
+            var layout = Layout(2, commands);
+            layout = layout with
+            {
+                Pages = layout.Pages
+                    .Append(layout.Pages[0] with
+                    {
+                        Commands = new DrawCommand[]
+                        {
+                            new GroupCommand(new PointPt(5, 5), 0, new DrawCommand[] { new ImageCommand(new RectPt(0, 0, 10, 10), single, "image/png", 0) }),
+                        },
+                    })
+                    .ToList(),
+            };
+            using var context = RenderContext.Prepare(layout, _metrics.Shaper, PdfRenderOptions.Default);
             var decodes = 0;
             SKImage Decode(byte[] data)
             {
@@ -109,11 +125,14 @@ namespace Utsushi.Rendering.Tests
                 return SKImage.FromBitmap(bitmap);
             }
 
-            var first = context.GetImage(png, Decode);
-            var second = context.GetImage(png, Decode);
-            context.GetImage((byte[])png.Clone(), Decode);
+            var first = context.GetImage(repeated, Decode, out var firstOwned);
+            var second = context.GetImage(repeated, Decode, out var secondOwned);
+            using var once = context.GetImage(single, Decode, out var onceOwned);
 
             Assert.Same(first, second);
+            Assert.False(firstOwned);
+            Assert.False(secondOwned);
+            Assert.True(onceOwned);
             Assert.Equal(2, decodes);
         }
 
