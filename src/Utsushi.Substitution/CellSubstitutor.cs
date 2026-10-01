@@ -22,6 +22,26 @@ namespace Utsushi.Substitution
     /// </remarks>
     public sealed class CellSubstitutor : ICellSubstitutor
     {
+        /// <summary>
+        /// 差し込み値・セル上書き値1つあたりの最大文字数(UTF-16のコード単位数)。
+        /// </summary>
+        /// <remarks>
+        /// Excel のセルに入れられる文字数の上限(32,767文字)に合わせている。これを超える値は元のExcelでも
+        /// 表現できない帳票にとって異常な入力であり、上限が無いと巨大な文字列の折り返し計算・字形の検証・描画に
+        /// 際限なくCPUとメモリを費やしてしまう(サービスから呼ばれた場合のサービス拒否の防止)。
+        /// </remarks>
+        internal const int MaxValueLength = 32767;
+
+        /// <summary>
+        /// 1回の変換で受け付けるセル番地の直接指定(セル上書き)の最大件数。
+        /// </summary>
+        /// <remarks>
+        /// 帳票の差し込み箇所は多くても数百件程度であり、これを大きく超える件数は呼び出し元の不具合か
+        /// 悪意のある入力である。値1つあたりの上限(<see cref="MaxValueLength"/>)だけでは件数×長さで
+        /// メモリと処理時間を際限なく消費できてしまうため、件数にも上限を設ける。
+        /// </remarks>
+        internal const int MaxCellOverrideCount = 10000;
+
         /// <inheritdoc />
         public ReportModel Apply(ReportModel report, IReadOnlyDictionary<string, string> values)
         {
@@ -92,6 +112,15 @@ namespace Utsushi.Substitution
 
             var definition = report.Definition;
             var sheet = report.Sheet;
+
+            if (cellOverrides.Count > MaxCellOverrideCount)
+            {
+                throw new InvalidSubstitutionValueException(
+                    "cellOverrides",
+                    $"セル番地の直接指定が {cellOverrides.Count} 件あり、上限({MaxCellOverrideCount} 件)を超えています。",
+                    definition.ReportCode,
+                    sheet.Name);
+            }
 
             // Apply と同様、まず全入力を検証してから一括で書き換える(要件2.8, 2.9)。
             var parsed = ParseAndValidateAddresses(definition, sheet, cellOverrides);
@@ -173,6 +202,16 @@ namespace Utsushi.Substitution
                     cell);
             }
 
+            if (value.Length > MaxValueLength)
+            {
+                throw new InvalidSubstitutionValueException(
+                    target,
+                    $"{description} の値が {value.Length} 文字あり、上限({MaxValueLength} 文字。Excelのセルに入れられる文字数)を超えています。",
+                    definition.ReportCode,
+                    sheetName,
+                    cell);
+            }
+
             for (var i = 0; i < value.Length; i++)
             {
                 var c = value[i];
@@ -228,6 +267,7 @@ namespace Utsushi.Substitution
             ReportDefinition definition, SheetModel sheet, IReadOnlyDictionary<string, string> cellOverrides)
         {
             var parsed = new List<(CellAddress, string)>(cellOverrides.Count);
+            var addressTextByCell = new Dictionary<CellAddress, string>(cellOverrides.Count);
 
             foreach (var (addressText, replacement) in cellOverrides)
             {
@@ -239,6 +279,20 @@ namespace Utsushi.Substitution
                         definition.ReportCode,
                         sheet.Name);
                 }
+
+                // "B1"・"b1"・"$B$1" は辞書のキーとしては別物だが同じセルを指す。
+                // そのまま適用すると列挙順で後の値だけが黙って採用されるため、正規化した番地で重複を検出する。
+                if (addressTextByCell.TryGetValue(address, out var otherText))
+                {
+                    throw new InvalidCellOverrideAddressException(
+                        addressText,
+                        $"セル番地 '{addressText}' と '{otherText}' が同じセル {address} を指しています。"
+                            + "1つのセルへの直接指定は1つにしてください。",
+                        definition.ReportCode,
+                        sheet.Name);
+                }
+
+                addressTextByCell.Add(address, addressText);
 
                 if (sheet.IsNonAnchorMergedCell(address, out var merged))
                 {

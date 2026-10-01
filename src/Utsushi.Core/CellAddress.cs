@@ -59,7 +59,7 @@ namespace Utsushi.Core
 
             var s = text!.Trim().Replace("$", string.Empty);
             var i = 0;
-            while (i < s.Length && char.IsLetter(s[i]))
+            while (i < s.Length && IsAsciiLetter(s[i]))
             {
                 i++;
             }
@@ -94,7 +94,7 @@ namespace Utsushi.Core
 
             foreach (var c in text)
             {
-                if (!char.IsLetter(c))
+                if (!IsAsciiLetter(c))
                 {
                     column = 0;
                     return false;
@@ -109,6 +109,15 @@ namespace Utsushi.Core
 
             return column >= 1;
         }
+
+        /// <summary>
+        /// 列名に使える英字('A'..'Z'・'a'..'z')かどうか。
+        /// </summary>
+        /// <remarks>
+        /// <see cref="char.IsLetter(char)"/> はASCII以外の英字(é・全角Ａなど)も受け付けるため、
+        /// 列番号の計算(<c>c - 'A' + 1</c>)が範囲外の値になり、"é1" が EG1 のような無関係なセルとして解釈されてしまう。
+        /// </remarks>
+        private static bool IsAsciiLetter(char c) => (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 
         /// <summary>1始まりの列番号を "A", "Z", "AA" 形式の列名に変換する。</summary>
         public static string ColumnName(int column)
