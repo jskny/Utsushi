@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Utsushi.Layout
 {
@@ -13,7 +14,13 @@ namespace Utsushi.Layout
     internal static class PageBandCalculator
     {
         /// <summary>
-        /// 分割を行う。
+        /// 「収まるかどうか」の比較に使う許容誤差(ポイント)。行高・列幅の合計や倍率での割り算で生じる
+        /// 浮動小数点の誤差で、ちょうど収まる行/列が次のページへ送られないようにする。
+        /// </summary>
+        internal const double TolerancePt = 1e-6;
+
+        /// <summary>
+        /// 分割を行う(1ページに使える大きさがどのページも同じ場合)。
         /// </summary>
         /// <param name="indices">分割対象の行番号または列番号(昇順)。</param>
         /// <param name="sizeOf">各指標のサイズ(ポイント)を返す関数。</param>
@@ -24,6 +31,26 @@ namespace Utsushi.Layout
             IReadOnlyList<int> indices,
             Func<int, double> sizeOf,
             double availableSizePt,
+            IReadOnlyCollection<int> manualBreaks) =>
+            Split(indices, sizeOf, _ => availableSizePt, manualBreaks);
+
+        /// <summary>
+        /// 分割を行う。1ページに使える大きさは、帯の先頭の指標によって変わってよい
+        /// (印刷タイトルを付けるページだけタイトルの分だけ狭くなる、など)。
+        /// </summary>
+        /// <param name="indices">分割対象の行番号または列番号(昇順)。</param>
+        /// <param name="sizeOf">各指標のサイズ(ポイント)を返す関数。</param>
+        /// <param name="availableSizeFor">帯の先頭の指標を受け取り、その帯(ページ)で使える大きさを返す関数。</param>
+        /// <param name="manualBreaks">
+        /// 手動改ページの位置。その指標の「手前」で改ページする。改ページ位置の行/列そのものが
+        /// 並びに無い(非表示・印刷タイトルなど)場合も、「直前の指標 &lt; 改ページ位置 &lt;= 現在の指標」を満たす
+        /// 指標の手前で改ページする。
+        /// </param>
+        /// <returns>ページ単位に分割された指標の帯。常に1つ以上の帯を返す(入力が空の場合は空の帯1つ)。</returns>
+        public static IReadOnlyList<IReadOnlyList<int>> Split(
+            IReadOnlyList<int> indices,
+            Func<int, double> sizeOf,
+            Func<int, double> availableSizeFor,
             IReadOnlyCollection<int> manualBreaks)
         {
             var bands = new List<IReadOnlyList<int>>();
@@ -33,16 +60,33 @@ namespace Utsushi.Layout
                 return bands;
             }
 
-            var breakSet = manualBreaks as ISet<int> ?? new HashSet<int>(manualBreaks);
+            var sortedBreaks = manualBreaks.Count == 0
+                ? Array.Empty<int>()
+                : manualBreaks.Distinct().OrderBy(b => b).ToArray();
+            var breakCursor = 0;
+
             var current = new List<int>();
             var currentSize = 0.0;
+            var currentAvailable = 0.0;
+            int? previous = null;
 
             foreach (var index in indices)
             {
                 var size = sizeOf(index);
 
-                var forcedBreak = breakSet.Contains(index);
-                var overflows = currentSize + size > availableSizePt;
+                // 直前の指標 < 改ページ位置 <= 現在の指標 を満たす改ページがあるか。
+                var forcedBreak = false;
+                while (breakCursor < sortedBreaks.Length && sortedBreaks[breakCursor] <= index)
+                {
+                    if (previous is { } prev && sortedBreaks[breakCursor] > prev)
+                    {
+                        forcedBreak = true;
+                    }
+
+                    breakCursor++;
+                }
+
+                var overflows = currentSize + size > currentAvailable + TolerancePt;
 
                 // 帯が空のときは改ページしない。1つの行/列だけで印字可能領域を超える場合は
                 // その行/列単独のページとし、はみ出し分はページ端で切り取られる(Excel と同じ挙動)。
@@ -53,8 +97,14 @@ namespace Utsushi.Layout
                     currentSize = 0.0;
                 }
 
+                if (current.Count == 0)
+                {
+                    currentAvailable = availableSizeFor(index);
+                }
+
                 current.Add(index);
                 currentSize += size;
+                previous = index;
             }
 
             if (current.Count > 0)

@@ -535,6 +535,7 @@ namespace Utsushi.Rendering
                 Color = ToSkColor(line.Color),
                 Style = SKPaintStyle.Stroke,
                 StrokeWidth = (float)line.WidthPt,
+                StrokeCap = ResolveLineCap(line),
                 IsAntialias = true,
             };
 
@@ -788,6 +789,22 @@ namespace Utsushi.Rendering
         /// <summary>
         /// 破線パターンを作る。間隔は線幅に比例させ、太い罫線でも破線に見えるようにする。
         /// </summary>
+        /// <summary>
+        /// 罫線の端の形。実線の水平・垂直の罫線は、端を線幅の半分だけ四角く延ばす(<see cref="SKStrokeCap.Square"/>)。
+        /// 端をそろえたまま(<see cref="SKStrokeCap.Butt"/>)だと、太い罫線(2.25pt など)が角で交わるところの
+        /// 外側に、線幅の半分四方の欠けができる。延ばす量は線幅の半分なので、隣のセルの罫線と重なるのは
+        /// 交点の線幅の範囲に限られる。
+        /// </summary>
+        /// <remarks>
+        /// 破線は延ばすと破線の周期がずれ、斜めの罫線は延ばすとセルの角から外へ突き出すため、
+        /// これらは端をそろえたままにする。
+        /// </remarks>
+        internal static SKStrokeCap ResolveLineCap(LineCommand line)
+        {
+            var axisAligned = line.From.X == line.To.X || line.From.Y == line.To.Y;
+            return line.Dash == LineDashStyle.Solid && axisAligned ? SKStrokeCap.Square : SKStrokeCap.Butt;
+        }
+
         private static SKPathEffect? CreateDashEffect(LineDashStyle dash, double widthPt)
         {
             var unit = (float)Math.Max(widthPt, 0.5);

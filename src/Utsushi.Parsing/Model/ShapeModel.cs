@@ -159,7 +159,23 @@ namespace Utsushi.Parsing.Model
     /// (折り返しはLayoutレイヤーの責務。design.md「Layout レイヤー」参照)。
     /// </summary>
     /// <param name="VAlign"><c>a:bodyPr/@anchor</c> から変換した垂直配置。</param>
-    public sealed record ShapeTextBody(IReadOnlyList<ShapeTextParagraph> Paragraphs, VerticalAlignment VAlign);
+    /// <param name="Insets">
+    /// <c>a:bodyPr/@lIns</c>・<c>@tIns</c>・<c>@rIns</c>・<c>@bIns</c>(図形の矩形の内側の余白)。
+    /// null はファイルに指定が無いことを表し、DrawingML の既定値(<see cref="ShapeTextInsets.Default"/>)を使う。
+    /// </param>
+    /// <remarks>
+    /// 段落内の改行(<c>a:br</c>)は <see cref="ShapeTextRun.Text"/> 中の <c>"\n"</c> で表し、
+    /// 空の段落(ランを持たない <c>a:p</c>)は <see cref="ShapeTextParagraph.Runs"/> が空の段落で表す。
+    /// </remarks>
+    public sealed record ShapeTextBody(
+        IReadOnlyList<ShapeTextParagraph> Paragraphs, VerticalAlignment VAlign, ShapeTextInsets? Insets = null);
+
+    /// <summary>図形内テキストの余白(ポイント、印刷倍率の適用前)。</summary>
+    public sealed record ShapeTextInsets(double LeftPt, double TopPt, double RightPt, double BottomPt)
+    {
+        /// <summary>DrawingML の既定値(左右 91440EMU = 7.2pt、上下 45720EMU = 3.6pt)。</summary>
+        public static ShapeTextInsets Default { get; } = new(7.2, 3.6, 7.2, 3.6);
+    }
 
     /// <summary>図形内テキストの1段落。</summary>
     /// <param name="HAlign"><c>a:pPr/@algn</c> から変換した水平配置。</param>

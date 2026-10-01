@@ -113,5 +113,44 @@ namespace Utsushi.Layout.Tests
             Assert.Single(bands);
             Assert.Empty(bands[0]);
         }
+
+        [Fact]
+        public void 改ページ位置の指標が並びに無くても直前の指標との間にあれば改ページする()
+        {
+            // 3は非表示などで並びに無い。2 < 3 <= 4 なので4の手前で改ページする。
+            var bands = Split(new[] { 1, 2, 4, 5 }, sizeEach: 1.0, available: 1000.0, manualBreaks: 3);
+
+            Assert.Equal(2, bands.Count);
+            Assert.Equal(new[] { 1, 2 }, bands[0]);
+            Assert.Equal(new[] { 4, 5 }, bands[1]);
+        }
+
+        [Fact]
+        public void 並びの先頭より前の改ページ位置は無視する()
+        {
+            var bands = Split(new[] { 5, 6, 7 }, sizeEach: 1.0, available: 1000.0, manualBreaks: 2);
+
+            Assert.Single(bands);
+        }
+
+        [Fact]
+        public void ページごとに使える大きさを帯の先頭の指標で変えられる()
+        {
+            // 先頭が3より後ろの帯だけ20pt狭くなる(タイトルを付けるページ)。
+            var bands = PageBandCalculator.Split(
+                Enumerable.Range(1, 10).ToList(), _ => 10.0, first => first > 3 ? 30.0 : 50.0, Array.Empty<int>());
+
+            Assert.Equal(new[] { 1, 2, 3, 4, 5 }, bands[0]);
+            Assert.Equal(new[] { 6, 7, 8 }, bands[1]);
+            Assert.Equal(new[] { 9, 10 }, bands[2]);
+        }
+
+        [Fact]
+        public void 浮動小数点の誤差の範囲で超える場合は収まるものとして扱う()
+        {
+            var bands = Split(Enumerable.Range(1, 10), sizeEach: 0.1, available: 1.0 - 1e-12);
+
+            Assert.Single(bands);
+        }
     }
 }

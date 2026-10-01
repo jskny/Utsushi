@@ -13,8 +13,11 @@ namespace Utsushi.Layout
     /// </remarks>
     internal static class BorderMetrics
     {
-        /// <summary>二重線の2本の線の間隔(ポイント)。</summary>
-        public const double DoubleLineGapPt = 1.0;
+        /// <summary>
+        /// 二重線の2本の線の中心どうしの間隔(ポイント)。Excel の二重線は「1px の線・1px の空き・1px の線」で
+        /// 描かれるため、線の中心の間隔は2px(1.5pt)になる。
+        /// </summary>
+        public static double DoubleLineCenterSpacingPt => Units.PixelsToPoints(2.0);
 
         /// <summary>罫線スタイルに対応する線幅(ポイント)。</summary>
         public static double GetWidthPt(BorderLineStyle style) => style switch

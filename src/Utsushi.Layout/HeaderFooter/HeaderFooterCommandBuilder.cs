@@ -54,16 +54,17 @@ namespace Utsushi.Layout.HeaderFooter
 
             // 「文書と一緒に拡大縮小する」が有効な場合のみ、拡大縮小率を文字サイズに適用する。
             var fontScale = headerFooter.ScaleWithDocument ? _scale : 1.0;
+            var isFirstPage = context.IsFirstPage ?? context.PageNumber == 1;
 
             AppendSections(
                 commands,
-                HeaderFooterParser.Parse(headerFooter.GetHeader(context.PageNumber), context),
+                HeaderFooterParser.Parse(headerFooter.GetHeader(context.PageNumber, isFirstPage), context),
                 fontScale,
                 isHeader: true);
 
             AppendSections(
                 commands,
-                HeaderFooterParser.Parse(headerFooter.GetFooter(context.PageNumber), context),
+                HeaderFooterParser.Parse(headerFooter.GetFooter(context.PageNumber, isFirstPage), context),
                 fontScale,
                 isHeader: false);
 
