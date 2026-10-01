@@ -14,6 +14,18 @@ namespace Utsushi.Core
                 throw new ArgumentOutOfRangeException(nameof(firstRow), "行・列番号は1始まりです。");
             }
 
+            // 終端が扱える最大行・最大列を超える範囲は作らない(セル番地 CellAddress と同じ上限。
+            // TopLeft/BottomRight で CellAddress に戻すときに例外にならないようにする)。
+            if (lastRow > CellAddress.MaxRow)
+            {
+                throw new ArgumentOutOfRangeException(nameof(lastRow), lastRow, "行番号は " + CellAddress.MaxRow + " 以下である必要があります。");
+            }
+
+            if (lastColumn > CellAddress.MaxColumn)
+            {
+                throw new ArgumentOutOfRangeException(nameof(lastColumn), lastColumn, "列番号は " + CellAddress.MaxColumn + " 以下である必要があります。");
+            }
+
             if (lastRow < firstRow || lastColumn < firstColumn)
             {
                 throw new ArgumentException("範囲の終端は始端以上である必要があります。", nameof(lastRow));
