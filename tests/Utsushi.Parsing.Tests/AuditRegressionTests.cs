@@ -368,6 +368,62 @@ namespace Utsushi.Parsing.Tests
             Assert.Equal(FontStyle.Default.SizePt, shape.Text!.Paragraphs[0].Runs[0].Font.SizePt);
         }
 
+        // --- 図形テキストの内側の余白(a:bodyPr の lIns 等) -------------------------------
+
+        [Fact]
+        public void 図形テキストの余白の指定が無ければnullにする()
+        {
+            var shape = ReadSingleShape(Dsf.ShapeAnchor(textBody:
+                "<xdr:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>x</a:t></a:r></a:p></xdr:txBody>"));
+
+            Assert.Null(shape.Text!.Insets);
+        }
+
+        [Fact]
+        public void 図形テキストの余白を読み無い辺と不正な辺は既定値にする()
+        {
+            // lIns=0、tIns=12700(1pt)、rIns は負(不正)、bIns は指定なし。
+            var shape = ReadSingleShape(Dsf.ShapeAnchor(textBody:
+                "<xdr:txBody><a:bodyPr lIns=\"0\" tIns=\"12700\" rIns=\"-12700\"/><a:lstStyle/>"
+                + "<a:p><a:r><a:t>x</a:t></a:r></a:p></xdr:txBody>"));
+
+            var insets = shape.Text!.Insets!;
+            Assert.Equal(0.0, insets.LeftPt);
+            Assert.Equal(1.0, insets.TopPt, 6);
+            Assert.Equal(ShapeTextInsets.Default.RightPt, insets.RightPt);
+            Assert.Equal(ShapeTextInsets.Default.BottomPt, insets.BottomPt);
+        }
+
+        // --- printOptions(ページ中央)・先頭ページ番号 ----------------------------------
+
+        [Fact]
+        public void ページ中央の指定と先頭ページ番号を読む()
+        {
+            var sheet = ReadSheetXml(
+                "<sheetData/>"
+                + "<printOptions horizontalCentered=\"1\" verticalCentered=\"true\"/>"
+                + "<pageSetup paperSize=\"9\" firstPageNumber=\"5\" useFirstPageNumber=\"1\"/>");
+
+            Assert.True(sheet.PageSetup.HorizontalCentered);
+            Assert.True(sheet.PageSetup.VerticalCentered);
+            Assert.Equal(5, sheet.PageSetup.FirstPageNumber);
+        }
+
+        [Theory]
+        [InlineData("<pageSetup firstPageNumber=\"5\"/>")]
+        [InlineData("<pageSetup firstPageNumber=\"5\" useFirstPageNumber=\"0\"/>")]
+        [InlineData("<pageSetup firstPageNumber=\"abc\" useFirstPageNumber=\"1\"/>")]
+        [InlineData("<pageSetup firstPageNumber=\"4294967295\" useFirstPageNumber=\"1\"/>")]
+        [InlineData("<pageSetup useFirstPageNumber=\"1\"/>")]
+        public void 先頭ページ番号が有効でなければ指定なしにする(string pageSetupXml)
+        {
+            var sheet = ReadSheetXml("<sheetData/>" + pageSetupXml);
+
+            Assert.Null(sheet.PageSetup.FirstPageNumber);
+            Assert.False(sheet.PageSetup.HorizontalCentered);
+            Assert.False(sheet.PageSetup.VerticalCentered);
+        }
+
         // --- 用紙コード ----------------------------------------------------------
 
         [Theory]

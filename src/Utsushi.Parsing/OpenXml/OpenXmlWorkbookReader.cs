@@ -655,6 +655,15 @@ namespace Utsushi.Parsing.OpenXml
         internal const int MaxPrintAreasPerSheet = 1000;
 
         /// <summary>
+        /// 先頭ページ番号(<c>pageSetup/@firstPageNumber</c>)として受け付ける値の上限。これを超える値は指定なしとして扱い、
+        /// ヘッダー/フッターのページ番号(先頭ページ番号 + ページ数)が int を溢れないようにする。
+        /// </summary>
+        internal const long MaxFirstPageNumber = 1_000_000_000;
+
+        /// <summary>図形のテキストの内側の余白(<c>a:bodyPr</c> の lIns 等)として受け付ける値の上限(ポイント)。超えた辺は既定値にする。</summary>
+        internal const double MaxShapeTextInsetPt = 5000.0;
+
+        /// <summary>
         /// 入力ファイル自体のバイト数、および展開後のZIPエントリ宣言サイズ合計の上限(1GiB)。
         /// 数百バイトのファイルが展開後に極端に大きくなる「ZIP爆弾」や、シーク不可ストリーム経由での
         /// 無制限なメモリ確保を防ぐための安全弁(要件6, 7。security-reviewer指摘)。自社帳票は
@@ -2172,8 +2181,42 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
-            var vAlign = MapVerticalAlignment(textBody.BodyProperties?.Anchor?.Value);
-            return new ShapeTextBody(paragraphs, vAlign);
+            var bodyProperties = textBody.BodyProperties;
+            var vAlign = MapVerticalAlignment(bodyProperties?.Anchor?.Value);
+            return new ShapeTextBody(paragraphs, vAlign, ReadShapeTextInsets(bodyProperties));
+        }
+
+        /// <summary>
+        /// <c>a:bodyPr</c> の内側の余白(lIns/tIns/rIns/bIns。EMU)を読む。どれも無ければ null(DrawingML の既定値)とし、
+        /// 一部だけ指定されていれば、無い辺・解釈できない辺・範囲外の辺は既定値にする。
+        /// </summary>
+        private static ShapeTextInsets? ReadShapeTextInsets(Dr.BodyProperties? bodyProperties)
+        {
+            if (bodyProperties is null
+                || (bodyProperties.LeftInset is null && bodyProperties.TopInset is null
+                    && bodyProperties.RightInset is null && bodyProperties.BottomInset is null))
+            {
+                return null;
+            }
+
+            var defaults = ShapeTextInsets.Default;
+            return new ShapeTextInsets(
+                ReadInsetPt(bodyProperties.LeftInset?.InnerText, defaults.LeftPt),
+                ReadInsetPt(bodyProperties.TopInset?.InnerText, defaults.TopPt),
+                ReadInsetPt(bodyProperties.RightInset?.InnerText, defaults.RightPt),
+                ReadInsetPt(bodyProperties.BottomInset?.InnerText, defaults.BottomPt));
+        }
+
+        private static double ReadInsetPt(string? emuText, double defaultPt)
+        {
+            if (emuText is null
+                || !long.TryParse(emuText, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var emu))
+            {
+                return defaultPt;
+            }
+
+            var pt = Units.EmusToPoints(emu);
+            return pt >= 0.0 && pt <= MaxShapeTextInsetPt ? pt : defaultPt;
         }
 
         private static FontStyle ReadShapeRunFont(Dr.RunProperties? runProperties, ArgbColor defaultColor, DrawingColorResolver colors)
@@ -2350,9 +2393,52 @@ namespace Utsushi.Parsing.OpenXml
 
             var headerFooter = ReadHeaderFooter(worksheet, sheetName, reportCode);
 
+            // printOptions の「ページ中央」(水平/垂直)と、pageSetup の「先頭ページ番号」(useFirstPageNumber が真のときだけ有効)。
+            var printOptions = worksheet.GetFirstChild<X.PrintOptions>();
+            var horizontalCentered = ReadBooleanAttribute(printOptions, "horizontalCentered");
+            var verticalCentered = ReadBooleanAttribute(printOptions, "verticalCentered");
+            var firstPageNumber = ReadBooleanAttribute(setup, "useFirstPageNumber") ? ReadFirstPageNumber(setup) : null;
+
             return new PageSetupModel(
                 paper, orientation, pageMargins, scaling, printAreas, rowBreaks, columnBreaks,
-                printTitles, pageOrder, headerFooter);
+                printTitles, pageOrder, headerFooter, horizontalCentered, verticalCentered, firstPageNumber);
+        }
+
+        /// <summary>
+        /// xsd:boolean の属性("1"/"true" が真)を読む。属性が無い・解釈できない場合は偽とする
+        /// (型付きプロパティの <c>Value</c> は不正な値で例外を投げるため、属性の文字列を直接解釈する)。
+        /// </summary>
+        private static bool ReadBooleanAttribute(OpenXmlElement? element, string localName)
+        {
+            if (element is null)
+            {
+                return false;
+            }
+
+            foreach (var attribute in element.GetAttributes())
+            {
+                if (attribute.LocalName == localName && string.IsNullOrEmpty(attribute.NamespaceUri))
+                {
+                    var value = attribute.Value?.Trim();
+                    return value == "1" || string.Equals(value, "true", StringComparison.Ordinal);
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// <c>pageSetup/@firstPageNumber</c> を読む。<see cref="MaxFirstPageNumber"/> を超える値・解釈できない値は
+        /// 指定なし(1から数える)とする(&amp;P・&amp;N の計算が int を溢れないようにする)。
+        /// </summary>
+        private static int? ReadFirstPageNumber(X.PageSetup? setup)
+        {
+            var text = setup?.FirstPageNumber?.InnerText;
+            return text is not null
+                && long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var value)
+                && value <= MaxFirstPageNumber
+                ? (int)value
+                : null;
         }
 
         /// <summary>ページヘッダー/フッターの設定を読み取る(要件3.7〜3.9)。</summary>
