@@ -99,6 +99,48 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   汎用の数値書式エンジンではなく、自社帳票が使う範囲(金額・数量・日付・パーセント)のサブセット実装とする。
   解釈できない書式(指数表記・分数表記など)は例外にせず General 相当へフォールバックし、
   表示の崩れはゴールデンテストで検出する。
+  - **組み込み書式(要件4.8)**: `NumberFormatter.BuiltInFormats` は ECMA-376 Part 1, 18.8.30 の既定値のうち、
+    日本語(ja-JP)ロケールのExcelの表示に合わせる(14=`yyyy/m/d`、22=`yyyy/m/d h:mm`、5〜8=円記号付きの通貨、
+    27〜36・50〜58=和暦を含む日本語ロケール固有の日付・時刻書式)。以前はロケールに依存しない既定値だけを持ち、
+    14がゼロ埋めの`yyyy/mm/dd`になり、5〜8・27〜36・50〜58は標準(General)の表示に落ちていた。
+  - **経過時間**: `[h]`・`[m]`・`[s]`(同じ文字の連続)は24時間・60分・60秒を超えて数える。時・分・秒の表示と同じく
+    ミリ秒に丸めてから数える。負の値は表示できないため General にする。秒の小数部(`ss.0`〜`ss.000`)は切り捨てで表示する。
+  - **和暦**: `[$-411]` 等のロケール指定は表示に反映しないが、`g`(英字1文字 `R`)・`gg`(漢字1文字 `令`)・`ggg`(元号名 `令和`)・
+    `e`(元号の年)・`ee`(2桁)を、明治(Excelの扱いに合わせ1868/1/1開始)〜令和の元号表で解釈する。明治より前の日付は General にする。
+    1年は「1」と表示し、「元年」には対応しない。解釈できない英字の書式指定子(`b` 等)は、書式文字をそのまま出さず General にする。
+  - **セクションと負号**: `@` を含むセクションは文字列の表示用であり、数値の表示には使わない(数値に使えるセクションが無ければ General)。
+    セクションが複数あり負数セクションが選ばれた場合は絶対値に書式を適用し、セクションが1つだけの場合は負号を出力全体の
+    先頭に付ける(`"¥"#,##0` で `-¥1,000`)。小数部の `#` は不要な0を出さず、`?` は空白にする。
+    `h"時"mm"分"` のように引用符・角括弧のリテラルを挟んでも、前後の書式指定子を見て `m` を「分」と判定する。
+  - **解析結果のキャッシュ**: 書式コードごとの解析結果(不変)を `ConcurrentDictionary` に持ち、数値セルごとの再解析を避ける。
+    キャッシュするのは255文字(Excelの書式コードの上限)以下の書式コードだけで、件数は1,024件までとする
+    (`MaxCacheableFormatLength`・`MaxCacheEntries`)。件数が上限に達したらキャッシュを空にして登録し直す
+    (先着の書式で埋まったままにすると、常駐プロセスでは1回の入力で埋められた後、以降の変換の書式がすべて都度解析になる。
+    security-reviewer指摘)。プロセス内で共有する静的なキャッシュのため、入力ファイルの内容で際限なく大きくならないようにしている。
+- **行・セルの番地と行高(要件1.7)**: `row/@r`・`c/@r` が省略されていれば、ECMA-376どおり直前の行の次の行・
+  同じ行の直前のセルの次の列(行の先頭ならA列)とする。補った行番号にも `MaxCellsPerSheet` による行番号の上限を当てる。
+  `r` があるのに番地として解釈できないセルは読み飛ばす。行高は `customHeight` の有無によらず `row/@ht` を採用する
+  (Excelは自動調整された行にも `ht` を書く)。
+- **ファイル内の数値の検証(要件6.12)**: 行高・列幅・既定の行高/列幅・余白・フォントサイズ・先頭ページ番号・図形の
+  テキストの余白は、NaN・無限大・負・上限超えを既定値(または指定なし)に戻す(上限は「信頼できない入力に対する安全弁 一覧」)。
+  NaNの余白で描画の原点がNaNになり、白紙のPDFが出ていたため。列幅換算(`ExcelUnitConverter.ColumnWidthToPixels`)も
+  NaN を0として扱う。
+- **用紙サイズ(要件1.8)**: `PaperSizeTable` のコードの意味は Windows の `DEVMODE.dmPaperSize`(`wingdi.h` の `DMPAPER_*`)に
+  合わせる(Excelはプリンタの用紙コードをそのまま保存する)。ECMA-376の説明と食い違う箇所(12/13)も `wingdi.h` に従う。
+  以前は43を「B4(JIS)」、62を「B4(JIS)回転」としていたが、`wingdi.h` では43ははがき、62はB5(JIS)横送りである。
+  収録するのは自社帳票で使いうる A/B判・Letter/Legal・はがき・往復はがき・封筒(角形2号・3号、長形3号・4号、洋形4号)と、
+  それらの回転(75〜89・92)・横送り(55・61・62・67)。回転・横送りの用紙は幅と高さを `wingdi.h` の定義どおりに持ち、
+  印刷の向きは `orientation` が別に決める。一覧に無いコードはA4とする。
+- **ページ中央・先頭ページ番号**: `printOptions/@horizontalCentered`・`@verticalCentered` を `PageSetupModel.HorizontalCentered`・
+  `VerticalCentered` に、`pageSetup/@firstPageNumber` を `@useFirstPageNumber` が真の場合だけ `PageSetupModel.FirstPageNumber` に読む
+  (`MaxFirstPageNumber` を超える値・解釈できない値は指定なし)。xsd:boolean の属性は、型付きプロパティの `Value` が不正な値で
+  例外を投げるため、属性の文字列("1"/"true")を直接解釈する。
+- **手動改ページ(要件3.11)**: `brk/@id` は0始まりの行(列)番号で、その行の上(列の左)で改ページする(ECMA-376 Part 1, 18.3.1.3)。
+  モデルは「この1始まりの番号の手前で改ページ」を表すため `id + 1` にする。`id = 0` と最終行(列)より後ろを指すものは無視する。
+- **印刷タイトルの範囲外の行・列**: `_xlnm.Print_Titles` の行番号・列番号が範囲外(`$0` や最大行を超える値)の場合は、
+  その方向の印刷タイトルなしとして無視する(以前は Layout で `ArgumentOutOfRangeException` になっていた)。
+- **セルの文字列と色**: インライン文字列のリッチテキストは共有文字列と同じく `r/t` だけを連結し、ふりがな(`rPh`)を本文に混ぜない。
+  セルの色(`rgb`・`indexedColors`)のアルファは Excel と同じく無視して不透明にする(`"00FF0000"` を透明として読むと、文字・罫線・塗りが消える)。
 - **入力ファイル全体の規模に対する安全弁(要件6.6)**: 画像・図形・結合セルのような個別の
   描画オブジェクトの上限とは別に、ファイル全体の規模に対しても上限を設ける。
   - `SpreadsheetDocument.Open` の前に `GuardPackageSize` で、ZIPエントリの宣言サイズ
@@ -126,9 +168,11 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
 - **結合セル範囲(要件2.9)**: `mergeCell` 要素を `MergedRange` として読み取る。1シートあたりの
   結合範囲の個数に上限(`MaxMergedRangesPerSheet`、既定1000)を設ける(`ElementKind =
   "TooManyMergedRanges"`。`unsupportedElements` ポリシーに従う)。Layoutレイヤーの結合セル矩形統合・
-  罫線合成(`SheetModel.FindMergedRange`)は結合範囲の個数に比例する線形走査をセルごとに行うため、
+  罫線合成は、当初セルごとに結合範囲の個数に比例する線形走査(`SheetModel.FindMergedRange`)を行っていたため、
   個数を無制限に許すと処理量がページ内セル数×結合範囲数で増大する(画像・図形の個数上限
   (`MaxImagesPerSheet`/`MaxShapesPerSheet`)と同じ理由によるDoS対策。security-reviewer指摘)。
+  現在は印刷範囲ごとに1度だけ作るセル→結合範囲の索引(`MergedCellIndex`。Layoutレイヤー節)を引くため、
+  処理量は結合範囲の個数に比例しないが、上限は索引のメモリを抑える安全弁として残す。
   個々の結合範囲の大きさ(行数・列数)自体の上限は、Layoutレイヤー節の`MaxSpanCells`を参照。
 - **画像(要件9)**: `WorksheetPart.DrawingsPart.WorksheetDrawing` 配下の `xdr:twoCellAnchor` /
   `xdr:oneCellAnchor` のうち `xdr:pic`(画像)のみを対象とする。`a:blip` の `r:embed` から
@@ -158,6 +202,9 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       設定に従う(`ElementKind = "TooManyImages"`)。
     - 画像1枚あたりの読み取りバイト数の上限(既定10MB)。超過時も同様
       (`ElementKind = "ImageTooLarge"`)。
+    - 同じ画像パートを参照する画像(同じロゴを複数箇所に貼った場合など)は、読み取り・検証済みのバイト列を共有する
+      (画像パートごとに `ConditionalWeakTable` で保持)。参照ごとに読み直すと、圧縮後は小さい画像を多数の `xdr:pic` から
+      参照させるだけで、展開後の大きさ×参照数のメモリを確保させられる(security-reviewer指摘)。
     - `ContentType` は宣言に過ぎず実バイト列と一致する保証がないため、ファイル先頭の
       シグネチャ(PNG/JPEG/GIF/BMPのマジックバイト)が一致することを確認する。
       不一致の場合は `ElementKind = "UnsupportedImageFormat"` として扱う。
@@ -442,9 +489,36 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   - 列幅(文字単位)→ ポイント換算(既定フォントの文字幅メトリクスを使用)
   - 行高(ポイント)の反映
   - 印刷範囲のクリッピング
-  - 手動改ページの適用
-  - 自動改ページ計算(1ページの印字可能領域 = 用紙サイズ - 余白、を拡大縮小率で除した論理サイズに対し、行高/列幅の累積が収まる位置で分割)
-  - 印刷タイトル行/列の複製(印刷タイトルは印刷範囲と独立に指定でき、印刷範囲の外の行/列でも各ページに繰り返す。要件3.4)
+  - 手動改ページの適用(要件3.2, 3.11): `PageBandCalculator.Split` は「直前の行(列) < 改ページ位置 <= 現在の行(列)」を
+    満たす改ページがあれば現在の行(列)の手前で改ページする。改ページ位置の行(列)そのものが本文の並びに無い
+    (非表示・高さ0・印刷タイトル)場合も改ページが失われない。
+  - 自動改ページ計算(1ページの印字可能領域 = 用紙サイズ - 余白、を拡大縮小率で除した論理サイズに対し、行高/列幅の累積が収まる位置で分割)。
+    「収まるか」の比較には許容誤差 `PageBandCalculator.TolerancePt`(1e-6pt)を設け、行高の合計や倍率での割り算の浮動小数点誤差で
+    ちょうど収まる行(列)が次のページへ送られないようにする。1ページに使える大きさは帯の先頭の行(列)によって変わってよい
+    (タイトルを付けるページだけタイトルの分狭くなる)ため、`Split` は帯の先頭を受け取って使える大きさを返す関数を取る。
+  - 印刷タイトル行/列の複製(印刷タイトルは印刷範囲と独立に指定でき、印刷範囲の外の行/列でも各ページに繰り返す。要件3.4, 3.12)。
+    タイトルを付けるのは、本文の帯の先頭がタイトルの最終行(列)より後ろにあるページだけとする(`ReportLayoutEngine.TitlePlan`)。
+    印刷範囲より上(左)のタイトルは全ページに付き、印刷範囲の中のタイトルはそれ自体を本文として印刷したページより後ろのページに
+    だけ付き、印刷範囲より下(右)のタイトルはどのページにも付かない。本文は印刷範囲の行(列)だけとし、範囲内のタイトル行(列)を
+    本文から取り除かない。どのページにタイトルを付けるかはページ分割の結果で決まるため、印刷範囲ごとに先に分割の計画
+    (`RangePlan`: 格子・タイトル・行帯・列帯・拡大縮小率・結合範囲の索引)を立て、差し込みセルの検証(要件2.6, 2.13)は
+    その後に行う。実際にはどのページにも付かないタイトル行(列)にある差し込みセルは、印刷範囲外と同じくエラーにする。
+  - 「次のページ数に合わせて印刷」(要件3.13): 本文の合計の大きさから求まる倍率(整数%に切り捨て、100%以下)を上限とし、
+    下限 `MinFitScalePercent`(10%)〜上限の整数%のうち、実際に行帯・列帯へ分割したページ数が指定以下になる最大の値を
+    二分探索で求める(倍率を下げても帯の数は増えないため単調。1%ずつ下げると大きなシートで最大90回の分割になる)。
+    どれも収まらなければ下限の10%とする。タイトルの分や行・列の区切り位置で、合計から求めた倍率では指定のページ数に
+    収まらないことがあるため、実際に分割して数える。この場合、手動改ページは無視する(Excelの仕様)。
+  - 「ページ中央」(要件3.14): 本文(タイトルを含む)の大きさ×倍率が印字可能領域より小さければ、差の半分だけ本文全体を
+    平行移動する(`PageCommandBuilder` の原点 = 余白 + 中央寄せの移動量)。大きい場合は移動しない。
+  - 高さ0の行・幅0の列(要件4.10): 非表示の行・列と同じく印刷しない。判定は `SheetGrid.PrintedRowHeightPt`・
+    `PrintedColumnWidthPt`(非表示または0以下・NaNなら0)に集約し、格子の構築・結合セルの矩形計算・差し込みセルの検証
+    (`SheetGrid.IsRowNotPrinted`/`IsColumnNotPrinted`)で同じ基準を使う。
+  - セル→結合範囲の索引(`MergedCellIndex`): 印刷範囲ごとに1度だけ作り、その印刷範囲の全ページで使い回す。
+    行方向を「かかる結合範囲の組が変わらない行の区間」(結合範囲の個数の2倍+1以下)に分け、区間ごとにその区間にかかる
+    結合範囲を先頭列の順に並べて持つ。格子の列にかからない結合範囲は登録しない。メモリは結合範囲の行数や格子の行数に
+    比例しない(行ごとに登録すると、全行にわたる縦長の結合範囲が多いシートで「格子の行数×結合範囲数」になる。
+    layout-fidelity-reviewer指摘)。結果は `SheetModel.FindMergedRange` と同じ(不正なファイルで結合範囲が重なる場合も、
+    `MergedRanges` の並びで先に現れる範囲を返す)。
   - 複数の印刷範囲をそれぞれ独立したページ群として計算(要件3.6)
   - 必須の置換フィールドの対象セルが、印刷範囲・印刷タイトルのいずれにも含まれない場合はエラーとする(要件2.6)
   - 空でない値を差し込んだセル(`ReportModel.SubstitutedCells`。任意キー・セル番地直接指定を含む)が
@@ -466,8 +540,21 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     印刷範囲外と同様にエラーにする。
   - **ヘッダー/フッターの改行**: 複数行のヘッダー/フッターは未対応のため、改行を取り除いて1行に配置する
     (`HeaderFooterCommandBuilder.ScaleRuns`。以前は改行文字がそのまま描画され豆腐や空白になっていた)。
-  - ページヘッダー/フッターの書式コード展開と配置(要件3.7〜3.9)
+  - ページヘッダー/フッターの書式コード展開と配置(要件3.7〜3.9, 3.15, 3.16)。
+    「先頭ページ番号」が指定されていれば、`&P` は `先頭ページ番号 + ページの通し番号 - 1`、`&N` は最終ページの番号
+    (`先頭ページ番号 + 総ページ数 - 1`)とする。「奇数/偶数ページで別指定」はこの表示上のページ番号の奇数・偶数で選び、
+    「先頭ページのみ別指定」は文書の1枚目のページ(`HeaderFooterContext.IsFirstPage`)で選ぶ(先頭ページ番号を指定すると、
+    1枚目のページ番号が1とは限らないため)。`&P+n`・`&P-n` は直後の数字(最大9桁。`MaxPageOffsetDigits`)を足し引きし、
+    数字の続かない `&P+` はページ番号の後に `+` をそのまま残す。フォント指定 `&"フォント名,スタイル"` のスタイルは
+    英語名(`Bold`/`Italic`/`Oblique`)と日本語版Excelの名前(`太字`/`斜体`)の両方を解釈する。
+    先頭ページ番号を指定した場合の `&N` と奇数/偶数の選び方は、Excelの実機との突き合わせが未実施である。
   - 結合セルの矩形統合
+  - **はみ出し表示のクリップ(要件4.9)**: 切り取り・折り返し・縮小のセルに加え、結合範囲の文字もセル(結合範囲)の矩形で
+    切り取る(Excelは結合セルの文字を隣のセルへはみ出させない)。結合範囲でないセルのはみ出し表示は、隣のセルへは描くが、
+    このページの本文(タイトルを含む)の矩形を印字可能領域(余白の内側)で切り詰めた矩形(`PageCommandBuilder._pageBodyRect`)の
+    外へは描かない(1列だけで印字可能領域を超えるページで、文字が余白へ描かれていた)。
+  - **二重線の罫線(要件4.11)**: Excelの二重線は「1pxの線・1pxの空き・1pxの線」で描かれるため、2本の線の中心の間隔を
+    2px(`BorderMetrics.DoubleLineCenterSpacingPt` = 1.5pt)に拡大縮小率を掛けた値とする(以前は中心の間隔を1ptとしていた)。
   - セル内テキストのフォントメトリクスに基づく配置(左右/上下揃え、インデント、縮小表示)
   - **画像・図形の配置(要件9, 10)**: `SheetModel.DrawingObjects`(画像・図形が`drawing.xml`の
     出現順で混在するリスト)を先頭から順に処理し、アンカーセルの位置(結合セルの
@@ -502,6 +589,15 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     確定させる。回転の適用はRenderingレイヤーの責務とする(座標変換をLayoutに持ち込むと
     `PagedLayout`が回転行列という新しい概念を持つことになり、既存の「軸に平行な矩形の
     集まり」という単純なモデルから外れるため)。
+  - **図形内テキストの余白・改行・空の段落(要件10.19)**: 矩形の内側の余白は `ShapeTextBody.Insets`(`a:bodyPr` の
+    `lIns`/`tIns`/`rIns`/`bIns`。指定が無ければ DrawingML の既定値 `ShapeTextInsets.Default` = 左右7.2pt・上下3.6pt)に、
+    拡大縮小率(グループ内なら追加の係数も)を掛けて使う。以前は全辺に固定の4ptを使っていた(`ShapeTextPaddingPt`)。
+    Parsingレイヤーは `a:br` を `"\n"` 1文字のラン、`a:fld` を保存時点の文字列のランとして読み、ランの無い段落も
+    空の段落として残す。Layoutは `"\n"` を行の区切りとし、空の段落は1行分の空行にする。空の段落の行の高さは、
+    直前(無ければ直後)のランを持つ段落の先頭ランのフォントに拡大縮小率を掛けて決める。
+  - **図形・接続線の枠線の倍率(要件10.20)**: 図形・グループ内図形・接続線の枠線の太さ(矢印の大きさはこれに比例する)に
+    拡大縮小率を掛ける。枠線の指定が無い接続線は、既定の黒い実線1pt(`DefaultConnectorOutline`)をLayoutで補ってから
+    倍率を掛ける(Renderingで補うと倍率が掛からないため)。
   - **接続線の配置(要件10.9)**: `ConnectorModel`は`DrawingObjectModel`のため、画像・図形と
     全く同じ`TryComputeDrawingObjectRect`でページ矩形を求め、`ConnectorCommand`を生成する。
     経路(実際にどう折れ線・曲線を引くか)はRenderingレイヤーの責務。
@@ -515,7 +611,7 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     でページ座標へ変換し、`ShapeCommand`/`ImageCommand`/`ConnectorCommand`を生成する
     (`GroupChildShape`のテキスト折り返しも通常の図形と同じロジックを流用するが、
     矩形自体が`scaleX`/`scaleY`で縮小/拡大されているのに合わせて、内側余白
-    (`ShapeTextPaddingPt`)・フォントサイズにも`scaleX`と`scaleY`の幾何平均を追加の係数として
+    (`a:bodyPr`の余白。下記「図形内テキストの余白」)・フォントサイズにも`scaleX`と`scaleY`の幾何平均を追加の係数として
     掛ける。トップレベルの図形はこの係数が1.0になるため、印刷拡大率(`_scale`)のみが
     効く従来どおりの挙動のままである。グループが大きく縮小されている場合に余白が
     シェイプ本体ほど縮まらずテキストが矩形からはみ出す/消えることを防ぐための対応
@@ -604,6 +700,11 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       void Render(PagedLayout layout, Stream output);
   }
   ```
+- **罫線の端の形(要件4.11)**: 実線の水平・垂直の罫線(`LineCommand`)は端を線幅の半分だけ四角く延ばす
+  (`SKStrokeCap.Square`。`SkiaPdfRenderer.ResolveLineCap`)。端をそろえたまま(`Butt`)だと、太い罫線(2.25ptなど)が
+  角で交わるところの外側に線幅の半分四方の欠けができる。延ばす量は線幅の半分なので、隣のセルの罫線と重なるのは
+  交点の線幅の範囲に限られる。破線は延ばすと破線の周期がずれ、斜線は延ばすとセルの角から突き出すため `Butt` のままにする。
+  T字に交わる箇所の見た目のExcelとの一致は未検証である。
 - 1ページ = 1 `SKCanvas` への描画。矩形塗りつぶし(背景)→罫線→テキスト→
   **画像・図形・接続線・グループ**(`drawing.xml`の出現順)の順で描画する。Excelはシート上に
   浮かぶ描画オブジェクト(画像・図形等)をセルの内容より上のレイヤーとして描画するため、
@@ -737,8 +838,8 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   - `curvedConnector2`: 2頂点を結ぶ1本の2次ベジェ曲線(制御点は`bentConnector2`と
     同じ折れ点)。
   - `curvedConnector3`: `bentConnector3`の折れ点を通る2本のベジェ曲線によるS字カーブ。
-  - `Outline`があれば`SKPaintStyle.Stroke`で描画する(`null`の場合、Excel上は既定の
-    黒い実線1ptで表示されるため、`Outline`が無い接続線にも既定の線色・太さを補う)。
+  - `Outline`があれば`SKPaintStyle.Stroke`で描画する(Excel上は既定の黒い実線1ptで表示されるため、
+    `Outline`が無い接続線にはLayoutレイヤーが既定の線色・太さを補い、拡大縮小率を掛けて渡す。要件10.20)。
     `ResolvedStart`/`ResolvedEnd`が両方とも`null`(未解決、`Rect`基準の経路)の場合のみ、
     回転(`RotationDegrees`)があれば図形と同じ`Save`/`RotateDegrees`/`Restore`を使う。
     解決済みの場合は絶対座標の両端点をそのまま結んだ経路が最終的な見た目であり、
@@ -943,9 +1044,12 @@ public sealed record RadialGradientShapeFill(IReadOnlyList<GradientStop> Stops, 
 public sealed record ShapeOutline(ArgbColor Color, double WidthPt);
 
 // 段落・ランの構造はOOXMLのa:pPr/a:rPrにあわせる。折り返しはLayoutレイヤーが行う(未折り返しの原文)。
+// 段落内の改行(a:br)はランの Text 中の "\n"、空の段落(ランの無い a:p)は Runs が空の段落で表す(要件10.19)。
 public sealed record ShapeTextBody(
     IReadOnlyList<ShapeTextParagraph> Paragraphs,
-    VerticalAlignment VAlign);            // a:bodyPr/@anchor
+    VerticalAlignment VAlign,             // a:bodyPr/@anchor
+    ShapeTextInsets? Insets = null);      // a:bodyPr/@lIns等。nullは指定なし(ShapeTextInsets.Default)
+public sealed record ShapeTextInsets(double LeftPt, double TopPt, double RightPt, double BottomPt); // Default = 7.2/3.6/7.2/3.6
 public sealed record ShapeTextParagraph(
     IReadOnlyList<ShapeTextRun> Runs,
     HorizontalAlignment HAlign);          // a:pPr/@algn
@@ -1111,17 +1215,32 @@ public sealed record GroupCommand(
     結合セル範囲の個数上限超過を示す`"TooManyMergedRanges"`(要件2.9)、画像の参照先パートが無いことを示す
     `"MissingImagePart"`(要件6.10)を持つ)
   - `SubstitutionKeyNotFoundException` / `RequiredSubstitutionValueMissingException`(要件2.3, 2.4, 2.12)
-  - `InvalidSubstitutionValueException`(要件2.10。差し込み値が`null`、改行以外の制御文字、対になっていないサロゲートを含む)
-  - `InvalidCellOverrideAddressException`(要件2.8。セル番地直接指定がA1形式として解釈できない場合)
+  - `InvalidSubstitutionValueException`(要件2.10, 2.16。差し込み値が`null`、改行以外の制御文字、対になっていないサロゲートを含む、
+    値の長さ・セル番地直接指定の件数が上限を超える(件数超過の`Target`は`"cellOverrides"`))
+  - `InvalidCellOverrideAddressException`(要件2.8, 2.15。セル番地直接指定がA1形式として解釈できない場合、
+    表記の異なる複数の番地が同じセルを指す場合。列名はASCIIの英字に限る(`char.IsLetter`だと`"é1"`が無関係なセルになっていた))
   - `NonAnchorMergedCellOverrideException`(要件2.9。セル番地直接指定の対象が結合セル範囲の非アンカー位置の場合)
   - `InvalidExcelFileException`(要件6.1, 6.2, 6.5, 6.6, 6.7, 6.8。`Reason` で非xlsx/破損/パスワード保護/
     ファイルを開けない(存在しない・アクセス不可)/ワークシートが無い/ファイル・共有文字列・
     セル数が上限超過(`TooLarge`)を区別する)
   - `ReportDefinitionSchemaException`(要件6.3。問題のあったプロパティパスを保持する)
   - `LayoutComputationException`(要件2.6, 2.13, 2.14, 6.9 を含む) / `PdfRenderingException` / `FontNotAvailableException`
+    - `PdfRenderingException` は、出力先への書き込みの失敗(要件6.13)も表す。`AtomicFileWriter` はパスの正規化・出力先ディレクトリの
+      作成・一時ファイルへの書き込み・置き換えで起きた `IOException`・`UnauthorizedAccessException`・`NotSupportedException`・
+      不正なパスの `ArgumentException`(`ArgumentNullException` を除く)を、ファサードの `Convert` 系は出力ストリームへの書き込みの
+      `IOException` を、`InnerException` に元の例外を入れた `PdfRenderingException` で包む(`IPdfRenderer` の実装によらない)。
+    - `FontNotAvailableException` は、帳票を知らない `FontResolver` が帳票コード・シート名なしで送出する。ファサードがこれを捕捉し、
+      帳票コード・シート名と処理段階(レイアウト計算中の文字幅の計測なら `Layout`、描画中なら `Rendering`)を補った同じ型の例外で
+      包み直す(元の例外は `InnerException`)。
+- ファサード(`ReportPdfConverter`)の引数の誤り(必須の引数が`null`、出力先パスが空・空白のみ、`maxDigitWidthPx`が正の有限の数でない)は、
+  呼び出し元のプログラムの誤りとして `ArgumentNullException`・`ArgumentException`・`ArgumentOutOfRangeException` を送出し、
+  `UtsushiException` 階層には含めない(要件6.14)。入力ファイルの読み込み・レイアウト計算を始める前にすべて検証する
+  (以前は出力先の `null` が、時間のかかるレイアウト計算の後に分かっていた)。
   - `MissingGlyphException`(要件5.5。描画する文字の字形がフォントに無い)
 - すべての例外は、帳票コード・シート名・セル番地・処理段階(Parsing/Substitution/Layout/Rendering)を構造化プロパティとして保持し、ログ出力時に特定できるようにする(要件6.4)。ただし`MissingGlyphException`は描画命令(`TextCommand`)がセル番地を持たないためセル番地を含まず、代わりに該当文字列(`Text`)で特定する。
 - Renderingレイヤーは一時ファイル/一時ストリームに書き込み、正常終了時のみ最終出力先へ確定させる(要件5.4: 不完全PDFを残さない)。
+  一時ファイルは出力先と同じディレクトリの `<出力先>.<GUID>.utsushi-tmp` で、失敗時は削除する。プロセスの強制終了など
+  後始末が動かない異常終了では残ることがある。
 
 ### 信頼できない入力に対する安全弁 一覧
 
@@ -1136,11 +1255,24 @@ public sealed record GroupCommand(
 | Parsing / `OpenXmlWorkbookReader` | `MaxXmlElementDepth` | 256段(全XMLパートの要素の入れ子) | `InvalidExcelFileException(TooLarge)`(DOM構築前に`XmlReader`で流し読みして検査) | 6.7 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxXmlPartBytes` | 64 MiB/XMLパート(展開後) | `InvalidExcelFileException(TooLarge)`(同上。`OpenSettings.MaxCharactersInPart`にも同じ値を設定) | 6.7 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxXmlElementsPerPart` | 5,000,000個/XMLパート | `InvalidExcelFileException(TooLarge)`(同上。DOMのメモリを抑える) | 6.7 |
-| Parsing / `OpenXmlWorkbookReader` | `MaxRelationshipsPerPart` | 10,000件/関係パート | `InvalidExcelFileException(TooLarge)`(`SpreadsheetDocument.Open`より前にZIPを直接流し読みして検査) | 6.7 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxRelationshipsPerPart` | 10,000件/関係パート | `InvalidExcelFileException(TooLarge)`(`SpreadsheetDocument.Open`より前にZIPを直接流し読みして検査。関係パートはエントリごとに検査し、展開できないものは`Corrupted`にして後ろの関係パートの検査を省かない) | 6.7, 6.11 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxRelationshipsPerPackage` | 50,000件(全関係パートの関係の数の合計) | `InvalidExcelFileException(TooLarge)`(同上) | 6.11 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxZipEntries` | 10,000個 | `InvalidExcelFileException(TooLarge)`(`ZipArchive`を作る前にZIPの終端レコード(ZIP64を含む)の申告件数で、作った後に実際の件数で検査) | 6.11 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxContentTypesBytes` | 4 MiB(`[Content_Types].xml`の展開後) | `InvalidExcelFileException(TooLarge)`(パートではないため`MaxXmlPartBytes`等の対象にならない。`Open`より前に流し読みで検査。エントリ名は`System.IO.Packaging`と同じく`ToUpperInvariant`した名前どうしで比べる(`OrdinalIgnoreCase`では`[Content_Typeſ].xml`を見逃す)) | 6.11 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxContentTypesEntries` | 10,000個(`[Content_Types].xml`の`Default`/`Override`の合計) | `InvalidExcelFileException(TooLarge)`(同上。入れ子の深さも`MaxXmlElementDepth`で検査) | 6.11 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxXmlElementsPerPackage` | 8,000,000個(全XMLパートの要素の数の合計) | `InvalidExcelFileException(TooLarge)`(`MaxXmlElementsPerPart`の直前まで詰めたパートを複数並べる入力への対策) | 6.11 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxCellTextLength` | 32,767文字(共有文字列・インライン文字列。Excel自体の上限) | `InvalidExcelFileException(TooLarge)` | 6.8 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxHeaderFooterTextLength` | 1,024文字/ヘッダー・フッター | `InvalidExcelFileException(TooLarge)` | 6.8 |
 | Parsing / `OpenXmlWorkbookReader` | `MinPrintScalePercent`/`MaxPrintScalePercent` | 10〜400%(Excelと同じ) | 範囲外の拡大縮小率を丸める(例外化なし) | 6.9 |
 | Parsing / `StyleTable` | `MaxNumberFormatCodeLength` | 255文字(Excel自体の上限) | その数値書式を読み取らず既定書式にフォールバック(例外化なし) | 6.8 |
+| Parsing / `NumberFormatter` | `MaxCacheableFormatLength` / `MaxCacheEntries` | 255文字以下の書式コードのみ / 1,024件(プロセス内で共有する解析結果のキャッシュ) | 長すぎる書式コードはキャッシュせず都度解析する。件数が上限に達したらキャッシュを空にして登録し直す(例外化なし) | 設計判断(静的キャッシュの肥大化防止、要件番号なし) |
+| Parsing / `OpenXmlWorkbookReader` | `MaxRowHeightPt` | 409pt(Excel自体の上限。`row/@ht`・`sheetFormatPr/@defaultRowHeight`) | 範囲外・NaN・無限大・負は無視し既定の行高(既定行高が不正なら`DefaultRowHeightPt` = 15pt)にする(例外化なし) | 6.12 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxColumnWidthChars` | 255文字(Excel自体の上限。`col/@width`・`defaultColWidth`) | 範囲外・NaN・無限大・負の`col/@width`は幅の指定が無いものとして、`defaultColWidth`は無いものとして`baseColWidth`から求める(例外化なし) | 6.12 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxPageMarginInches` | 100インチ/余白1辺 | 範囲外・NaN・無限大・負はその辺の既定の余白に戻す(例外化なし。用紙に収まらない余白の検出はLayout) | 6.12 |
+| Parsing / `OpenXmlWorkbookReader` | `MinFontSizePt`/`MaxFontSizePt` | 1〜409pt(セルのフォント。Excelと同じ) | 範囲外・NaN・無限大は既定のサイズに戻す(例外化なし) | 6.12 |
+| Parsing / `OpenXmlWorkbookReader` | `MinShapeFontSizeHundredths`/`MaxShapeFontSizeHundredths` | 100〜400,000(1/100pt。図形の文字の`a:rPr/@sz`、1〜4,000pt。ECMA-376の`ST_TextFontSize`) | 範囲外は既定のサイズに戻す(例外化なし) | 6.12 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxFirstPageNumber` | 1,000,000,000 | 超える値・解釈できない値は先頭ページ番号の指定なし(1から数える)とする(例外化なし。`&P`・`&N`の計算がintを溢れないように) | 3.15, 6.12 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxShapeTextInsetPt` | 5,000pt/辺(`a:bodyPr`の`lIns`等) | 範囲外・解釈できない辺はその辺だけ既定値(左右7.2pt・上下3.6pt)にする(例外化なし) | 10.19, 6.12 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxColumnExpansionsPerSheet` | 65,536列(`<col>`の`min`〜`max`の展開の合計) | `InvalidExcelFileException(TooLarge)` | 6.8 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxPageBreaksPerSheet` | 1,026件(行・列それぞれ。Excel自体の上限) | `InvalidExcelFileException(TooLarge)` | 6.8 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxPrintAreasPerSheet` | 1,000個 | `InvalidExcelFileException(TooLarge)` | 6.8 |
@@ -1151,7 +1283,7 @@ public sealed record GroupCommand(
 | Parsing / `OpenXmlWorkbookReader` | `MaxImagesPerSheet` | 50枚/シート | `UnsupportedWorkbookElementException(TooManyImages)` | 9.6 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxImageDataBytes` | 10 MiB/画像 | `UnsupportedWorkbookElementException(ImageTooLarge)` | 9.6 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxShapesPerSheet` | 50個/シート(図形・接続線・グループ合計) | `UnsupportedWorkbookElementException(TooManyShapes)` | 10.8 |
-| Parsing / `OpenXmlWorkbookReader` | `MaxShapeTextLength` | 2,000文字 | `UnsupportedWorkbookElementException(ShapeTextTooLong)` | 10.8 |
+| Parsing / `OpenXmlWorkbookReader` | `MaxShapeTextLength` | 2,000文字(段落・ランを連結した文字数。段落の区切りも1文字と数える) | `UnsupportedWorkbookElementException(ShapeTextTooLong)` | 10.8 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxShapeNestingDepth` | 5段 | `UnsupportedWorkbookElementException(GroupNestingTooDeep)` | 10.8 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxGradientStopsPerFill` | 64個/塗りつぶし | 打ち切り(超過分は無視、例外化なし) | 設計判断(DoS対策、要件番号なし) |
 | Parsing / `OpenXmlWorkbookReader` | `MaxMergedRangesPerSheet` | 1,000件/シート | `UnsupportedWorkbookElementException(TooManyMergedRanges)` | 2.9 |
@@ -1160,6 +1292,9 @@ public sealed record GroupCommand(
 | Layout / `PageCommandBuilder` | `MaxSpanCells` | 4,096セル | 結合セル・可視範囲の走査を打ち切り(例外化なし) | 設計判断(DoS対策、要件番号なし) |
 | Layout / `PageCommandBuilder` | `MaxDrawingObjectDimensionPt` | 5,000pt | 描画オブジェクトの寸法をクランプ(例外化なし) | 設計判断(DoS対策、要件番号なし) |
 | Rendering / `SkiaPdfRenderer` | `MaxDecodedImageDimensionPx` | 4,096px | `PdfRenderingException`(デコード前に宣言サイズを検査) | 設計判断(DoS対策、要件番号なし) |
+| Substitution / `CellSubstitutor` | `MaxValueLength` | 32,767文字/値(UTF-16のコード単位数。Excelのセルの上限。置換キー経由・セル番地直接指定とも) | `InvalidSubstitutionValueException` | 2.16 |
+| Substitution / `CellSubstitutor` | `MaxCellOverrideCount` | 10,000件/変換(セル番地直接指定) | `InvalidSubstitutionValueException`(`Target = "cellOverrides"`。番地の解釈より前に判定) | 2.16 |
+| Layout / `HeaderFooterParser` | `MaxPageOffsetDigits` | 9桁(`&P+n`/`&P-n`の数字) | それより後ろの数字は加減算に使わず文字のまま残す(例外化なし。桁あふれ防止) | 3.16 |
 
 ## テスト戦略
 
@@ -1213,7 +1348,7 @@ public sealed record GroupCommand(
   - 禁則処理・英単語単位の折り返しは行わない(書記素クラスタ単位の単純な幅基準)。Excelとは行数が
     1行ずれることがあり、要件2.14の判定もこの行数に基づく。
   - 横方向の欠落は検出しない。`clip`のセルでは長い氏名・住所が右側で切り詰められ、`overflow`のセルでは
-    印刷範囲の右端・ページの外にはみ出した部分が欠ける。要件2.14は縦方向(折り返し行)のみを対象とする。
+    このページの本文の範囲(余白の内側。要件4.9)の外にはみ出した部分が欠ける。結合セルの文字ははみ出さず結合範囲で切れる。要件2.14は縦方向(折り返し行)のみを対象とする。
   - 複数行のヘッダー/フッターは未対応(改行を取り除いて1行に配置する)。
   - 文字の合成(シェーピング)は、異体字セレクタ(要件11.3)と仮名の濁点・半濁点(要件11.4)に限って行う。
     それ以外の結合文字(例: ラテン文字のアクセント記号)や字形の置き換え(`GSUB`)は行わない。
@@ -1224,6 +1359,14 @@ public sealed record GroupCommand(
   発行件数が問題になった時点で、テンプレート解析結果のキャッシュ(`WorkbookModel`は不変モデルのため
   使い回せる)を検討する。
 
+- **全体監査(タスク28)で残した未検証事項・未対応事項**(layout-fidelity-reviewer指摘):
+  - Excelの実機(PDF出力)との突き合わせが未実施: 先頭ページ番号を指定した場合の`&N`と奇数/偶数ページの選び方、
+    はみ出し表示をページ本文(余白の内側)で切り取ること、ページ中央の対象に印刷タイトルを含めること、
+    印刷範囲より下(右)にあるタイトルを付けないこと、太い実線の罫線がT字に交わる箇所の端の形(`Square`)、
+    回転(75〜89・92)・横送りの用紙と横向き(`landscape`)の組み合わせ。
+  - 未対応: 数値がセル幅に収まらない場合の`####`表示(数値の文字列をそのまま配置する)、45〜135度回転した画像の
+    配置矩形(この角度ではアンカーが幅と高さを入れ替えた矩形を表すとされるが、Utsushiは入れ替えずに扱う。実機では未確認)、最終行(列)が非表示の結合範囲で外周の罫線の辺が欠けること、
+    和暦の「元年」表示。
 - **改ページをまたぐ結合セルの文字位置**: 結合範囲がページ境界をまたぐ場合、現状は
   「そのページに見えている部分」を1つの矩形として扱い、その中にテキストを配置する。
   Excel は結合範囲全体を基準に文字を配置したうえでページ境界で切り取るため、
@@ -1355,13 +1498,16 @@ public sealed record GroupCommand(
   なお、同じ名前の`<sheet>`を大量に並べると名前での絞り込みを素通りして同じシートを何度も読めてしまう問題は、
   絞り込んだ1枚を読んだ時点でループを打ち切ることで解消した(タスク24.9)。
 - **ファイルの内容だけで処理量が決まる経路の上限漏れ**(帳票定義なしモード追加時のsecurity-reviewer指摘):
-  タスク25で対応した(要件6.7〜6.10、上の安全弁一覧)。残る制約は次のとおり。`MaxPrintRangeCells`以内でも、
-  1ページ内のセルごとに結合範囲を線形に探す(`SheetModel.FindMergedRange`)ため、処理量は
-  「印刷範囲のセル数×結合範囲の個数(最大`MaxMergedRangesPerSheet`)」に比例する。自社帳票の規模では問題にならない。
+  タスク25で対応した(要件6.7〜6.10、上の安全弁一覧)。当時残っていた「1ページ内のセルごとに結合範囲を線形に探す
+  (`SheetModel.FindMergedRange`)ため、処理量が印刷範囲のセル数×結合範囲の個数に比例する」制約は、タスク28で
+  セル→結合範囲の索引(`MergedCellIndex`)を印刷範囲ごとに作ってページ間で使い回すことで解消した。
   その後の security-reviewer の実測で見つかった経路(型として不正な属性値による SDK の例外の漏れ、検証に失敗した
   画像が枚数に数えられない、印刷タイトルでの上限の迂回、文字列の長さ、DOM の要素数、関係パートの数)も、
   上の安全弁一覧のとおり対応した(タスク25.6)。属性値の例外は、個々の読み取り箇所ではなく `ReadCore` で
   `FormatException`/`OverflowException` をまとめて `InvalidExcelFileException(Corrupted)` に読み替える。
+  タスク28の全体監査では、パッケージ構造に残っていた迂回経路(ZIPエントリの数、関係の数の合計、`[Content_Types].xml`、
+  パッケージ全体の要素の数、壊れた関係パートの後ろの関係パートが検査されない)を塞いだ(要件6.11)。パートのルート要素が
+  想定と違う場合に OpenXml SDK が投げる `InvalidDataException` も `Corrupted` に読み替える。
 - **図形の色・反転・矢印の未検証事項・既知の差分**(要件10.15〜10.18。layout-fidelity-reviewer指摘):
   (1) 上下反転した図形の文字を180°回す挙動と、矢印の大きさ(線の太さの2/3/5倍、元の太さの最小1pt)は、Excelで保存した
   ファイルのPDF出力との実測での突き合わせが未実施。LibreOfficeの実装では元の太さの最小が約2ptで、開いた矢印(`arrow`)の
