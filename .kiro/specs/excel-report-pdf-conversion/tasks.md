@@ -188,7 +188,7 @@
       属するページにのみ画像全体を配置し、他のページには描画しない(design.md「未決事項」の割り切り)
     - _Requirements: 9.1_
   - [x] 13.8 Renderingレイヤー: `ImageCommand` を描画する
-    - `SKBitmap.Decode` でデコードし `SKCanvas.DrawBitmap` で描画する。描画順を
+    - `SKBitmap.Decode` でデコードし(`SKImage`に変換して出力全体で使い回す)`SKCanvas.DrawImage` で描画する。描画順を
       背景→罫線→テキスト→画像 とし、Excelと同様に画像が他のセル内容より最前面に来るようにする
     - _Requirements: 9.1, 9.3_
   - [x] 13.9 `Utsushi.SampleGenerator` に画像埋め込み機能を追加する

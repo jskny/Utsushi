@@ -452,7 +452,10 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   - **セル内テキストの改行と折り返し(要件4.6, 4.7)**: 折り返し表示のセルは`WrapLines`で、LF・CRLF・CR単独を
     段落区切りとしたうえで、`StringInfo.GetTextElementEnumerator`による書記素クラスタ単位で幅を測って
     折り返す(UTF-16の1単位ごとに区切るとサロゲートペアや異体字セレクタの途中で改行されるため)。
-    図形内テキストも同じ`WrapLines`を使う。折り返し表示でないセル(はみ出し・切り取り・縮小)では、
+    図形内テキストも同じ`WrapLines`を使う。実際の折り返しは`TextWrapper`が行い、1文字足すごとに行全体を
+    測り直す(行の長さの2乗に比例する計測になる)代わりに、計測済みの幅から改行位置の見当を付けて行全体の計測で
+    確かめる。文字列を後ろへ伸ばしても幅が減らない(単調である)前提のもとで、1文字ずつ測り直す方法と同じ位置で改行する。
+    折り返し表示でないセル(はみ出し・切り取り・縮小)では、
     Excelと同様に改行文字を取り除いて1行として配置する(`RemoveLineBreaks`)。
   - **折り返した差し込み値の欠落検出(要件2.14)**: 折り返し表示で、かつ`SubstitutedCells`に含まれるセルは、
     各行の字面(アセント+ディセント)が、字面の高さの4分の1の許容量を超えてセルの外に出ないことを確かめ
@@ -463,7 +466,9 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     非表示行にかかって一部しか見えないページでも判定を省かないため(layout-fidelity-reviewer指摘)。
     同じ関数で、差し込みセルの幅(余白・インデントを除く)または高さが0以下で何も描画できない場合もエラーにする(要件2.13)。
     非表示の行・列にある差し込みセルは、ページ上に行・列自体が現れないため、`ValidateSubstitutedCellsAreInPrintRanges`で
-    印刷範囲外と同様にエラーにする。
+    印刷範囲外と同様にエラーにする。判定の結果はセルの番地・書式・(印刷範囲で共通の)拡大縮小率で決まるため、
+    確かめ終えたセルは印刷範囲ごとに記録し、印刷タイトルの行/列として複数ページに繰り返し現れるセルを
+    ページごとに検証し直さない。
   - **ヘッダー/フッターの改行**: 複数行のヘッダー/フッターは未対応のため、改行を取り除いて1行に配置する
     (`HeaderFooterCommandBuilder.ScaleRuns`。以前は改行文字がそのまま描画され豆腐や空白になっていた)。
   - ページヘッダー/フッターの書式コード展開と配置(要件3.7〜3.9)
@@ -608,16 +613,18 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   **画像・図形・接続線・グループ**(`drawing.xml`の出現順)の順で描画する。Excelはシート上に
   浮かぶ描画オブジェクト(画像・図形等)をセルの内容より上のレイヤーとして描画するため、
   これらは他のセル内容と重なる場合に最前面へ来るようにする(要件9.3, 10.3)。
-- **画像の描画(要件9)**: `ImageCommand` は `SKBitmap.Decode(byte[])`でデコードし、
-  `SKCanvas.DrawBitmap(bitmap, destRect)` で `ImageCommand.Rect` へ描画する
-  (SkiaSharp 2.88.8で利用可能な標準API)。既存の `ToSkRect(RectPt)` をそのまま使う。
+- **画像の描画(要件9)**: `ImageCommand` は `SKBitmap.Decode(byte[])`でデコードして`SKImage`に変換し、
+  `SKCanvas.DrawImage(image, destRect)` で `ImageCommand.Rect` へ描画する
+  (SkiaSharp 2.88.8で利用可能な標準API)。デコードした画像は1回の出力の間`RenderContext`に記録し、
+  同じバイナリ(配列の同一性で比べる)の画像では使い回す。印刷タイトルの行にある画像のように全ページに現れる画像も、
+  デコードは1回で済み、PDFには1回だけ埋め込まれる。既存の `ToSkRect(RectPt)` をそのまま使う。
   ページ境界外にはみ出す部分は `SKCanvas` が自然にクリップするため、追加のクリップ処理は不要。
   `SKBitmap.Decode` で実際に展開する前に `SKBitmap.DecodeBounds` で宣言上のピクセル寸法を確認し、
   上限(既定4096px)を超える場合はデコードせず `PdfRenderingException` とする(要件9.6。
   ピクセル爆弾対策。詳細はParsingレイヤー節「信頼できない入力に対する安全弁」を参照)。
   回転がある場合は、図形(要件10.5)と全く同じ`canvas.Save()` →
   `canvas.RotateDegrees(RotationDegrees, centerX, centerY)`(中心は`Rect`の中心)→
-  `DrawBitmap` → `canvas.Restore()` のパターンで`RotationDegrees`を反映する(要件9.7。
+  `DrawImage` → `canvas.Restore()` のパターンで`RotationDegrees`を反映する(要件9.7。
   捺印画像のように回転させて配置する運用があるため対応する)。
 - **図形の描画(要件10)**: `ShapeCommand` ごとに、回転がある場合は
   `canvas.Save()` → `canvas.RotateDegrees(RotationDegrees, centerX, centerY)`
