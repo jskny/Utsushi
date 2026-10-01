@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -26,10 +27,41 @@ namespace Utsushi.Parsing.OpenXml
         /// <summary>1日あたりのミリ秒数。</summary>
         private const double MillisecondsPerDay = 24.0 * 60.0 * 60.0 * 1000.0;
 
+        /// <summary>和暦の短い日付(例: <c>R8.4.1</c>)。組み込み書式 27・36・50・57。</summary>
+        private const string JapaneseEraShortDate = "[$-411]ge.m.d";
+
+        /// <summary>和暦の長い日付(例: <c>令和8年4月1日</c>)。組み込み書式 28・29・51・54・58。</summary>
+        private const string JapaneseEraLongDate = "[$-411]ggge\"年\"m\"月\"d\"日\"";
+
+        /// <summary>Excel の書式コードの最大長。これを超える書式コードは解析結果をキャッシュしない。</summary>
+        private const int MaxCacheableFormatLength = 255;
+
+        /// <summary>解析結果キャッシュの件数上限。上限に達した後の新しい書式コードは都度解析する。</summary>
+        private const int MaxCacheEntries = 1024;
+
+        /// <summary>書式コードごとの解析結果。数値セルごとの再解析を避ける。</summary>
+        private static readonly ConcurrentDictionary<string, ParsedFormat> ParsedFormats = new(StringComparer.Ordinal);
+
         /// <summary>
-        /// 組み込み数値書式ID(<c>numFmtId</c> 0〜49)のうち、対象帳票で現れうるものの書式文字列。
-        /// ECMA-376 Part 1, 18.8.30 の既定値。
+        /// 元号の一覧(開始日の昇順)。明治の開始日は Excel の扱いに合わせて 1868/1/1 とする。
         /// </summary>
+        private static readonly JapaneseEra[] JapaneseEras =
+        {
+            new(new DateTime(1868, 1, 1), 'M', "明", "明治"),
+            new(new DateTime(1912, 7, 30), 'T', "大", "大正"),
+            new(new DateTime(1926, 12, 25), 'S', "昭", "昭和"),
+            new(new DateTime(1989, 1, 8), 'H', "平", "平成"),
+            new(new DateTime(2019, 5, 1), 'R', "令", "令和"),
+        };
+
+        /// <summary>
+        /// 組み込み数値書式ID(<c>numFmtId</c> 0〜58)のうち、対象帳票で現れうるものの書式文字列。
+        /// </summary>
+        /// <remarks>
+        /// 本製品は日本の帳票が対象のため、ECMA-376 Part 1, 18.8.30 の既定値のうち
+        /// 日本語(ja-JP)ロケールの表示に合わせている(例: 14 は <c>yyyy/m/d</c>、5〜8 は円記号、
+        /// 27〜36・50〜58 は和暦を含む日本語ロケール固有の日付・時刻書式)。
+        /// </remarks>
         private static readonly Dictionary<int, string> BuiltInFormats = new()
         {
             [0] = "General",
@@ -37,12 +69,16 @@ namespace Utsushi.Parsing.OpenXml
             [2] = "0.00",
             [3] = "#,##0",
             [4] = "#,##0.00",
+            [5] = "\"¥\"#,##0;\"¥\"\\-#,##0",
+            [6] = "\"¥\"#,##0;[Red]\"¥\"\\-#,##0",
+            [7] = "\"¥\"#,##0.00;\"¥\"\\-#,##0.00",
+            [8] = "\"¥\"#,##0.00;[Red]\"¥\"\\-#,##0.00",
             [9] = "0%",
             [10] = "0.00%",
             [11] = "0.00E+00",
             [12] = "# ?/?",
             [13] = "# ??/??",
-            [14] = "yyyy/mm/dd",
+            [14] = "yyyy/m/d",
             [15] = "d-mmm-yy",
             [16] = "d-mmm",
             [17] = "mmm-yy",
@@ -50,7 +86,17 @@ namespace Utsushi.Parsing.OpenXml
             [19] = "h:mm:ss AM/PM",
             [20] = "h:mm",
             [21] = "h:mm:ss",
-            [22] = "yyyy/mm/dd h:mm",
+            [22] = "yyyy/m/d h:mm",
+            [27] = JapaneseEraShortDate,
+            [28] = JapaneseEraLongDate,
+            [29] = JapaneseEraLongDate,
+            [30] = "m/d/yy",
+            [31] = "yyyy\"年\"m\"月\"d\"日\"",
+            [32] = "h\"時\"mm\"分\"",
+            [33] = "h\"時\"mm\"分\"ss\"秒\"",
+            [34] = "yyyy\"年\"m\"月\"",
+            [35] = "m\"月\"d\"日\"",
+            [36] = JapaneseEraShortDate,
             [37] = "#,##0;-#,##0",
             [38] = "#,##0;[Red]-#,##0",
             [39] = "#,##0.00;-#,##0.00",
@@ -60,6 +106,15 @@ namespace Utsushi.Parsing.OpenXml
             [47] = "mm:ss.0",
             [48] = "##0.0E+0",
             [49] = "@",
+            [50] = JapaneseEraShortDate,
+            [51] = JapaneseEraLongDate,
+            [52] = "yyyy\"年\"m\"月\"",
+            [53] = "m\"月\"d\"日\"",
+            [54] = JapaneseEraLongDate,
+            [55] = "yyyy\"年\"m\"月\"",
+            [56] = "m\"月\"d\"日\"",
+            [57] = JapaneseEraShortDate,
+            [58] = JapaneseEraLongDate,
         };
 
         /// <summary>組み込み書式IDから書式文字列を取得する。未知のIDは null。</summary>
@@ -78,21 +133,24 @@ namespace Utsushi.Parsing.OpenXml
                 return FormatGeneral(value);
             }
 
-            var section = SelectSection(formatCode!, value);
-            if (section is null || IsGeneral(section))
+            var parsed = GetParsedFormat(formatCode!);
+            var section = parsed.Select(value);
+            if (section is null || section.Kind == SectionKind.General)
             {
+                // "@"(文字列書式)だけの書式など、数値に使えるセクションが無い場合も General で表示する。
                 return FormatGeneral(value);
             }
 
-            // 負数セクションが選ばれた場合、値の絶対値に対して書式を適用する
+            // セクションが複数あり負数セクションが選ばれた場合、値の絶対値に対して書式を適用する
             // (符号はセクション側のリテラル "-" が担うため)。
-            var target = SectionCountOf(formatCode!) > 1 && value < 0 ? Math.Abs(value) : value;
+            // セクションが1つだけの場合は負号付きのまま渡し、NumericSection が出力全体の先頭に負号を付ける。
+            var target = parsed.NumericSections.Count > 1 && value < 0 ? Math.Abs(value) : value;
 
             try
             {
-                return IsDateTimeFormat(section)
-                    ? FormatDateTime(target, section)
-                    : FormatNumericSection(target, section);
+                return section.Kind == SectionKind.DateTime
+                    ? FormatDateTime(target, section.Text)
+                    : section.Numeric!.Format(target);
             }
             catch (Exception ex) when (ex is FormatException or ArgumentException or OverflowException)
             {
@@ -100,9 +158,6 @@ namespace Utsushi.Parsing.OpenXml
                 return FormatGeneral(value);
             }
         }
-
-        /// <summary>文字列セルに書式(<c>@</c> 等)を適用する。現状は素通し。</summary>
-        public static string FormatText(string value, string? formatCode) => value;
 
         private static bool IsGeneral(string formatCode) =>
             formatCode.Trim().Equals("General", StringComparison.OrdinalIgnoreCase);
@@ -119,35 +174,62 @@ namespace Utsushi.Parsing.OpenXml
             return rounded.ToString("0.##########", CultureInfo.InvariantCulture);
         }
 
-        private static int SectionCountOf(string formatCode) => SplitSections(formatCode).Count;
-
-        /// <summary>
-        /// <c>正;負;ゼロ;文字列</c> のセクションから、値に対応するものを選ぶ。
-        /// </summary>
-        private static string? SelectSection(string formatCode, double value)
+        /// <summary>書式コードの解析結果をキャッシュから取得する。無ければ解析して(上限内なら)登録する。</summary>
+        private static ParsedFormat GetParsedFormat(string formatCode)
         {
-            var sections = SplitSections(formatCode);
-            if (sections.Count == 0)
+            if (ParsedFormats.TryGetValue(formatCode, out var cached))
             {
-                return null;
+                return cached;
             }
 
-            if (sections.Count == 1)
+            var parsed = ParsedFormat.Parse(formatCode);
+            if (formatCode.Length <= MaxCacheableFormatLength && ParsedFormats.Count < MaxCacheEntries)
             {
-                return sections[0];
+                // 並行して同じ書式を解析した場合はどちらか一方が登録される(内容は同一)。
+                ParsedFormats.TryAdd(formatCode, parsed);
             }
 
-            if (value > 0)
+            return parsed;
+        }
+
+        /// <summary>引用符・角括弧・エスケープの外にある <c>@</c>(文字列の差し込み位置)を含むかどうか。</summary>
+        private static bool ContainsTextPlaceholder(string section)
+        {
+            var inQuotes = false;
+            for (var i = 0; i < section.Length; i++)
             {
-                return sections[0];
+                var c = section[i];
+                if (c == '"')
+                {
+                    inQuotes = !inQuotes;
+                    continue;
+                }
+
+                if (inQuotes)
+                {
+                    continue;
+                }
+
+                if (c == '\\')
+                {
+                    i++;
+                    continue;
+                }
+
+                if (c == '[')
+                {
+                    var close = section.IndexOf(']', i);
+                    i = close < 0 ? section.Length : close;
+                    continue;
+                }
+
+                if (c == '@')
+                {
+                    return true;
+                }
             }
 
-            if (value < 0)
-            {
-                return sections[1];
-            }
-
-            return sections.Count >= 3 ? sections[2] : sections[0];
+            return false;
         }
 
         /// <summary>引用符・角括弧内のセミコロンを無視してセクション分割する。</summary>
@@ -219,8 +301,14 @@ namespace Utsushi.Parsing.OpenXml
 
                 if (c == '[')
                 {
-                    // [Red] 等の色指定・条件指定は日付判定の対象外
+                    // [h]・[mm]・[ss] は経過時間の書式指定子。
+                    // [Red] 等の色指定・[$-411] 等のロケール指定・条件指定は日付判定の対象外。
                     var close = section.IndexOf(']', i);
+                    if (close > i && IsElapsedTimeToken(section, i + 1, close - i - 1))
+                    {
+                        return true;
+                    }
+
                     i = close < 0 ? section.Length : close;
                     continue;
                 }
@@ -241,9 +329,38 @@ namespace Utsushi.Parsing.OpenXml
             return false;
         }
 
+        /// <summary>
+        /// 角括弧の中身が経過時間の書式指定子(<c>h</c>・<c>m</c>・<c>s</c> のいずれか1種類の連続)かどうか。
+        /// </summary>
+        private static bool IsElapsedTimeToken(string section, int start, int length)
+        {
+            if (length <= 0)
+            {
+                return false;
+            }
+
+            var first = char.ToLowerInvariant(section[start]);
+            if (first is not ('h' or 'm' or 's'))
+            {
+                return false;
+            }
+
+            for (var k = 1; k < length; k++)
+            {
+                if (char.ToLowerInvariant(section[start + k]) != first)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         private static bool LooksLikeAmPm(string section, int index) =>
             section.IndexOf("AM/PM", index, StringComparison.OrdinalIgnoreCase) == index
             || section.IndexOf("aaa", index, StringComparison.OrdinalIgnoreCase) == index;
+
+        private static bool IsAsciiLetter(char c) => c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z');
 
         private static string FormatDateTime(double serial, string section)
         {
@@ -251,6 +368,7 @@ namespace Utsushi.Parsing.OpenXml
             var sb = new StringBuilder();
             var culture = CultureInfo.GetCultureInfo("ja-JP");
             var hasAmPm = section.IndexOf("AM/PM", StringComparison.OrdinalIgnoreCase) >= 0;
+            var secondsEmitted = false;
 
             for (var i = 0; i < section.Length;)
             {
@@ -280,6 +398,15 @@ namespace Utsushi.Parsing.OpenXml
                 if (c == '[')
                 {
                     var end = section.IndexOf(']', i);
+                    if (end > i && IsElapsedTimeToken(section, i + 1, end - i - 1))
+                    {
+                        AppendElapsedTime(sb, serial, section[i + 1], end - i - 1);
+                        secondsEmitted |= section[i + 1] is 's' or 'S';
+                        i = end + 1;
+                        continue;
+                    }
+
+                    // [Red] 等の色指定・[$-411] 等のロケール指定は表示に反映しない。
                     i = end < 0 ? section.Length : end + 1;
                     continue;
                 }
@@ -289,6 +416,22 @@ namespace Utsushi.Parsing.OpenXml
                     // _x は x の幅の空白、*x は繰り返し。帳票の桁揃え用途では空白1つで近似する。
                     i += i + 1 < section.Length ? 2 : 1;
                     sb.Append(' ');
+                    continue;
+                }
+
+                if (c == '.' && secondsEmitted && i + 1 < section.Length && section[i + 1] == '0')
+                {
+                    // ss.0 / ss.00 / ss.000 は秒の小数部(最大3桁、切り捨て)。
+                    var digits = 0;
+                    while (digits < 3 && i + 1 + digits < section.Length && section[i + 1 + digits] == '0')
+                    {
+                        digits++;
+                    }
+
+                    var divisor = digits switch { 1 => 100, 2 => 10, _ => 1 };
+                    sb.Append('.').Append(
+                        (dateTime.Millisecond / divisor).ToString(new string('0', digits), CultureInfo.InvariantCulture));
+                    i += 1 + digits;
                     continue;
                 }
 
@@ -352,15 +495,84 @@ namespace Utsushi.Parsing.OpenXml
                         sb.Append(token.Length <= 1
                             ? dateTime.Second.ToString(CultureInfo.InvariantCulture)
                             : dateTime.Second.ToString("00", CultureInfo.InvariantCulture));
+                        secondsEmitted = true;
                         break;
 
+                    case 'g':
+                    case 'G':
+                        {
+                            // g: 英字1文字(R)、gg: 漢字1文字(令)、ggg: 元号名(令和)
+                            var era = FindJapaneseEra(dateTime);
+                            sb.Append(token.Length switch
+                            {
+                                1 => era.Letter.ToString(),
+                                2 => era.Abbreviation,
+                                _ => era.Name,
+                            });
+                            break;
+                        }
+
+                    case 'e':
+                    case 'E':
+                        {
+                            // e: 元号の年(1年は「1」)、ee: 2桁
+                            var eraYear = dateTime.Year - FindJapaneseEra(dateTime).Start.Year + 1;
+                            sb.Append(token.Length <= 1
+                                ? eraYear.ToString(CultureInfo.InvariantCulture)
+                                : eraYear.ToString("00", CultureInfo.InvariantCulture));
+                            break;
+                        }
+
                     default:
+                        if (IsAsciiLetter(token[0]))
+                        {
+                            // 解釈できない書式指定子(b 等)は、書式文字をそのまま出さず General 相当にフォールバックする。
+                            throw new FormatException($"未対応の日付書式指定子 '{token}'。");
+                        }
+
                         sb.Append(token);
                         break;
                 }
             }
 
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 経過時間 <c>[h]</c>・<c>[m]</c>・<c>[s]</c> を追記する(24時間・60分・60秒を超えて数える)。
+        /// </summary>
+        private static void AppendElapsedTime(StringBuilder sb, double serial, char unit, int width)
+        {
+            if (serial < 0)
+            {
+                throw new FormatException("負の経過時間は表示できない。");
+            }
+
+            // 時・分・秒の表示(FromSerial)と同じくミリ秒に丸めてから数える。
+            var totalMilliseconds = (long)Math.Round(serial * MillisecondsPerDay, MidpointRounding.AwayFromZero);
+            var elapsed = char.ToLowerInvariant(unit) switch
+            {
+                'h' => totalMilliseconds / 3_600_000L,
+                'm' => totalMilliseconds / 60_000L,
+                _ => totalMilliseconds / 1_000L,
+            };
+
+            sb.Append(elapsed.ToString(new string('0', width), CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>日付が属する元号を返す。明治より前の日付は和暦で表せないため例外にする。</summary>
+        private static JapaneseEra FindJapaneseEra(DateTime dateTime)
+        {
+            var date = dateTime.Date;
+            for (var k = JapaneseEras.Length - 1; k >= 0; k--)
+            {
+                if (date >= JapaneseEras[k].Start)
+                {
+                    return JapaneseEras[k];
+                }
+            }
+
+            throw new FormatException("明治より前の日付は和暦で表示できない。");
         }
 
         private static int ToTwelveHour(int hour)
@@ -393,12 +605,28 @@ namespace Utsushi.Parsing.OpenXml
             });
         }
 
+        /// <summary>
+        /// 前後にある書式指定子(英字)を見て 'm' が「分」かどうかを判定する。
+        /// 区切り記号・角括弧・引用符で囲んだリテラル(例: <c>h"時"mm"分"</c>)は読み飛ばす。
+        /// </summary>
         private static bool IsMinuteContext(string section, int tokenStart, int tokenLength)
         {
             for (var i = tokenStart - 1; i >= 0; i--)
             {
                 var c = section[i];
-                if (c is ' ' or ':' or ']')
+                if (c == '"')
+                {
+                    var open = i > 0 ? section.LastIndexOf('"', i - 1) : -1;
+                    if (open < 0)
+                    {
+                        break;
+                    }
+
+                    i = open;
+                    continue;
+                }
+
+                if (!IsAsciiLetter(c))
                 {
                     continue;
                 }
@@ -414,7 +642,19 @@ namespace Utsushi.Parsing.OpenXml
             for (var i = tokenStart + tokenLength; i < section.Length; i++)
             {
                 var c = section[i];
-                if (c is ' ' or ':')
+                if (c == '"')
+                {
+                    var close = section.IndexOf('"', i + 1);
+                    if (close < 0)
+                    {
+                        break;
+                    }
+
+                    i = close;
+                    continue;
+                }
+
+                if (!IsAsciiLetter(c))
                 {
                     continue;
                 }
@@ -459,10 +699,113 @@ namespace Utsushi.Parsing.OpenXml
             return SerialEpoch.AddTicks((long)totalMilliseconds * TimeSpan.TicksPerMillisecond);
         }
 
-        private static string FormatNumericSection(double value, string section)
+        private enum SectionKind
         {
-            var parsed = NumericSection.Parse(section);
-            return parsed.Format(value);
+            General,
+            DateTime,
+            Numeric,
+        }
+
+        /// <summary>書式コード1セクション分の解析結果。</summary>
+        private sealed class FormatSection
+        {
+            public FormatSection(string text)
+            {
+                Text = text;
+                if (IsGeneral(text))
+                {
+                    Kind = SectionKind.General;
+                }
+                else if (IsDateTimeFormat(text))
+                {
+                    Kind = SectionKind.DateTime;
+                }
+                else
+                {
+                    Kind = SectionKind.Numeric;
+                    Numeric = NumericSection.Parse(text);
+                }
+            }
+
+            public string Text { get; }
+
+            public SectionKind Kind { get; }
+
+            /// <summary><see cref="Kind"/> が <see cref="SectionKind.Numeric"/> のときの解析結果。</summary>
+            public NumericSection? Numeric { get; }
+        }
+
+        /// <summary>
+        /// 書式コード全体の解析結果。不変であり、複数スレッドから共有してよい。
+        /// </summary>
+        private sealed class ParsedFormat
+        {
+            private ParsedFormat(IReadOnlyList<FormatSection> numericSections)
+            {
+                NumericSections = numericSections;
+            }
+
+            /// <summary>数値の表示に使うセクション(<c>@</c> を含む文字列用セクションを除く)。</summary>
+            public IReadOnlyList<FormatSection> NumericSections { get; }
+
+            public static ParsedFormat Parse(string formatCode)
+            {
+                var sections = new List<FormatSection>(4);
+                foreach (var text in SplitSections(formatCode))
+                {
+                    // "@" を含むセクションは文字列の表示用で、数値の表示には使わない。
+                    if (ContainsTextPlaceholder(text))
+                    {
+                        continue;
+                    }
+
+                    sections.Add(new FormatSection(text));
+                }
+
+                return new ParsedFormat(sections);
+            }
+
+            /// <summary><c>正;負;ゼロ</c> のセクションから、値に対応するものを選ぶ。</summary>
+            public FormatSection? Select(double value)
+            {
+                var sections = NumericSections;
+                if (sections.Count == 0)
+                {
+                    return null;
+                }
+
+                if (sections.Count == 1 || value > 0)
+                {
+                    return sections[0];
+                }
+
+                if (value < 0)
+                {
+                    return sections[1];
+                }
+
+                return sections.Count >= 3 ? sections[2] : sections[0];
+            }
+        }
+
+        /// <summary>元号(開始日・英字略号・漢字略号・元号名)。</summary>
+        private sealed class JapaneseEra
+        {
+            public JapaneseEra(DateTime start, char letter, string abbreviation, string name)
+            {
+                Start = start;
+                Letter = letter;
+                Abbreviation = abbreviation;
+                Name = name;
+            }
+
+            public DateTime Start { get; }
+
+            public char Letter { get; }
+
+            public string Abbreviation { get; }
+
+            public string Name { get; }
         }
     }
 }
