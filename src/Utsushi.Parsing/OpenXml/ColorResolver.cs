@@ -82,7 +82,9 @@ namespace Utsushi.Parsing.OpenXml
 
             if (color.Rgb?.Value is { Length: > 0 } rgb && ArgbColor.TryParseHex(rgb, out var parsed))
             {
-                baseColor = parsed;
+                // Excel はセルの色(rgb="AARRGGBB")のアルファを無視する。"00FF0000" のようにアルファが 00 の色も
+                // 不透明として描くため、ここでも常に不透明にする(透明として読むと文字・罫線・塗りが消える)。
+                baseColor = parsed.WithAlpha(0xFF);
             }
             else if (color.Indexed?.Value is { } indexed)
             {
@@ -119,7 +121,8 @@ namespace Utsushi.Parsing.OpenXml
                 return fallback;
             }
 
-            return FromUInt(_indexedPalette[index]);
+            // indexedColors の rgb も、セルの rgb と同じくアルファを無視して不透明にする。
+            return FromUInt(_indexedPalette[index]).WithAlpha(0xFF);
         }
 
         private ArgbColor ResolveTheme(int index, ArgbColor fallback) =>

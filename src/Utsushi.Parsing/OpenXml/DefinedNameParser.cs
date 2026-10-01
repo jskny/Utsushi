@@ -20,7 +20,14 @@ namespace Utsushi.Parsing.OpenXml
         /// <summary>
         /// 印刷範囲の定義("Sheet1!$A$1:$H$40" 形式、カンマ区切りで複数可)を解釈する。
         /// </summary>
-        public static IReadOnlyList<CellRange> ParsePrintArea(string? definition)
+        public static IReadOnlyList<CellRange> ParsePrintArea(string? definition) => ParsePrintArea(definition, int.MaxValue);
+
+        /// <summary>
+        /// <see cref="ParsePrintArea(string?)"/> と同じだが、<paramref name="maxCount"/> + 1 個まで読んだ時点で打ち切る
+        /// (要件6.8)。戻り値の個数が <paramref name="maxCount"/> を超えていれば、上限を超えていたことを表す。
+        /// 上限を大きく超える定義でも、全件をリストにしてから比べることはしない(security-reviewer指摘)。
+        /// </summary>
+        public static IReadOnlyList<CellRange> ParsePrintArea(string? definition, int maxCount)
         {
             var result = new List<CellRange>();
             foreach (var reference in SplitReferences(definition))
@@ -29,6 +36,10 @@ namespace Utsushi.Parsing.OpenXml
                 if (CellRange.TryParse(range, out var parsed))
                 {
                     result.Add(parsed);
+                    if (result.Count > maxCount)
+                    {
+                        break;
+                    }
                 }
             }
 
@@ -54,8 +65,14 @@ namespace Utsushi.Parsing.OpenXml
                 if (int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var rowStart)
                     && int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var rowEnd))
                 {
-                    firstRow = Math.Min(rowStart, rowEnd);
-                    lastRow = Math.Max(rowStart, rowEnd);
+                    // 行番号の範囲外($0 や最大行を超える値)の指定は、行の印刷タイトルなしとして無視する
+                    // (そのまま渡すと Layout で ArgumentOutOfRangeException になっていた)。
+                    if (IsValidRow(rowStart) && IsValidRow(rowEnd))
+                    {
+                        firstRow = Math.Min(rowStart, rowEnd);
+                        lastRow = Math.Max(rowStart, rowEnd);
+                    }
+
                     continue;
                 }
 
@@ -69,6 +86,8 @@ namespace Utsushi.Parsing.OpenXml
 
             return new PrintTitles(firstRow, lastRow, firstColumn, lastColumn);
         }
+
+        private static bool IsValidRow(int row) => row >= 1 && row <= CellAddress.MaxRow;
 
         /// <summary>シート名(引用符付きを含む)を除いた参照部分を返す。</summary>
         private static string StripSheetName(string reference)

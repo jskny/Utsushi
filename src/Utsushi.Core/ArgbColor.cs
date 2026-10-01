@@ -33,6 +33,9 @@ namespace Utsushi.Core
 
         public bool IsTransparent => A == 0;
 
+        /// <summary>RGB はそのままで、アルファだけを <paramref name="alpha"/> にした色を返す。</summary>
+        public ArgbColor WithAlpha(byte alpha) => new(alpha, R, G, B);
+
         /// <summary>"FF0000" / "FFFF0000" / "#FF0000" 形式の16進表記を解釈する。アルファ省略時は不透明として扱う。</summary>
         public static bool TryParseHex(string? text, out ArgbColor color)
         {
