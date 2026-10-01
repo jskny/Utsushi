@@ -37,7 +37,8 @@ namespace Utsushi.Layout
                     nameof(maxDigitWidthPx), maxDigitWidthPx, "最大数字幅は正の数である必要があります。");
             }
 
-            if (width <= 0)
+            // NaN(幅の指定が無い列を誤ってそのまま渡した場合など)も0として扱う。
+            if (!(width > 0))
             {
                 return 0.0;
             }

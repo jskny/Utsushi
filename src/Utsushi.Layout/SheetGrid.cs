@@ -61,15 +61,10 @@ namespace Utsushi.Layout
             var columnWidths = new Dictionary<int, double>();
             foreach (var c in CollectDistinctIndices(columnRanges))
             {
-                if (sheet.IsColumnHidden(c))
-                {
-                    continue;
-                }
-
-                var widthPt = ExcelUnitConverter.SheetColumnWidthToPoints(sheet, c, maxDigitWidthPx);
+                // 非表示の列と幅0の列は印刷しない(PrintedColumnWidthPt参照)。
+                var widthPt = PrintedColumnWidthPt(sheet, c, maxDigitWidthPx);
                 if (widthPt <= 0)
                 {
-                    // 幅0の列は非表示と同じ扱い。
                     continue;
                 }
 
@@ -87,12 +82,7 @@ namespace Utsushi.Layout
             var rowHeights = new Dictionary<int, double>();
             foreach (var r in CollectDistinctIndices(rowRanges))
             {
-                if (sheet.IsRowHidden(r))
-                {
-                    continue;
-                }
-
-                var heightPt = sheet.GetRowHeight(r);
+                var heightPt = PrintedRowHeightPt(sheet, r);
                 if (heightPt <= 0)
                 {
                     continue;
@@ -104,6 +94,44 @@ namespace Utsushi.Layout
 
             return new SheetGrid(columns, rows, columnWidths, rowHeights, printRange);
         }
+
+        /// <summary>
+        /// 印刷したときの行高(ポイント)。非表示の行と、高さが0以下(または NaN)の行は0を返す。
+        /// 行を「印刷されない(非表示)」とみなすかどうかの判定は、すべてこの値が0かどうかで行う
+        /// (格子の構築・差し込みセルの検証などで基準をそろえるため)。
+        /// </summary>
+        internal static double PrintedRowHeightPt(SheetModel sheet, int row)
+        {
+            if (sheet.IsRowHidden(row))
+            {
+                return 0.0;
+            }
+
+            var heightPt = sheet.GetRowHeight(row);
+            return heightPt > 0 ? heightPt : 0.0;
+        }
+
+        /// <summary>
+        /// 印刷したときの列幅(ポイント)。非表示の列と、幅が0以下(または NaN)の列は0を返す
+        /// (<see cref="PrintedRowHeightPt"/>と同じ考え方)。
+        /// </summary>
+        internal static double PrintedColumnWidthPt(SheetModel sheet, int column, double maxDigitWidthPx)
+        {
+            if (sheet.IsColumnHidden(column))
+            {
+                return 0.0;
+            }
+
+            var widthPt = ExcelUnitConverter.SheetColumnWidthToPoints(sheet, column, maxDigitWidthPx);
+            return widthPt > 0 ? widthPt : 0.0;
+        }
+
+        /// <summary>行が印刷されない(非表示、または高さが0)かどうか。</summary>
+        internal static bool IsRowNotPrinted(SheetModel sheet, int row) => PrintedRowHeightPt(sheet, row) <= 0;
+
+        /// <summary>列が印刷されない(非表示、または幅が0)かどうか。</summary>
+        internal static bool IsColumnNotPrinted(SheetModel sheet, int column, double maxDigitWidthPx) =>
+            PrintedColumnWidthPt(sheet, column, maxDigitWidthPx) <= 0;
 
         /// <summary>複数区間の索引を、重複と順序を整えたうえで昇順に列挙する。</summary>
         private static IEnumerable<int> CollectDistinctIndices(IReadOnlyList<(int First, int Last)> ranges)

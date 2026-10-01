@@ -51,13 +51,19 @@ namespace Utsushi.Layout.HeaderFooter
     /// <param name="FileName">ファイル名(<c>&amp;F</c>)。</param>
     /// <param name="Timestamp">日付・時刻(<c>&amp;D</c> / <c>&amp;T</c>)。</param>
     /// <param name="DefaultFont">書式コードで指定が無い場合に使うフォント。</param>
+    /// <param name="IsFirstPage">
+    /// 文書の先頭ページかどうか(「先頭ページのみ別指定」の判定に使う)。null の場合は
+    /// <paramref name="PageNumber"/> が1かどうかで判定する。「先頭ページ番号」を指定した帳票では、
+    /// 先頭ページの <paramref name="PageNumber"/> が1とは限らないため明示する。
+    /// </param>
     public sealed record HeaderFooterContext(
         int PageNumber,
         int TotalPages,
         string SheetName,
         string? FileName,
         DateTime Timestamp,
-        FontStyle DefaultFont);
+        FontStyle DefaultFont,
+        bool? IsFirstPage = null);
 
     /// <summary>
     /// Excel のヘッダー/フッター書式コードを解釈し、セクションごとの文字列へ展開する。
@@ -69,6 +75,7 @@ namespace Utsushi.Layout.HeaderFooter
     /// <list type="table">
     ///   <item><term>&amp;L / &amp;C / &amp;R</term><description>以降を左/中央/右セクションへ</description></item>
     ///   <item><term>&amp;P / &amp;N</term><description>ページ番号 / 総ページ数</description></item>
+    ///   <item><term>&amp;P+n / &amp;P-n</term><description>ページ番号に n を足した / 引いた値</description></item>
     ///   <item><term>&amp;D / &amp;T</term><description>日付 / 時刻</description></item>
     ///   <item><term>&amp;A / &amp;F / &amp;Z</term><description>シート名 / ファイル名 / ファイルパス</description></item>
     ///   <item><term>&amp;B / &amp;I / &amp;U / &amp;S</term><description>太字 / 斜体 / 下線 / 取り消し線の切り替え</description></item>
@@ -154,8 +161,7 @@ namespace Utsushi.Layout.HeaderFooter
                     return index + 2;
 
                 case 'P' or 'p':
-                    builder.Append(context.PageNumber.ToString(CultureInfo.InvariantCulture));
-                    return index + 2;
+                    return AppendPageNumber(text, index, builder, context.PageNumber);
 
                 case 'N' or 'n':
                     builder.Append(context.TotalPages.ToString(CultureInfo.InvariantCulture));
@@ -213,6 +219,45 @@ namespace Utsushi.Layout.HeaderFooter
                     // 未知のコードは読み飛ばす。
                     return index + 2;
             }
+        }
+
+        /// <summary>
+        /// 1回の加減算で読む数字の最大桁数。これより長い数字列は加減算に使わず、そのまま文字として残す
+        /// (桁あふれを避けるため。Excel の UI で入力できるページ番号より十分大きい)。
+        /// </summary>
+        private const int MaxPageOffsetDigits = 9;
+
+        /// <summary>
+        /// &amp;P を処理する。直後に <c>+数字</c> / <c>-数字</c> が続けば、その値を足した/引いたページ番号にする
+        /// (Excel の「&amp;[ページ番号]+1」)。
+        /// </summary>
+        private static int AppendPageNumber(string text, int index, SectionBuilder builder, int pageNumber)
+        {
+            var next = index + 2;
+            if (next < text.Length && (text[next] == '+' || text[next] == '-'))
+            {
+                var digitsStart = next + 1;
+                var digitsEnd = digitsStart;
+                while (digitsEnd < text.Length && digitsEnd - digitsStart < MaxPageOffsetDigits && char.IsDigit(text[digitsEnd]))
+                {
+                    digitsEnd++;
+                }
+
+                if (digitsEnd > digitsStart
+                    && long.TryParse(
+                        text.Substring(digitsStart, digitsEnd - digitsStart),
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out var offset))
+                {
+                    var value = text[next] == '+' ? (long)pageNumber + offset : (long)pageNumber - offset;
+                    builder.Append(value.ToString(CultureInfo.InvariantCulture));
+                    return digitsEnd;
+                }
+            }
+
+            builder.Append(pageNumber.ToString(CultureInfo.InvariantCulture));
+            return next;
         }
 
         /// <summary>&amp;"フォント名,スタイル" を処理する。</summary>
@@ -327,7 +372,10 @@ namespace Utsushi.Layout.HeaderFooter
 
             public void SetFontSize(double sizePt) => ChangeFont(_font with { SizePt = sizePt });
 
-            /// <summary>&amp;"フォント名,スタイル" のスタイル部分(Bold / Italic / Bold Italic / Regular)を反映する。</summary>
+            /// <summary>
+            /// &amp;"フォント名,スタイル" のスタイル部分(Bold / Italic / Bold Italic / Regular、
+            /// 日本語版 Excel の 太字 / 斜体 / 太字 斜体 / 標準)を反映する。
+            /// </summary>
             public void SetFontStyleFromName(string style)
             {
                 if (string.IsNullOrWhiteSpace(style))
@@ -336,8 +384,8 @@ namespace Utsushi.Layout.HeaderFooter
                 }
 
                 var normalized = style.Trim().ToLowerInvariant();
-                var bold = normalized.Contains("bold");
-                var italic = normalized.Contains("italic") || normalized.Contains("oblique");
+                var bold = normalized.Contains("bold") || normalized.Contains("太字");
+                var italic = normalized.Contains("italic") || normalized.Contains("oblique") || normalized.Contains("斜体");
                 ChangeFont(_font with { Bold = bold, Italic = italic });
             }
 

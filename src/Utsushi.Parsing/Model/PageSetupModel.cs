@@ -127,17 +127,28 @@ namespace Utsushi.Parsing.Model
 
         /// <summary>指定ページ(1始まり)に適用するヘッダーを返す。</summary>
         public string? GetHeader(int pageNumber) =>
-            Select(pageNumber, FirstHeader, EvenHeader, OddHeader);
+            Select(pageNumber, pageNumber == 1, FirstHeader, EvenHeader, OddHeader);
 
         /// <summary>指定ページ(1始まり)に適用するフッターを返す。</summary>
         public string? GetFooter(int pageNumber) =>
-            Select(pageNumber, FirstFooter, EvenFooter, OddFooter);
+            Select(pageNumber, pageNumber == 1, FirstFooter, EvenFooter, OddFooter);
 
-        private string? Select(int pageNumber, string? first, string? even, string? odd)
+        /// <summary>
+        /// ページ番号 <paramref name="pageNumber"/>(「先頭ページ番号」を反映した番号。奇数/偶数の判定に使う)の
+        /// ページに適用するヘッダーを返す。<paramref name="isFirstPage"/> は文書の先頭ページかどうか。
+        /// </summary>
+        public string? GetHeader(int pageNumber, bool isFirstPage) =>
+            Select(pageNumber, isFirstPage, FirstHeader, EvenHeader, OddHeader);
+
+        /// <summary><see cref="GetHeader(int, bool)"/> のフッター版。</summary>
+        public string? GetFooter(int pageNumber, bool isFirstPage) =>
+            Select(pageNumber, isFirstPage, FirstFooter, EvenFooter, OddFooter);
+
+        private string? Select(int pageNumber, bool isFirstPage, string? first, string? even, string? odd)
         {
             // 「先頭ページのみ別指定」が優先。次に奇数/偶数の別指定。
             // 該当する指定が空の場合、Excel はそのページのヘッダー/フッターを表示しない。
-            if (DifferentFirst && pageNumber == 1)
+            if (DifferentFirst && isFirstPage)
             {
                 return first;
             }
@@ -154,6 +165,15 @@ namespace Utsushi.Parsing.Model
     /// <summary>
     /// シートのページ設定。要件1.3 が求める項目を保持する。
     /// </summary>
+    /// <param name="HorizontalCentered">
+    /// 「ページ中央(水平)」(<c>printOptions/@horizontalCentered</c>)。各ページの本文(印刷タイトルを含む)を
+    /// 印字可能領域の左右中央に配置する。
+    /// </param>
+    /// <param name="VerticalCentered">「ページ中央(垂直)」(<c>printOptions/@verticalCentered</c>)。</param>
+    /// <param name="FirstPageNumber">
+    /// 先頭ページのページ番号(<c>pageSetup/@firstPageNumber</c>。<c>@useFirstPageNumber</c> が真のときだけ値を持つ)。
+    /// null は「自動」(1から始まる)。ヘッダー/フッターの <c>&amp;P</c>・<c>&amp;N</c> に反映する。
+    /// </param>
     public sealed record PageSetupModel(
         PaperSize Paper,
         PageOrientation Orientation,
@@ -164,7 +184,10 @@ namespace Utsushi.Parsing.Model
         IReadOnlyList<int> ManualColumnBreaks,
         PrintTitles PrintTitles,
         PageOrder PageOrder,
-        HeaderFooterModel HeaderFooter)
+        HeaderFooterModel HeaderFooter,
+        bool HorizontalCentered = false,
+        bool VerticalCentered = false,
+        int? FirstPageNumber = null)
     {
         /// <summary>ページ設定が未指定のシート向けの既定値。</summary>
         public static PageSetupModel Default { get; } = new(
