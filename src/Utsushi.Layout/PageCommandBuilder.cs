@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Text;
 using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.Layout.Model;
@@ -27,7 +26,11 @@ namespace Utsushi.Layout
         private readonly SheetGrid _grid;
         private readonly IFontMetricsProvider _fontMetrics;
         private readonly double _scale;
-        private readonly PageMargins _margins;
+        private readonly double _originX;
+        private readonly double _originY;
+        private readonly RectPt? _printableArea;
+        private readonly MergedCellIndex? _mergedIndex;
+        private readonly ISet<CellAddress>? _validatedSubstitutedCells;
 
         /// <summary>
         /// 2セルアンカー画像の幅/高さ計算で合算する列/行数の上限。対角セルにセル番地の上限
@@ -39,29 +42,69 @@ namespace Utsushi.Layout
         /// <summary>画像・図形1つの表示サイズ(pt)の上限。異常に大きいEMU値に対する安全弁。</summary>
         private const double MaxDrawingObjectDimensionPt = 5000.0;
 
-        /// <summary>図形内テキストの矩形内側の余白(pt)。セルの<see cref="ExcelUnitConverter.CellPaddingPoints"/>とは別に、図形用の小さめの値を使う。</summary>
-        private const double ShapeTextPaddingPt = 4.0;
+        /// <summary>
+        /// <see cref="ConnectorModel.Outline"/>が<c>null</c>の接続線に補う既定の枠線(Excel上は黒い実線1ptで表示される。
+        /// design.md参照)。印刷倍率を線幅に掛けるため、Rendering レイヤーではなくここで補う。
+        /// </summary>
+        private static readonly ShapeOutline DefaultConnectorOutline = new(ArgbColor.Black, 1.0);
 
         private readonly List<DrawCommand> _fills = new();
         private readonly List<DrawCommand> _borders = new();
+
+        /// <summary><see cref="_borders"/> の各罫線が、セル境界上の一重の水平・垂直の罫線(角の継ぎ目の調整の対象)かどうか。</summary>
+        private readonly List<bool> _borderOnGridLine = new();
         private readonly List<DrawCommand> _texts = new();
         private readonly List<DrawCommand> _drawingObjects = new();
-        private readonly HashSet<string> _emittedBorders = new(StringComparer.Ordinal);
+        private readonly HashSet<BorderLineKey> _emittedBorders = new();
 
+        /// <param name="report">帳票。</param>
+        /// <param name="grid">印刷対象の格子。</param>
+        /// <param name="fontMetrics">フォントメトリクス。</param>
+        /// <param name="scale">拡大縮小率。</param>
+        /// <param name="margins">余白。本文の左上は(左余白, 上余白)に置く。</param>
+        /// <param name="centeringOffset">
+        /// 「ページ中央」(<see cref="PageSetupModel.HorizontalCentered"/>/<see cref="PageSetupModel.VerticalCentered"/>)
+        /// のために本文全体を平行移動する量(用紙座標、ポイント)。
+        /// </param>
+        /// <param name="printableArea">
+        /// 印字可能領域(余白の内側、用紙座標)。はみ出し表示の文字をこのページの本文の矩形で切り取るときに、
+        /// 本文の矩形をさらにこの矩形で切り詰める。null の場合は本文の矩形だけで切り取る。
+        /// </param>
+        /// <param name="mergedIndex">
+        /// セル→結合範囲の索引(<paramref name="grid"/> の行を登録したもの)。null の場合はページごとに作る。
+        /// 同じ格子の複数ページで使い回すため、呼び出し側で1度だけ作って渡す。
+        /// </param>
+        /// <param name="validatedSubstitutedCells">
+        /// 表示されることを確かめ終えた差し込みセル(要件2.13, 2.14)の記録。同じ印刷範囲の全ページで共有し、
+        /// 印刷タイトルの行/列のように複数ページに繰り返し現れるセルを、ページごとに検証し直さないようにする。
+        /// 検証の結果はセルの番地・書式・(同じ印刷範囲で共通の)拡大縮小率だけで決まるため、1度確かめれば十分である。
+        /// null の場合は記録せず、現れるたびに検証する。
+        /// </param>
         public PageCommandBuilder(
             ReportModel report,
             SheetGrid grid,
             IFontMetricsProvider fontMetrics,
             double scale,
-            PageMargins margins)
+            PageMargins margins,
+            PointPt centeringOffset = default,
+            RectPt? printableArea = null,
+            MergedCellIndex? mergedIndex = null,
+            ISet<CellAddress>? validatedSubstitutedCells = null)
         {
             _report = report;
             _sheet = report.Sheet;
             _grid = grid;
             _fontMetrics = fontMetrics;
             _scale = scale;
-            _margins = margins;
+            _originX = margins.LeftPt + centeringOffset.X;
+            _originY = margins.TopPt + centeringOffset.Y;
+            _printableArea = printableArea;
+            _mergedIndex = mergedIndex;
+            _validatedSubstitutedCells = validatedSubstitutedCells;
         }
+
+        /// <summary>はみ出し表示の文字を切り取る矩形(このページの本文の矩形)。<see cref="Build"/> で決まる。</summary>
+        private RectPt _pageBodyRect;
 
         /// <summary>ページに含まれる行・列からの描画命令を生成する。</summary>
         public IReadOnlyList<DrawCommand> Build(IReadOnlyList<int> rows, IReadOnlyList<int> columns)
@@ -72,6 +115,12 @@ namespace Utsushi.Layout
             var columnIndex = BuildIndex(columns);
             var rowIndex = BuildIndex(rows);
 
+            _pageBodyRect = ResolvePageBodyRect(rowOffsets, columnOffsets);
+
+            // セルごとに結合範囲を線形探索しないよう、索引を引く(印刷範囲ごとに作った索引を
+            // 呼び出し側で使い回すのが既定。無ければこのページの列について作る)。
+            var mergedIndex = _mergedIndex ?? MergedCellIndex.Create(_sheet.MergedRanges, columns);
+
             // 同一ページ上で同じ結合範囲を二重に描かないための記録。
             var emittedMergedRanges = new HashSet<CellRange>();
 
@@ -80,7 +129,7 @@ namespace Utsushi.Layout
                 foreach (var column in columns)
                 {
                     var address = new CellAddress(row, column);
-                    var merged = _sheet.FindMergedRange(address);
+                    var merged = mergedIndex.Find(address);
 
                     if (merged is not null)
                     {
@@ -112,6 +161,8 @@ namespace Utsushi.Layout
 
             EmitDrawingObjects(rowIndex, columnIndex, rowOffsets, columnOffsets);
 
+            ExtendBorderEndsAtJunctions();
+
             var commands = new List<DrawCommand>(_fills.Count + _borders.Count + _texts.Count + _drawingObjects.Count);
             commands.AddRange(_fills);
             commands.AddRange(_borders);
@@ -119,6 +170,34 @@ namespace Utsushi.Layout
             commands.AddRange(_drawingObjects);
             return commands;
         }
+
+        /// <summary>
+        /// このページの本文(印刷タイトルを含む)の矩形。印字可能領域が分かっていれば、その内側に切り詰める
+        /// (1行/1列だけで印字可能領域を超える場合に、はみ出し表示の文字が余白へ描かれないようにする)。
+        /// </summary>
+        private RectPt ResolvePageBodyRect(double[] rowOffsets, double[] columnOffsets)
+        {
+            var body = ToPageRect(0.0, 0.0, columnOffsets[columnOffsets.Length - 1], rowOffsets[rowOffsets.Length - 1]);
+            if (_printableArea is not { } area)
+            {
+                return body;
+            }
+
+            var left = Math.Max(body.Left, area.Left);
+            var top = Math.Max(body.Top, area.Top);
+            return RectPt.FromBounds(
+                left,
+                top,
+                Math.Max(left, Math.Min(body.Right, area.Right)),
+                Math.Max(top, Math.Min(body.Bottom, area.Bottom)));
+        }
+
+        /// <summary>
+        /// 図形・接続線の枠線の太さ(矢印の大きさもこれに比例する)に印刷倍率を掛ける。
+        /// 色(透明=線なしを含む)と矢印の種類はそのまま保つ。
+        /// </summary>
+        private ShapeOutline? ScaleOutline(ShapeOutline? outline) =>
+            outline is null ? null : outline with { WidthPt = outline.WidthPt * _scale };
 
         // ---------------------------------------------------------------------
         // 画像・図形(要件9, 10)
@@ -165,7 +244,7 @@ namespace Utsushi.Layout
                             connector.StartConnection, connector.EndConnection, connectionTargets);
                         _drawingObjects.Add(new ConnectorCommand(
                             rect, connector.Preset, connector.RotationDegrees, connector.FlipHorizontal, connector.FlipVertical,
-                            connector.Outline, resolvedStart, resolvedEnd));
+                            ScaleOutline(connector.Outline ?? DefaultConnectorOutline), resolvedStart, resolvedEnd));
                         break;
                     case GroupShapeModel group:
                         var children = BuildGroupChildren(
@@ -363,7 +442,7 @@ namespace Utsushi.Layout
                         result.Add(new ConnectorCommand(
                             childRect, connector.Preset, Rotation(connector.RotationDegrees),
                             connector.FlipHorizontal ^ flipHorizontal, connector.FlipVertical ^ flipVertical,
-                            connector.Outline, resolvedStart, resolvedEnd));
+                            ScaleOutline(connector.Outline ?? DefaultConnectorOutline), resolvedStart, resolvedEnd));
                         break;
                     case GroupChildGroup nestedGroup:
                         var nestedChildren = BuildGroupChildren(
@@ -411,7 +490,7 @@ namespace Utsushi.Layout
                 : Array.Empty<ShapeTextLine>();
 
             return new ShapeCommand(
-                rect, shape.Preset, shape.AdjustmentValues, rotationDegrees, shape.Fill, shape.Outline, textLines,
+                rect, shape.Preset, shape.AdjustmentValues, rotationDegrees, shape.Fill, ScaleOutline(shape.Outline), textLines,
                 flipHorizontal, flipVertical);
         }
 
@@ -491,7 +570,7 @@ namespace Utsushi.Layout
                 : Array.Empty<ShapeTextLine>();
 
             return new ShapeCommand(
-                rect, shape.Preset, shape.AdjustmentValues, shape.RotationDegrees, shape.Fill, shape.Outline, textLines,
+                rect, shape.Preset, shape.AdjustmentValues, shape.RotationDegrees, shape.Fill, ScaleOutline(shape.Outline), textLines,
                 shape.FlipHorizontal, shape.FlipVertical);
         }
 
@@ -512,12 +591,14 @@ namespace Utsushi.Layout
             // (layout-fidelity-reviewer指摘: グループが大きく縮小されている場合、以前は余白が
             // _scale分しか縮まらずシェイプ本体ほど縮小されないため、縮小率次第でcontentRectが
             // 0以下になりテキストが消える境界に達しうる)。
-            var paddingPt = ShapeTextPaddingPt * _scale * groupScale;
+            // 余白は a:bodyPr の lIns/tIns/rIns/bIns(指定が無ければ DrawingML の既定値 左右7.2pt・上下3.6pt)。
+            var insets = text.Insets ?? ShapeTextInsets.Default;
+            var insetScale = _scale * groupScale;
             var contentRect = RectPt.FromBounds(
-                rect.Left + paddingPt,
-                rect.Top + paddingPt,
-                rect.Right - paddingPt,
-                rect.Bottom - paddingPt);
+                rect.Left + (insets.LeftPt * insetScale),
+                rect.Top + (insets.TopPt * insetScale),
+                rect.Right - (insets.RightPt * insetScale),
+                rect.Bottom - (insets.BottomPt * insetScale));
 
             if (contentRect.Width <= 0 || contentRect.Height <= 0)
             {
@@ -551,22 +632,32 @@ namespace Utsushi.Layout
         /// 段落内で複数ランが異なるフォントを持つ場合でも、折り返し計算は先頭ランのフォントで代表させる
         /// (図形は注記・吹き出し用途を想定した近似実装であり、セル内テキストほど厳密な混在対応はしない)。
         /// </summary>
+        /// <remarks>
+        /// 段落内の改行(<c>a:br</c>。ランの中の改行文字)は行の区切りとして扱い(<see cref="WrapLines"/>)、
+        /// ランを持たない空の段落は1行分の空行にする。空の段落の行の高さは、直前(無ければ直後)の
+        /// ランを持つ段落の先頭ランのフォントで代表させる。
+        /// </remarks>
         private List<(string Text, HorizontalAlignment HAlign, FontStyle Font)> WrapShapeText(
             ShapeTextBody text, double availableWidthPt, double groupScale = 1.0)
         {
             var lines = new List<(string, HorizontalAlignment, FontStyle)>();
-            foreach (var paragraph in text.Paragraphs)
+            var paragraphs = text.Paragraphs;
+            for (var p = 0; p < paragraphs.Count; p++)
             {
-                if (paragraph.Runs.Count == 0)
-                {
-                    lines.Add((string.Empty, paragraph.HAlign, FontStyle.Default));
-                    continue;
-                }
+                var paragraph = paragraphs[p];
 
                 // 拡大縮小率はフォントサイズにも適用する(セル内テキストのEmitTextと同様。
                 // 座標だけを縮めると文字が矩形に収まらなくなるため)。groupScaleは
                 // グループ内図形の場合の追加のリサイズ比率(BuildShapeTextLines参照)。
-                var scaledFont = paragraph.Runs[0].Font with { SizePt = paragraph.Runs[0].Font.SizePt * _scale * groupScale };
+                var baseFont = RepresentativeFont(paragraphs, p);
+                var scaledFont = baseFont with { SizePt = baseFont.SizePt * _scale * groupScale };
+
+                if (paragraph.Runs.Count == 0)
+                {
+                    lines.Add((string.Empty, paragraph.HAlign, scaledFont));
+                    continue;
+                }
+
                 var paragraphText = string.Concat(paragraph.Runs.Select(run => run.Text));
                 foreach (var line in WrapLines(scaledFont, paragraphText, availableWidthPt))
                 {
@@ -575,6 +666,31 @@ namespace Utsushi.Layout
             }
 
             return lines;
+        }
+
+        /// <summary>
+        /// 段落 <paramref name="index"/> の折り返し・行の高さに使うフォント。ランを持つ段落はその先頭ランのフォント、
+        /// 空の段落は直前(無ければ直後)のランを持つ段落の先頭ランのフォント。どこにも無ければ既定のフォント。
+        /// </summary>
+        private static FontStyle RepresentativeFont(IReadOnlyList<ShapeTextParagraph> paragraphs, int index)
+        {
+            for (var i = index; i >= 0; i--)
+            {
+                if (paragraphs[i].Runs.Count > 0)
+                {
+                    return paragraphs[i].Runs[0].Font;
+                }
+            }
+
+            for (var i = index + 1; i < paragraphs.Count; i++)
+            {
+                if (paragraphs[i].Runs.Count > 0)
+                {
+                    return paragraphs[i].Runs[0].Font;
+                }
+            }
+
+            return FontStyle.Default;
         }
 
         /// <summary>
@@ -615,12 +731,10 @@ namespace Utsushi.Layout
 
         /// <summary>印刷範囲によらない、シート上の実際の列幅(pt)。非表示列は0。</summary>
         private double RawColumnWidthPt(int column) =>
-            _sheet.IsColumnHidden(column)
-                ? 0.0
-                : ExcelUnitConverter.SheetColumnWidthToPoints(_sheet, column, _report.Definition.MaxDigitWidthPx);
+            SheetGrid.PrintedColumnWidthPt(_sheet, column, _report.Definition.MaxDigitWidthPx);
 
         /// <summary>印刷範囲によらない、シート上の実際の行高(pt)。非表示行は0。</summary>
-        private double RawRowHeightPt(int row) => _sheet.IsRowHidden(row) ? 0.0 : _sheet.GetRowHeight(row);
+        private double RawRowHeightPt(int row) => SheetGrid.PrintedRowHeightPt(_sheet, row);
 
         private void EmitCell(
             CellAddress address, CellModel? cell, RectPt rect, BorderSet? bordersOverride = null, CellRange? mergedRange = null)
@@ -629,9 +743,11 @@ namespace Utsushi.Layout
             var text = cell?.DisplayValue;
 
             // 差し込み値は、矩形が空(行高・列幅が0)で何も描かれない場合も含めて検証する(要件2.13, 2.14)。
-            if (!string.IsNullOrEmpty(text) && _report.SubstitutedCells.Contains(address))
+            if (!string.IsNullOrEmpty(text) && _report.SubstitutedCells.Contains(address)
+                && _validatedSubstitutedCells?.Contains(address) != true)
             {
                 EnsureSubstitutedTextFits(address, style, text!, rect, mergedRange);
+                _validatedSubstitutedCells?.Add(address);
             }
 
             if (rect.IsEmpty)
@@ -648,7 +764,7 @@ namespace Utsushi.Layout
 
             if (!string.IsNullOrEmpty(text))
             {
-                EmitText(address, cell!, style, rect, text!);
+                EmitText(address, cell!, style, rect, text!, mergedRange);
             }
         }
 
@@ -777,14 +893,15 @@ namespace Utsushi.Layout
             if (BorderMetrics.IsDouble(edge.Style))
             {
                 // 二重線は細線2本で表現する。罫線が属するセル境界の内外へ等距離に振り分ける。
-                var offset = BorderMetrics.DoubleLineGapPt * _scale / 2.0;
+                var offset = BorderMetrics.DoubleLineCenterSpacingPt * _scale / 2.0;
                 var (dx, dy) = horizontal ? (0.0, offset) : (offset, 0.0);
-                AddLine(Offset(from, -dx, -dy), Offset(to, -dx, -dy), edge.Color, width, dash);
-                AddLine(Offset(from, dx, dy), Offset(to, dx, dy), edge.Color, width, dash);
+                AddLine(Offset(from, -dx, -dy), Offset(to, -dx, -dy), edge.Color, width, dash, onGridLine: false);
+                AddLine(Offset(from, dx, dy), Offset(to, dx, dy), edge.Color, width, dash, onGridLine: false);
                 return;
             }
 
-            AddLine(from, to, edge.Color, width, dash);
+            var axisAligned = from.X == to.X || from.Y == to.Y;
+            AddLine(from, to, edge.Color, width, dash, onGridLine: axisAligned);
         }
 
         private static PointPt Offset(PointPt point, double dx, double dy) => new(point.X + dx, point.Y + dy);
@@ -792,26 +909,93 @@ namespace Utsushi.Layout
         /// <summary>
         /// 罫線を追加する。隣接セルが同じ境界に同一の罫線を持つ場合、描画命令が重複するため取り除く。
         /// </summary>
-        private void AddLine(PointPt from, PointPt to, ArgbColor color, double widthPt, LineDashStyle dash)
+        private void AddLine(PointPt from, PointPt to, ArgbColor color, double widthPt, LineDashStyle dash, bool onGridLine)
         {
-            var key = string.Format(
-                System.Globalization.CultureInfo.InvariantCulture,
-                "{0:0.###},{1:0.###},{2:0.###},{3:0.###},{4},{5:0.###},{6}",
-                from.X, from.Y, to.X, to.Y, color, widthPt, dash);
-
-            if (!_emittedBorders.Add(key))
+            if (!_emittedBorders.Add(new BorderLineKey(from, to, color, widthPt, dash)))
             {
                 return;
             }
 
             _borders.Add(new LineCommand(from, to, color, widthPt, dash));
+            _borderOnGridLine.Add(onGridLine);
         }
+
+        /// <summary>
+        /// 実線の水平・垂直の罫線の端に、垂直・水平の罫線の端が接している(角・T字の継ぎ目)場合、接している罫線の
+        /// 線幅の半分だけ端を延ばす(継ぎ目の外側の欠けがちょうど埋まる)。端をそろえたままだと、太い罫線(2.25pt など)が角で交わるところの外側に欠けができる。
+        /// </summary>
+        /// <remarks>
+        /// 罫線の端を一律に延ばす(線端を四角くする)と、垂直の罫線が無い端(合計欄の下罫線だけを引いた場合など)でも
+        /// 隣のセルへ突き出すため、継ぎ目のある端だけを延ばす(layout-fidelity-reviewer指摘)。
+        /// 罫線はセルの辺ごとに出力するため、継ぎ目は端点どうしの一致で判定できる。破線は延ばすと破線の周期がずれるため延ばさない。
+        /// 二重線・斜線はセル境界の上に無いため、延ばす対象にも継ぎ目の相手にもしない(継ぎ目の相手としては、破線も数える)。
+        /// </remarks>
+        private void ExtendBorderEndsAtJunctions()
+        {
+            if (_borders.Count < 2)
+            {
+                return;
+            }
+
+            // 端点 → その点に端を持つ水平/垂直の罫線の線幅の半分の最大値。
+            var horizontalEnds = new Dictionary<(long X, long Y), double>();
+            var verticalEnds = new Dictionary<(long X, long Y), double>();
+            for (var i = 0; i < _borders.Count; i++)
+            {
+                if (!_borderOnGridLine[i] || _borders[i] is not LineCommand line)
+                {
+                    continue;
+                }
+
+                var ends = line.From.Y == line.To.Y ? horizontalEnds : verticalEnds;
+                var half = line.WidthPt / 2.0;
+                foreach (var point in new[] { line.From, line.To })
+                {
+                    var key = PointKey(point);
+                    ends[key] = ends.TryGetValue(key, out var existing) ? Math.Max(existing, half) : half;
+                }
+            }
+
+            for (var i = 0; i < _borders.Count; i++)
+            {
+                if (!_borderOnGridLine[i] || _borders[i] is not LineCommand line || line.Dash != LineDashStyle.Solid)
+                {
+                    continue;
+                }
+
+                var horizontal = line.From.Y == line.To.Y;
+                var perpendicularEnds = horizontal ? verticalEnds : horizontalEnds;
+                var fromExtension = perpendicularEnds.TryGetValue(PointKey(line.From), out var f) ? f : 0.0;
+                var toExtension = perpendicularEnds.TryGetValue(PointKey(line.To), out var t) ? t : 0.0;
+                if (fromExtension == 0.0 && toExtension == 0.0)
+                {
+                    continue;
+                }
+
+                // 罫線は左→右・上→下の向きで出力している(EmitBorders)。
+                _borders[i] = horizontal
+                    ? line with
+                    {
+                        From = new PointPt(line.From.X - fromExtension, line.From.Y),
+                        To = new PointPt(line.To.X + toExtension, line.To.Y),
+                    }
+                    : line with
+                    {
+                        From = new PointPt(line.From.X, line.From.Y - fromExtension),
+                        To = new PointPt(line.To.X, line.To.Y + toExtension),
+                    };
+            }
+        }
+
+        private static (long X, long Y) PointKey(PointPt point) =>
+            ((long)Math.Round(point.X * 1000.0), (long)Math.Round(point.Y * 1000.0));
 
         // ---------------------------------------------------------------------
         // テキスト(要件4.1, 4.4, 2.5)
         // ---------------------------------------------------------------------
 
-        private void EmitText(CellAddress address, CellModel cell, CellStyle style, RectPt rect, string text)
+        private void EmitText(
+            CellAddress address, CellModel cell, CellStyle style, RectPt rect, string text, CellRange? mergedRange)
         {
             var maxDigitWidthPx = _report.Definition.MaxDigitWidthPx;
             var paddingPt = ExcelUnitConverter.CellPaddingPoints * _scale;
@@ -849,9 +1033,12 @@ namespace Utsushi.Layout
             var totalHeight = metrics.LineSpacingPt * lines.Count;
             var firstBaselineY = ResolveFirstBaselineY(style.VAlign, rect, metrics, totalHeight);
 
-            RectPt? clipRect = overflow is OverflowBehavior.Clip or OverflowBehavior.Wrap or OverflowBehavior.Shrink
-                ? rect
-                : null;
+            // はみ出し表示でも、結合範囲の文字は結合範囲の外へ出さない(Excel は結合セルの文字を隣のセルへ
+            // はみ出させない)。結合範囲でないセルのはみ出し表示は隣のセルへ描くが、このページの本文の矩形
+            // (余白の内側)の外へは描かない。
+            var clipsToCell = overflow is OverflowBehavior.Clip or OverflowBehavior.Wrap or OverflowBehavior.Shrink
+                || mergedRange is not null;
+            var clipRect = clipsToCell ? rect : _pageBodyRect;
 
             for (var i = 0; i < lines.Count; i++)
             {
@@ -1028,46 +1215,9 @@ namespace Utsushi.Layout
             return font with { SizePt = shrunkSize };
         }
 
-        /// <summary>セル幅に合わせてテキストを折り返す。</summary>
-        /// <remarks>
-        /// 改行は LF・CRLF・CR 単独のいずれも段落区切りとして扱う。折り返し位置は書記素クラスタ
-        /// (サロゲートペア・結合文字・異体字セレクタを含む、利用者が1文字と認識する単位)の境界に限る
-        /// (要件4.6)。UTF-16 の1単位ごとに区切ると、「𠮷」のようなサロゲートペアの途中で改行され、
-        /// 両側が文字化けする。
-        /// </remarks>
-        private List<string> WrapLines(FontStyle font, string text, double availableWidthPt)
-        {
-            var lines = new List<string>();
-            var unified = text.IndexOf('\r') < 0 ? text : text.Replace("\r\n", "\n").Replace('\r', '\n');
-
-            foreach (var paragraph in unified.Split('\n'))
-            {
-                if (paragraph.Length == 0)
-                {
-                    lines.Add(string.Empty);
-                    continue;
-                }
-
-                var current = new StringBuilder();
-                var elements = StringInfo.GetTextElementEnumerator(paragraph);
-                while (elements.MoveNext())
-                {
-                    var element = elements.GetTextElement();
-                    if (current.Length > 0
-                        && _fontMetrics.MeasureTextWidth(font, current.ToString() + element) > availableWidthPt)
-                    {
-                        lines.Add(current.ToString());
-                        current.Clear();
-                    }
-
-                    current.Append(element);
-                }
-
-                lines.Add(current.ToString());
-            }
-
-            return lines.Count == 0 ? new List<string> { string.Empty } : lines;
-        }
+        /// <summary>セル幅に合わせてテキストを折り返す(<see cref="TextWrapper"/>)。</summary>
+        private List<string> WrapLines(FontStyle font, string text, double availableWidthPt) =>
+            TextWrapper.Wrap(_fontMetrics, font, text, availableWidthPt);
 
         // ---------------------------------------------------------------------
         // 座標計算
@@ -1099,10 +1249,10 @@ namespace Utsushi.Layout
         /// <summary>論理座標を、余白と拡大縮小率を適用した用紙座標へ変換する。</summary>
         private RectPt ToPageRect(double left, double top, double right, double bottom) =>
             RectPt.FromBounds(
-                _margins.LeftPt + (left * _scale),
-                _margins.TopPt + (top * _scale),
-                _margins.LeftPt + (right * _scale),
-                _margins.TopPt + (bottom * _scale));
+                _originX + (left * _scale),
+                _originY + (top * _scale),
+                _originX + (right * _scale),
+                _originY + (bottom * _scale));
 
         private RectPt CellRect(
             int row,

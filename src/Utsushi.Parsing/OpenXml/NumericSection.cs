@@ -13,12 +13,13 @@ namespace Utsushi.Parsing.OpenXml
     /// 桁区切り(<c>,</c>)・小数桁(<c>0</c>/<c>#</c>/<c>?</c>)・百分率(<c>%</c>)・
     /// リテラル(<c>"..."</c>、<c>\x</c>)・色指定(<c>[Red]</c> 等、表示上は無視)である。
     /// 指数表記・分数表記は対象外で、その場合は <see cref="Format"/> が General 相当の文字列を返す。
+    /// 解析結果は不変であり、複数スレッドから共有してよい(<see cref="NumberFormatter"/> がキャッシュする)。
     /// </remarks>
     internal sealed class NumericSection
     {
         private readonly List<Token> _tokens;
         private readonly int _integerDigits;
-        private readonly int _decimalDigits;
+        private readonly string _decimalPlaceholders;
         private readonly bool _useThousandsSeparator;
         private readonly int _percentCount;
         private readonly double _scaleDivisor;
@@ -28,7 +29,7 @@ namespace Utsushi.Parsing.OpenXml
         private NumericSection(
             List<Token> tokens,
             int integerDigits,
-            int decimalDigits,
+            string decimalPlaceholders,
             bool useThousandsSeparator,
             int percentCount,
             double scaleDivisor,
@@ -37,7 +38,7 @@ namespace Utsushi.Parsing.OpenXml
         {
             _tokens = tokens;
             _integerDigits = integerDigits;
-            _decimalDigits = decimalDigits;
+            _decimalPlaceholders = decimalPlaceholders;
             _useThousandsSeparator = useThousandsSeparator;
             _percentCount = percentCount;
             _scaleDivisor = scaleDivisor;
@@ -49,7 +50,7 @@ namespace Utsushi.Parsing.OpenXml
         {
             var tokens = new List<Token>();
             var integerDigits = 0;
-            var decimalDigits = 0;
+            var decimalPlaceholders = new StringBuilder();
             var useThousands = false;
             var percentCount = 0;
             var scaleDivisor = 1.0;
@@ -122,7 +123,8 @@ namespace Utsushi.Parsing.OpenXml
                         trailingCommas = 0;
                         if (seenDecimalPoint)
                         {
-                            decimalDigits++;
+                            // 小数部は 0(必ず表示)/#(不要な0は出さない)/?(不要な0は空白)を桁ごとに覚えておく。
+                            decimalPlaceholders.Append(c);
                             if (c == '0')
                             {
                                 tokens.Add(Token.RequiredDecimalDigit());
@@ -204,7 +206,7 @@ namespace Utsushi.Parsing.OpenXml
             var literalOnly = !placeholderSeen;
 
             return new NumericSection(
-                tokens, integerDigits, decimalDigits, useThousands, percentCount, scaleDivisor, supported, literalOnly);
+                tokens, integerDigits, decimalPlaceholders.ToString(), useThousands, percentCount, scaleDivisor, supported, literalOnly);
         }
 
         public string Format(double value)
@@ -228,7 +230,10 @@ namespace Utsushi.Parsing.OpenXml
                 return value.ToString("0.##########", CultureInfo.InvariantCulture);
             }
 
-            var scaled = value;
+            // セクションが1つだけの書式(負数セクション無し)では、Excel は負号を出力全体の先頭に付ける
+            // (例: "¥"#,##0 で -1000 は -¥1,000)。複数セクションの場合、呼び出し側が絶対値を渡す。
+            var negative = value < 0;
+            var scaled = Math.Abs(value);
             for (var i = 0; i < _percentCount; i++)
             {
                 scaled *= 100.0;
@@ -266,7 +271,7 @@ namespace Utsushi.Parsing.OpenXml
                 sb.Append(numberText);
             }
 
-            return sb.ToString();
+            return negative ? "-" + sb : sb.ToString();
         }
 
         private string BuildNumberText(double value)
@@ -275,12 +280,16 @@ namespace Utsushi.Parsing.OpenXml
             pattern.Append(_useThousandsSeparator ? "#,##" : string.Empty);
             pattern.Append(_integerDigits > 0 ? new string('0', _integerDigits) : "0");
 
-            if (_decimalDigits > 0)
+            if (_decimalPlaceholders.Length > 0)
             {
-                pattern.Append('.').Append(new string('0', _decimalDigits));
+                pattern.Append('.').Append(new string('0', _decimalPlaceholders.Length));
             }
 
             var text = value.ToString(pattern.ToString(), CultureInfo.InvariantCulture);
+            if (_decimalPlaceholders.Length > 0)
+            {
+                text = TrimOptionalDecimals(text);
+            }
 
             // 整数部プレースホルダが 1 つも無い書式(例: ".00")では先頭の 0 を落とす。
             if (_integerDigits == 0 && text.StartsWith("0.", StringComparison.Ordinal))
@@ -289,6 +298,41 @@ namespace Utsushi.Parsing.OpenXml
             }
 
             return text;
+        }
+
+        /// <summary>
+        /// 小数部の末尾から、<c>#</c> に対応する不要な0を取り除き、<c>?</c> に対応する不要な0を空白にする。
+        /// <c>0</c> のプレースホルダか0以外の数字に達したら止める(例: <c>0.0#</c> で 1.50 → 1.5)。
+        /// </summary>
+        private string TrimOptionalDecimals(string text)
+        {
+            var point = text.LastIndexOf('.');
+            if (point < 0 || text.Length - point - 1 != _decimalPlaceholders.Length)
+            {
+                return text;
+            }
+
+            var sb = new StringBuilder(text);
+            for (var k = _decimalPlaceholders.Length - 1; k >= 0; k--)
+            {
+                var placeholder = _decimalPlaceholders[k];
+                var index = point + 1 + k;
+                if (placeholder == '0' || sb[index] != '0')
+                {
+                    break;
+                }
+
+                if (placeholder == '#')
+                {
+                    sb.Remove(index, 1);
+                }
+                else
+                {
+                    sb[index] = ' ';
+                }
+            }
+
+            return sb.ToString();
         }
 
         private enum TokenKind

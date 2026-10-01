@@ -242,7 +242,8 @@ namespace Utsushi.Layout.Tests
 
             var layout = Compute(sheet);
 
-            // タイトル2行(200pt)を除いた残り641.89pt → 本文6行/ページ
+            // 1ページ目はタイトル行そのものを本文として印刷する(841.89pt → 8行)。
+            // 2ページ目以降はタイトル2行(200pt)を除いた残り641.89pt → 本文6行/ページ
             Assert.Equal(3, layout.PageCount);
 
             foreach (var page in layout.Pages)
@@ -252,9 +253,13 @@ namespace Utsushi.Layout.Tests
                 Assert.Contains("A2", texts);
             }
 
-            // 本文はタイトル行を含まず、3行目から流し込まれる
-            Assert.Equal((3, 8), layout.Pages[0].RowRange);
+            // 印刷範囲の中にあるタイトル行は本文から除かず、1ページ目は1行目から順に並ぶ
+            Assert.Equal((1, 8), layout.Pages[0].RowRange);
             Assert.Equal((9, 14), layout.Pages[1].RowRange);
+            Assert.Equal((15, 20), layout.Pages[2].RowRange);
+            Assert.Equal(
+                Enumerable.Range(1, 8).Select(r => "A" + r),
+                Texts(layout.Pages[0]).Select(t => t.Text));
         }
 
         [Fact]
@@ -446,7 +451,9 @@ namespace Utsushi.Layout.Tests
             // 右端(C1のRight)。アンカーA1だけを見ていると欠落する。
             Assert.Contains(lines, l => l.From.X == columnWidthPt * 3 && l.To.X == columnWidthPt * 3);
             // 下端(C1のBottom)。3列ぶんの幅で1本になる。アンカーA1だけを見ていると欠落する。
-            Assert.Contains(lines, l => l.From.Y == rowHeightPt && l.To.Y == rowHeightPt && l.To.X - l.From.X == columnWidthPt * 3);
+            // 両端は左右の罫線との角の継ぎ目として、左右の罫線の線幅の半分ずつ延びる。
+            Assert.Contains(lines, l => l.From.Y == rowHeightPt && l.To.Y == rowHeightPt
+                && l.To.X - l.From.X == (columnWidthPt * 3) + l.WidthPt);
             // 上端はどのセルにも設定していないため出力されない
             Assert.DoesNotContain(lines, l => l.From.Y == 0.0 && l.To.Y == 0.0);
         }
@@ -707,13 +714,20 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void はみ出し許容ならクリップしない()
+        public void はみ出し許容ならセルではなくページの本文の矩形でクリップする()
         {
-            var sheet = UniformSheet(rows: 1, columns: 1, columnWidth: 2.0, pageSetup: NoMarginA4());
+            var sheet = UniformSheet(rows: 1, columns: 3, columnWidth: 2.0, pageSetup: NoMarginA4());
 
-            var text = Assert.Single(Texts(Assert.Single(Compute(sheet).Pages)));
+            var page = Assert.Single(Compute(sheet).Pages);
+            var text = Texts(page).First(t => t.Text == "A1");
 
-            Assert.Null(text.ClipRect);
+            // 隣のセルへははみ出せるが、このページの本文(3列×1行)の外へは出ない
+            Assert.NotNull(text.ClipRect);
+            var clip = text.ClipRect!.Value;
+            var cellWidth = ExcelUnitConverter.ColumnWidthToPoints(2.0, ReportDefinition.DefaultMaxDigitWidthPx);
+            Assert.Equal(0.0, clip.Left, 6);
+            Assert.Equal(cellWidth * 3, clip.Right, 6);
+            Assert.Equal(20.0, clip.Bottom, 6);
         }
 
         [Fact]
@@ -1011,10 +1025,10 @@ namespace Utsushi.Layout.Tests
                 new[] { new ShapeTextParagraph(new[] { new ShapeTextRun("AAAAAAAAAA", font) }, HorizontalAlignment.Left) },
                 VerticalAlignment.Top);
 
-            // 半角文字幅は0.5em(=5pt)。矩形幅33pt・内側余白4pt×2ぶんを引くと文字領域は25pt=5文字ぶん。
+            // 半角文字幅は0.5em(=5pt)。矩形幅40pt から DrawingML 既定の左右余白7.2pt×2を引くと文字領域は25.6pt=5文字ぶん。
             var shape = new ShapeModel(
                  1u, ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, text,
-                CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(33.0, 60.0));
+                CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(40.0, 60.0));
             sheet = sheet with { DrawingObjects = new[] { shape } };
 
             var page = Assert.Single(Compute(sheet).Pages);
@@ -1088,7 +1102,7 @@ namespace Utsushi.Layout.Tests
                     rows: 2, columns: 2, columnWidth: 40.0, rowHeightPt: 60.0, pageSetup: NoMarginA4(scaling: scaling));
                 var shape = new ShapeModel(
                      1u, ShapePresetType.Rect, Array.Empty<double>(), 0, null, null, text,
-                    CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(33.0, 60.0));
+                    CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(40.0, 60.0));
                 sheet = sheet with { DrawingObjects = new[] { shape } };
 
                 var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider());

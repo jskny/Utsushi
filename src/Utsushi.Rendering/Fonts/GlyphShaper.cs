@@ -99,6 +99,11 @@ namespace Utsushi.Rendering.Fonts
         }
 
         /// <summary>計測・描画用の <see cref="SKFont"/> を作る。斜体の合成もここで与える。</summary>
+        /// <remarks>
+        /// PDF の座標系は1単位=1ポイントであり、Skia の <c>TextSize</c> もその単位で解釈されるため、フォントサイズ(pt)を
+        /// そのまま渡す。斜体の字形を持たないフォントには傾き(<see cref="SKFont.SkewX"/>)を与えて斜体を再現する。
+        /// 太字は文字送り幅に影響させないため、描画時の輪郭の太らせで再現する(<see cref="ResolvedTypeface.SynthesizeBold"/>)。
+        /// </remarks>
         public static SKFont CreateFont(ResolvedTypeface face, double sizePt, SKTypeface? typefaceOverride = null)
         {
             var font = new SKFont(typefaceOverride ?? face.Typeface, (float)sizePt)

@@ -179,7 +179,7 @@ namespace Utsushi.Rendering
                     break;
 
                 case LineCommand line:
-                    DrawLine(canvas, line);
+                    DrawLine(canvas, line, context);
                     break;
 
                 case TextCommand text:
@@ -187,7 +187,7 @@ namespace Utsushi.Rendering
                     break;
 
                 case ImageCommand image:
-                    DrawImage(canvas, image, context.ReportCode, context.SheetName);
+                    DrawImage(canvas, image, context);
                     break;
 
                 case ShapeCommand shape:
@@ -221,33 +221,14 @@ namespace Utsushi.Rendering
         }
 
         /// <summary>画像を描画する(要件9)。他のセル内容より最前面に描画される。</summary>
-        private static void DrawImage(SKCanvas canvas, ImageCommand image, string reportCode, string sheetName)
+        /// <remarks>
+        /// 2回以上描く画像はデコード結果を出力全体で使い回す(<see cref="RenderContext.GetImage"/>)。印刷タイトルの行にある
+        /// 画像のように全ページに現れる画像も、デコードは1回で済み、PDFには1回だけ埋め込まれる。1回しか描かない画像は
+        /// 描画後すぐに解放する。
+        /// </remarks>
+        private static void DrawImage(SKCanvas canvas, ImageCommand image, RenderContext context)
         {
-            // 実際にデコードする前に宣言サイズを確認し、極端に大きい画像
-            // (いわゆるピクセル爆弾。数百バイトのファイルが数千万〜数億ピクセル相当を
-            // 宣言することでメモリを大量消費させる攻撃)を拒否する(security-reviewer指摘)。
-            var bounds = SKBitmap.DecodeBounds(image.Data);
-            if (bounds.IsEmpty)
-            {
-                throw new PdfRenderingException(
-                    $"画像(ContentType: {image.ContentType})をデコードできませんでした。", reportCode, sheetName);
-            }
-
-            if (bounds.Width > MaxDecodedImageDimensionPx || bounds.Height > MaxDecodedImageDimensionPx)
-            {
-                throw new PdfRenderingException(
-                    $"画像(ContentType: {image.ContentType})の寸法({bounds.Width}x{bounds.Height}px)が"
-                    + $"上限({MaxDecodedImageDimensionPx}px)を超えています。",
-                    reportCode, sheetName);
-            }
-
-            using var bitmap = SKBitmap.Decode(image.Data);
-            if (bitmap is null)
-            {
-                throw new PdfRenderingException(
-                    $"画像(ContentType: {image.ContentType})をデコードできませんでした。", reportCode, sheetName);
-            }
-
+            var skImage = context.GetImage(image.Data, data => DecodeImage(data, image.ContentType, context), out var owned);
             var skRect = ToSkRect(image.Rect);
             var hasRotation = Math.Abs(image.RotationDegrees) > double.Epsilon;
 
@@ -261,7 +242,7 @@ namespace Utsushi.Rendering
 
             try
             {
-                canvas.DrawBitmap(bitmap, skRect);
+                canvas.DrawImage(skImage, skRect);
             }
             finally
             {
@@ -269,7 +250,46 @@ namespace Utsushi.Rendering
                 {
                     canvas.Restore();
                 }
+
+                if (owned)
+                {
+                    skImage.Dispose();
+                }
             }
+        }
+
+        /// <summary>画像のバイナリをデコードする。</summary>
+        private static SKImage DecodeImage(byte[] data, string contentType, RenderContext context)
+        {
+            // 実際にデコードする前に宣言サイズを確認し、極端に大きい画像
+            // (いわゆるピクセル爆弾。数百バイトのファイルが数千万〜数億ピクセル相当を
+            // 宣言することでメモリを大量消費させる攻撃)を拒否する(security-reviewer指摘)。
+            var bounds = SKBitmap.DecodeBounds(data);
+            if (bounds.IsEmpty)
+            {
+                throw new PdfRenderingException(
+                    $"画像(ContentType: {contentType})をデコードできませんでした。", context.ReportCode, context.SheetName);
+            }
+
+            if (bounds.Width > MaxDecodedImageDimensionPx || bounds.Height > MaxDecodedImageDimensionPx)
+            {
+                throw new PdfRenderingException(
+                    $"画像(ContentType: {contentType})の寸法({bounds.Width}x{bounds.Height}px)が"
+                    + $"上限({MaxDecodedImageDimensionPx}px)を超えています。",
+                    context.ReportCode, context.SheetName);
+            }
+
+            using var bitmap = SKBitmap.Decode(data);
+            if (bitmap is null)
+            {
+                throw new PdfRenderingException(
+                    $"画像(ContentType: {contentType})をデコードできませんでした。", context.ReportCode, context.SheetName);
+            }
+
+            // SKImage へはピクセルを複製して変換するため、デコードしたビットマップはここで解放してよい。
+            return SKImage.FromBitmap(bitmap)
+                ?? throw new PdfRenderingException(
+                    $"画像(ContentType: {contentType})をデコードできませんでした。", context.ReportCode, context.SheetName);
         }
 
         /// <summary>図形を描画する(要件10)。他のセル内容より最前面に描画される。</summary>
@@ -528,21 +548,18 @@ namespace Utsushi.Rendering
             return (start, end);
         }
 
-        private static void DrawLine(SKCanvas canvas, LineCommand line)
+        /// <summary>罫線を描く。<see cref="SKPaint"/> と破線パターンは出力全体で使い回す(罫線は描画命令の大半を占めるため)。</summary>
+        private static void DrawLine(SKCanvas canvas, LineCommand line, RenderContext context)
         {
-            using var paint = new SKPaint
-            {
-                Color = ToSkColor(line.Color),
-                Style = SKPaintStyle.Stroke,
-                StrokeWidth = (float)line.WidthPt,
-                IsAntialias = true,
-            };
+            var paint = context.LinePaint;
+            paint.Color = ToSkColor(line.Color);
+            paint.Style = SKPaintStyle.Stroke;
+            paint.StrokeWidth = (float)line.WidthPt;
 
-            using var dash = CreateDashEffect(line.Dash, line.WidthPt);
-            if (dash is not null)
-            {
-                paint.PathEffect = dash;
-            }
+            // 罫線の角・T字の継ぎ目は、Layout が継ぎ目のある端だけを接する罫線の線幅の半分延ばして埋める(PageCommandBuilder)。
+            paint.StrokeCap = SKStrokeCap.Butt;
+            paint.IsAntialias = true;
+            paint.PathEffect = context.GetDashEffect(line.Dash, line.WidthPt, CreateDashEffect);
 
             canvas.DrawLine(
                 (float)line.From.X, (float)line.From.Y,
@@ -553,14 +570,17 @@ namespace Utsushi.Rendering
         private void DrawText(SKCanvas canvas, TextCommand text, RenderContext context)
         {
             var shaped = context.GetShaped(text.Font, text.Text);
-            using var primaryFont = GlyphShaper.CreateFont(shaped.Primary, text.Font.SizePt);
-            using var paint = new SKPaint
-            {
-                Color = ToSkColor(text.Font.Color),
-                IsAntialias = true,
-            };
 
-            var width = SkiaFontMetricsProvider.MeasureShaped(shaped, text.Font.SizePt);
+            // 字形の並びごとの送り幅(描画位置と下線の長さに使う)。SkiaFontMetricsProvider.MeasureShaped と同じ順に合計する。
+            var runs = shaped.Runs;
+            var advances = new double[runs.Count];
+            var width = 0.0;
+            for (var i = 0; i < runs.Count; i++)
+            {
+                advances[i] = context.GetFont(runs[i].Face, text.Font.SizePt).MeasureText(runs[i].Glyphs);
+                width += advances[i];
+            }
+
             var x = text.Anchor switch
             {
                 TextAnchor.Right => text.Origin.X - width,
@@ -578,19 +598,13 @@ namespace Utsushi.Rendering
             try
             {
                 var runX = x;
-                foreach (var run in shaped.Runs)
+                for (var i = 0; i < runs.Count; i++)
                 {
-                    runX += DrawGlyphRun(canvas, run, text, runX, context);
+                    DrawGlyphRun(canvas, runs[i], text, runX, context);
+                    runX += advances[i];
                 }
 
-                // 太字を合成している場合は、下線・取消線も同じだけ太くする(DrawTextDecorations)。
-                if (shaped.Primary.SynthesizeBold)
-                {
-                    paint.Style = SKPaintStyle.StrokeAndFill;
-                    paint.StrokeWidth = (float)(text.Font.SizePt * BoldStrokeRatio);
-                }
-
-                DrawTextDecorations(canvas, text, x, width, primaryFont, paint);
+                DrawTextDecorations(canvas, text, shaped.Primary, x, width, context);
             }
             finally
             {
@@ -602,14 +616,14 @@ namespace Utsushi.Rendering
         }
 
         /// <summary>
-        /// 同じ書体で続く字形の並びを1つ描き、その送り幅を返す。
+        /// 同じ書体で続く字形の並びを1つ描く。
         /// </summary>
         /// <remarks>
         /// 字形番号で直接描く(外字用の代替フォント・異体字の字形は、文字列からは引けないため)。
         /// フォント埋め込みの場合は、元の書体の代わりにサブセット書体と振り直した字形番号を使う(要件11.5)。
         /// 送り幅はサブセットでも元の書体と同じ値になる(hmtx をそのまま写すため)。
         /// </remarks>
-        private double DrawGlyphRun(SKCanvas canvas, GlyphRun run, TextCommand text, double x, RenderContext context)
+        private void DrawGlyphRun(SKCanvas canvas, GlyphRun run, TextCommand text, double x, RenderContext context)
         {
             using var paint = new SKPaint
             {
@@ -626,19 +640,17 @@ namespace Utsushi.Rendering
                 paint.StrokeWidth = (float)(text.Font.SizePt * BoldStrokeRatio);
             }
 
-            using var originalFont = GlyphShaper.CreateFont(run.Face, text.Font.SizePt);
-            var advance = originalFont.MeasureText(run.Glyphs);
-
             if (_options.TextRendering == PdfTextRendering.Outline)
             {
+                var originalFont = context.GetFont(run.Face, text.Font.SizePt);
                 DrawGlyphsAsOutline(canvas, run.Glyphs, originalFont, paint, x, text.Origin.Y, run.Face.SynthesizeBold);
-                return advance;
+                return;
             }
 
             var segmentX = x;
             foreach (var (typeface, glyphs) in context.MapForEmbedding(run))
             {
-                using var font = GlyphShaper.CreateFont(run.Face, text.Font.SizePt, typeface);
+                var font = context.GetFont(run.Face, text.Font.SizePt, typeface);
                 using var builder = new SKTextBlobBuilder();
                 var buffer = builder.AllocateRun(font, glyphs.Length, (float)segmentX, (float)text.Origin.Y);
                 glyphs.AsSpan().CopyTo(buffer.GetGlyphSpan());
@@ -650,8 +662,6 @@ namespace Utsushi.Rendering
 
                 segmentX += font.MeasureText(glyphs);
             }
-
-            return advance;
         }
 
         /// <summary>字形が見つからなかったことを表す例外を作る(要件5.5)。</summary>
@@ -738,8 +748,12 @@ namespace Utsushi.Rendering
         }
 
         /// <summary>下線・取り消し線を描画する(要件4.1)。</summary>
+        /// <remarks>
+        /// 線の位置・太さはセルのフォント(<paramref name="primary"/>)のメトリクスから求める。
+        /// 下線・取消線の無い文字列(大半)ではフォントを用意しない。
+        /// </remarks>
         private static void DrawTextDecorations(
-            SKCanvas canvas, TextCommand text, double x, double width, SKFont font, SKPaint paint)
+            SKCanvas canvas, TextCommand text, ResolvedTypeface primary, double x, double width, RenderContext context)
         {
             var font_ = text.Font;
             if (font_.Underline == UnderlineStyle.None && !font_.Strike)
@@ -747,18 +761,18 @@ namespace Utsushi.Rendering
                 return;
             }
 
-            var metrics = font.Metrics;
+            var metrics = context.GetFont(primary, font_.SizePt).Metrics;
             var thickness = metrics.UnderlineThickness ?? (float)(font_.SizePt / 14.0);
 
             // 太字を合成している場合は、下線・取消線も同じだけ太くして字面と釣り合わせる。
-            if (paint.Style == SKPaintStyle.StrokeAndFill)
+            if (primary.SynthesizeBold)
             {
-                thickness += paint.StrokeWidth;
+                thickness += (float)(font_.SizePt * BoldStrokeRatio);
             }
 
             using var linePaint = new SKPaint
             {
-                Color = paint.Color,
+                Color = ToSkColor(font_.Color),
                 Style = SKPaintStyle.Stroke,
                 StrokeWidth = thickness,
                 IsAntialias = true,
@@ -817,12 +831,13 @@ namespace Utsushi.Rendering
     /// </summary>
     /// <remarks>
     /// <para>
-    /// SkiaSharp の PDF バックエンド(NuGet で配布されるネイティブビルド)はフォントの
-    /// <b>サブセット化を行わず、使用フォントを丸ごと埋め込む</b>。日本語フォントは数MBあるため、
-    /// 1ページの帳票でも出力PDFが数MBになる。SkiaSharp 2.88 / 3.x のいずれでも同じ挙動を確認している。
+    /// 既定(<see cref="EmbedFont"/>)では、帳票で使った字形だけのサブセットフォントを作って埋め込む(要件11.5、
+    /// <c>RenderContext</c> / <c>TrueTypeSubsetter</c>)。SkiaSharp の PDF バックエンド自体はサブセット化を行わないため、
+    /// Utsushi 側で作り直している。ただし CFF 形式(.otf)のフォントや、埋め込み許可がサブセット化を禁止しているフォントは
+    /// サブセットを作れず、フォント全体を埋め込む(日本語フォントでは数MBになる)。
     /// </para>
     /// <para>
-    /// 帳票の配布サイズが問題になる場合は <see cref="Outline"/> を選ぶ。
+    /// それでも配布サイズが問題になる場合は <see cref="Outline"/> を選ぶ。
     /// 見た目は <see cref="EmbedFont"/> と同一だが、PDF内の文字列検索・コピー・
     /// テキスト抽出ができなくなる点に注意すること。
     /// </para>

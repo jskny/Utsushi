@@ -122,11 +122,10 @@ namespace Utsushi.Cli.Tests
             var options = Parse(WithDefinitionArgs(
                 "--set", "InvoiceNo=A-001",
                 "-s", "Formula=a=b",          // 値の中の '=' はそのまま
-                "--set", "Remarks=",          // 空の値
-                "--set", "InvoiceNo=A-002")); // 同じキーは後勝ち
+                "--set", "Remarks="));        // 空の値
 
             Assert.Equal(3, options.Values.Count);
-            Assert.Equal("A-002", options.Values["InvoiceNo"]);
+            Assert.Equal("A-001", options.Values["InvoiceNo"]);
             Assert.Equal("a=b", options.Values["Formula"]);
             Assert.Equal(string.Empty, options.Values["Remarks"]);
         }
@@ -232,11 +231,10 @@ namespace Utsushi.Cli.Tests
             var options = Parse(WithoutDefinitionArgs(
                 "--override", "A1=請求書(控)",
                 "--override", "B12=x=y",       // 値の中の '=' はそのまま
-                "--override", "C3=",           // 空の値
-                "--override", "A1=請求書"));   // 同じ番地は後勝ち
+                "--override", "C3="));         // 空の値
 
             Assert.Equal(3, options.CellOverrides.Count);
-            Assert.Equal("請求書", options.CellOverrides["A1"]);
+            Assert.Equal("請求書(控)", options.CellOverrides["A1"]);
             Assert.Equal("x=y", options.CellOverrides["B12"]);
             Assert.Equal(string.Empty, options.CellOverrides["C3"]);
             Assert.Empty(options.Values);
@@ -254,7 +252,8 @@ namespace Utsushi.Cli.Tests
         [Fact]
         public void overrideのセル番地は大文字小文字を区別してそのまま渡す()
         {
-            // 番地の正規化・検証は Substitution レイヤーの責務。CLI は文字列のまま渡す。
+            // 番地の正規化・検証は Substitution レイヤーの責務。CLI は文字列のまま渡す
+            // ("a1" と "A1" が同じセルを指すことは Substitution レイヤーがエラーにする)。
             var options = Parse(WithoutDefinitionArgs("--override", "a1=x", "--override", "A1=y"));
 
             Assert.Equal("x", options.CellOverrides["a1"]);
@@ -271,6 +270,55 @@ namespace Utsushi.Cli.Tests
 
             Assert.Contains("--override", error, StringComparison.Ordinal);
             Assert.Contains("<セル番地>=<値>", error, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void 同じセル番地のoverrideを重ねて指定するとエラー()
+        {
+            // 以前は後の値だけが黙って採用されていた。
+            var error = ParseError(WithoutDefinitionArgs("--override", "A1=請求書(控)", "--override", "A1=請求書"));
+
+            Assert.Contains("--override", error, StringComparison.Ordinal);
+            Assert.Contains("'A1'", error, StringComparison.Ordinal);
+            Assert.Contains("重複", error, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void 同じキーのsetを重ねて指定するとエラー()
+        {
+            var error = ParseError(WithDefinitionArgs("--set", "InvoiceNo=A-001", "--set", "InvoiceNo=A-002"));
+
+            Assert.Contains("--set", error, StringComparison.Ordinal);
+            Assert.Contains("'InvoiceNo'", error, StringComparison.Ordinal);
+            Assert.Contains("重複", error, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void definitionsの値が空ならエラー(string value)
+        {
+            var error = ParseError(WithDefinitionArgs("--definitions", value));
+
+            Assert.Contains("--definitions の値が空です", error, StringComparison.Ordinal);
+        }
+
+        // -- 引数の解釈では弾けない不正な値(Main) ------------------------------------------------------
+
+        [Fact]
+        public void NUL文字を含む帳票定義ルートは使い方エラーになりプロセスは落ちない()
+        {
+            var exitCode = Program.Main(WithDefinitionArgs("--definitions", "reports\0x"));
+
+            Assert.Equal(Program.ExitUsageError, exitCode);
+        }
+
+        [Fact]
+        public void NUL文字を含む入力パスは使い方エラーになりプロセスは落ちない()
+        {
+            var exitCode = Program.Main(new[] { "--input", "in\0.xlsx", "--output", Output, "--allow-font-fallback" });
+
+            Assert.Equal(Program.ExitUsageError, exitCode);
         }
 
         [Fact]

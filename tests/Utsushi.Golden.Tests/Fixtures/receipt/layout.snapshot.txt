@@ -2,46 +2,46 @@ report=receipt sheet=領収書 pages=2
 
 ## page 1 paper=A4/Portrait size=595.28x841.89 scale=1 rows=1-13 cols=1-4
 line   from=(50.4,111) to=(249.9,111) color=#FF000000 width=0.75 dash=Solid
-line   from=(123.9,124.5) to=(407.4,124.5) color=#FF000000 width=1.5 dash=Solid
-line   from=(123.9,138) to=(407.4,138) color=#FF000000 width=1.5 dash=Solid
-line   from=(123.9,124.5) to=(123.9,138) color=#FF000000 width=1.5 dash=Solid
-line   from=(407.4,124.5) to=(407.4,138) color=#FF000000 width=1.5 dash=Solid
-line   from=(123.9,151.5) to=(407.4,151.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(123.9,165) to=(407.4,165) color=#FF000000 width=0.75 dash=Solid
-line   from=(123.9,151.5) to=(123.9,165) color=#FF000000 width=0.75 dash=Solid
-line   from=(407.4,151.5) to=(407.4,165) color=#FF000000 width=0.75 dash=Solid
-text   origin=(228.9,74.04) anchor=Center font=MS PGothic@18pt/#FF000000,bold clip=none value="領 収 書"
+line   from=(123.15,124.5) to=(408.15,124.5) color=#FF000000 width=1.5 dash=Solid
+line   from=(123.15,138) to=(408.15,138) color=#FF000000 width=1.5 dash=Solid
+line   from=(123.9,123.75) to=(123.9,138.75) color=#FF000000 width=1.5 dash=Solid
+line   from=(407.4,123.75) to=(407.4,138.75) color=#FF000000 width=1.5 dash=Solid
+line   from=(123.53,151.5) to=(407.78,151.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(123.53,165) to=(407.78,165) color=#FF000000 width=0.75 dash=Solid
+line   from=(123.9,151.13) to=(123.9,165.38) color=#FF000000 width=0.75 dash=Solid
+line   from=(407.4,151.13) to=(407.4,165.38) color=#FF000000 width=0.75 dash=Solid
+text   origin=(228.9,74.04) anchor=Center font=MS PGothic@18pt/#FF000000,bold clip=[50.4,54 357x30] value="領 収 書"
 text   origin=(51.9,107.48) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,97.5 199.5x13.5] value="株式会社テスト製作所 様"
-text   origin=(321.9,107.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="発行日"
-text   origin=(324.9,107.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="2026年4月20日"
-text   origin=(51.9,134.33) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="金額"
+text   origin=(321.9,107.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=[50.4,54 357x192] value="発行日"
+text   origin=(324.9,107.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[50.4,54 357x192] value="2026年4月20日"
+text   origin=(51.9,134.33) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,54 357x192] value="金額"
 text   origin=(405.9,135.17) anchor=Right font=MS PGothic@14pt/#FF000000,bold clip=[123.9,124.5 283.5x13.5] value="¥2,153,800"
-text   origin=(51.9,161.33) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="但し"
-text   origin=(125.4,161.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル案件の代金として"
-text   origin=(51.9,188.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="上記正に領収いたしました。"
+text   origin=(51.9,161.33) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,54 357x192] value="但し"
+text   origin=(125.4,161.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[123.9,151.5 283.5x13.5] value="サンプル案件の代金として"
+text   origin=(51.9,188.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[50.4,54 357x192] value="上記正に領収いたしました。"
 text   origin=(251.4,213.42) anchor=Left font=MS PGothic@9pt/#FF000000 clip=[249.9,205.5 157.5x27] value="株式会社Utsushi"
 text   origin=(251.4,224.22) anchor=Left font=MS PGothic@9pt/#FF000000 clip=[249.9,205.5 157.5x27] value="東京都サンプル区1-2-3"
 text   origin=(283.89,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="- 1 -"
 
 ## page 2 paper=A4/Portrait size=595.28x841.89 scale=1 rows=16-28 cols=1-4
 line   from=(50.4,111) to=(249.9,111) color=#FF000000 width=0.75 dash=Solid
-line   from=(123.9,124.5) to=(407.4,124.5) color=#FF000000 width=1.5 dash=Solid
-line   from=(123.9,138) to=(407.4,138) color=#FF000000 width=1.5 dash=Solid
-line   from=(123.9,124.5) to=(123.9,138) color=#FF000000 width=1.5 dash=Solid
-line   from=(407.4,124.5) to=(407.4,138) color=#FF000000 width=1.5 dash=Solid
-line   from=(123.9,151.5) to=(407.4,151.5) color=#FF000000 width=0.75 dash=Solid
-line   from=(123.9,165) to=(407.4,165) color=#FF000000 width=0.75 dash=Solid
-line   from=(123.9,151.5) to=(123.9,165) color=#FF000000 width=0.75 dash=Solid
-line   from=(407.4,151.5) to=(407.4,165) color=#FF000000 width=0.75 dash=Solid
-text   origin=(228.9,74.04) anchor=Center font=MS PGothic@18pt/#FF000000,bold clip=none value="領 収 書(控)"
+line   from=(123.15,124.5) to=(408.15,124.5) color=#FF000000 width=1.5 dash=Solid
+line   from=(123.15,138) to=(408.15,138) color=#FF000000 width=1.5 dash=Solid
+line   from=(123.9,123.75) to=(123.9,138.75) color=#FF000000 width=1.5 dash=Solid
+line   from=(407.4,123.75) to=(407.4,138.75) color=#FF000000 width=1.5 dash=Solid
+line   from=(123.53,151.5) to=(407.78,151.5) color=#FF000000 width=0.75 dash=Solid
+line   from=(123.53,165) to=(407.78,165) color=#FF000000 width=0.75 dash=Solid
+line   from=(123.9,151.13) to=(123.9,165.38) color=#FF000000 width=0.75 dash=Solid
+line   from=(407.4,151.13) to=(407.4,165.38) color=#FF000000 width=0.75 dash=Solid
+text   origin=(228.9,74.04) anchor=Center font=MS PGothic@18pt/#FF000000,bold clip=[50.4,54 357x30] value="領 収 書(控)"
 text   origin=(51.9,107.48) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,97.5 199.5x13.5] value="株式会社テスト製作所 様"
-text   origin=(321.9,107.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=none value="発行日"
-text   origin=(324.9,107.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="2026年4月20日"
-text   origin=(51.9,134.33) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="金額"
+text   origin=(321.9,107.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=[50.4,54 357x192] value="発行日"
+text   origin=(324.9,107.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[50.4,54 357x192] value="2026年4月20日"
+text   origin=(51.9,134.33) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,54 357x192] value="金額"
 text   origin=(405.9,135.17) anchor=Right font=MS PGothic@14pt/#FF000000,bold clip=[123.9,124.5 283.5x13.5] value="¥2,153,800"
-text   origin=(51.9,161.33) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="但し"
-text   origin=(125.4,161.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="サンプル案件の代金として"
-text   origin=(51.9,188.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="上記正に領収いたしました。"
+text   origin=(51.9,161.33) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,54 357x192] value="但し"
+text   origin=(125.4,161.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[123.9,151.5 283.5x13.5] value="サンプル案件の代金として"
+text   origin=(51.9,188.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[50.4,54 357x192] value="上記正に領収いたしました。"
 text   origin=(251.4,213.42) anchor=Left font=MS PGothic@9pt/#FF000000 clip=[249.9,205.5 157.5x27] value="株式会社Utsushi"
 text   origin=(251.4,224.22) anchor=Left font=MS PGothic@9pt/#FF000000 clip=[249.9,205.5 157.5x27] value="東京都サンプル区1-2-3"
 text   origin=(283.89,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="- 2 -"

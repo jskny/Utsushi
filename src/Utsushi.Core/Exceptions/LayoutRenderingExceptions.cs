@@ -48,6 +48,26 @@ namespace Utsushi.Core.Exceptions
             FontName = fontName;
         }
 
+        /// <summary>
+        /// 帳票コード・シート名・処理段階を補って作る。
+        /// </summary>
+        /// <remarks>
+        /// フォントの解決(<c>FontResolver</c>)は帳票を知らないため、帳票コード・シート名を持たない例外を投げる。
+        /// ファサードがそれを捕捉し、どの帳票のどの段階(レイアウトの文字幅計測か、PDFの描画か)で起きたかを補った
+        /// この例外で包み直す(要件6.4)。元の例外は <see cref="Exception.InnerException"/> に入れる。
+        /// </remarks>
+        public FontNotAvailableException(
+            string fontName,
+            string message,
+            ProcessingStage stage,
+            string? reportCode,
+            string? sheetName,
+            Exception? innerException)
+            : base(message, stage, reportCode, sheetName, innerException: innerException)
+        {
+            FontName = fontName;
+        }
+
         /// <summary>解決できなかったフォント名。</summary>
         public string FontName { get; }
     }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.Layout;
 using Utsushi.Layout.Model;
@@ -140,11 +141,25 @@ namespace Utsushi
             Stream output,
             IReadOnlyDictionary<string, string>? cellOverrides = null)
         {
+            // 変換(解析・レイアウト計算)を始める前に、すべての引数を検証する。
+            ValidateConvertArguments(reportCode, xlsxStream, values);
+            if (output is null)
+            {
+                throw new ArgumentNullException(nameof(output));
+            }
+
             var layout = ComputeLayout(reportCode, xlsxStream, values, cellOverrides);
-            _renderer.Render(layout, output);
+            RenderToStream(layout, output);
         }
 
         /// <summary>変換を実行し、PDFをファイルへ書き出す(失敗時に不完全なファイルを残さない)。</summary>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="reportCode"/>・<paramref name="xlsxPath"/>・<paramref name="values"/>・<paramref name="outputPath"/> が null の場合。
+        /// </exception>
+        /// <exception cref="ArgumentException"><paramref name="outputPath"/> が空または空白のみの場合。</exception>
+        /// <exception cref="UtsushiException">
+        /// 帳票定義・入力ファイル・置換値・レイアウト・描画・出力ファイルの書き込みのいずれかで失敗した場合。
+        /// </exception>
         public void ConvertToFile(
             string reportCode,
             string xlsxPath,
@@ -152,6 +167,24 @@ namespace Utsushi
             string outputPath,
             IReadOnlyDictionary<string, string>? cellOverrides = null)
         {
+            // 変換(入力ファイルの読み込み・レイアウト計算)を始める前に、すべての引数を検証する。
+            if (reportCode is null)
+            {
+                throw new ArgumentNullException(nameof(reportCode));
+            }
+
+            if (xlsxPath is null)
+            {
+                throw new ArgumentNullException(nameof(xlsxPath));
+            }
+
+            if (values is null)
+            {
+                throw new ArgumentNullException(nameof(values));
+            }
+
+            ValidateOutputPath(outputPath);
+
             using var input = OpenInputFile(xlsxPath, reportCode);
             var layout = ComputeLayout(reportCode, input, values, cellOverrides);
             RenderToFile(layout, outputPath);
@@ -183,13 +216,20 @@ namespace Utsushi
             string? documentName = null,
             double? maxDigitWidthPx = null)
         {
+            if (xlsxStream is null)
+            {
+                throw new ArgumentNullException(nameof(xlsxStream));
+            }
+
             if (output is null)
             {
                 throw new ArgumentNullException(nameof(output));
             }
 
+            ValidateMaxDigitWidth(maxDigitWidthPx);
+
             var layout = ComputeLayoutWithoutDefinition(xlsxStream, cellOverrides, documentName, maxDigitWidthPx);
-            _renderer.Render(layout, output);
+            RenderToStream(layout, output);
         }
 
         /// <summary>
@@ -210,40 +250,38 @@ namespace Utsushi
             string? documentName = null,
             double? maxDigitWidthPx = null)
         {
-            documentName ??= Path.GetFileNameWithoutExtension(xlsxPath ?? throw new ArgumentNullException(nameof(xlsxPath)));
+            // 変換(入力ファイルの読み込み・レイアウト計算)を始める前に、すべての引数を検証する。
+            if (xlsxPath is null)
+            {
+                throw new ArgumentNullException(nameof(xlsxPath));
+            }
+
+            ValidateOutputPath(outputPath);
+            ValidateMaxDigitWidth(maxDigitWidthPx);
+
+            documentName ??= Path.GetFileNameWithoutExtension(xlsxPath);
 
             using var input = OpenInputFile(xlsxPath, documentName);
             var layout = ComputeLayoutWithoutDefinition(input, cellOverrides, documentName, maxDigitWidthPx);
             RenderToFile(layout, outputPath);
         }
 
-        private void RenderToFile(PagedLayout layout, string outputPath)
+        /// <summary>出力先パスを検証する(null・空・空白のみを弾く)。</summary>
+        private static void ValidateOutputPath(string outputPath)
         {
-            if (_renderer is SkiaPdfRenderer skia)
+            if (outputPath is null)
             {
-                skia.RenderToFile(layout, outputPath);
-                return;
+                throw new ArgumentNullException(nameof(outputPath));
             }
 
-            using var buffer = new MemoryStream();
-            _renderer.Render(layout, buffer);
-
-            buffer.Position = 0;
-            AtomicFileWriter.Write(outputPath, buffer, layout.ReportCode, layout.SheetName);
+            if (string.IsNullOrWhiteSpace(outputPath))
+            {
+                throw new ArgumentException("出力先のパスが空です。", nameof(outputPath));
+            }
         }
 
-        /// <summary>
-        /// PDF描画の手前まで(Parsing → ReportDefinition → Substitution → Layout)を実行する。
-        /// </summary>
-        /// <remarks>
-        /// ゴールデンテストは描画結果のバイナリではなくこのレイアウト結果を比較対象とするため、
-        /// 公開メソッドとして切り出している(design.md「テスト戦略」)。
-        /// </remarks>
-        public PagedLayout ComputeLayout(
-            string reportCode,
-            Stream xlsxStream,
-            IReadOnlyDictionary<string, string> values,
-            IReadOnlyDictionary<string, string>? cellOverrides = null)
+        private static void ValidateConvertArguments(
+            string reportCode, Stream xlsxStream, IReadOnlyDictionary<string, string> values)
         {
             if (reportCode is null)
             {
@@ -259,6 +297,91 @@ namespace Utsushi
             {
                 throw new ArgumentNullException(nameof(values));
             }
+        }
+
+        private static void ValidateMaxDigitWidth(double? maxDigitWidthPx)
+        {
+            if (maxDigitWidthPx is { } mdw && (mdw <= 0 || double.IsNaN(mdw) || double.IsInfinity(mdw)))
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxDigitWidthPx), mdw, "最大数字幅は正の数である必要があります。");
+            }
+        }
+
+        /// <summary>
+        /// PDFを描画して <paramref name="output"/> へ書き出す。
+        /// </summary>
+        /// <remarks>
+        /// 描画結果を出力先へ書き込むときの <see cref="IOException"/>(ディスクの空き不足、ネットワーク切断など)は、
+        /// <see cref="IPdfRenderer"/> の実装によらず <see cref="PdfRenderingException"/> に包み、
+        /// ファサードの例外を <see cref="UtsushiException"/> 階層にそろえる(要件6.4)。
+        /// </remarks>
+        private void RenderToStream(PagedLayout layout, Stream output)
+        {
+            try
+            {
+                _renderer.Render(layout, output);
+            }
+            catch (FontNotAvailableException ex) when (LacksContext(ex))
+            {
+                throw WithContext(ex, ProcessingStage.Rendering, layout.ReportCode, layout.SheetName);
+            }
+            catch (IOException ex)
+            {
+                throw new PdfRenderingException(
+                    $"PDFを出力先へ書き込めませんでした: {ex.Message}", layout.ReportCode, layout.SheetName, ex);
+            }
+        }
+
+        private void RenderToFile(PagedLayout layout, string outputPath)
+        {
+            try
+            {
+                if (_renderer is SkiaPdfRenderer skia)
+                {
+                    skia.RenderToFile(layout, outputPath);
+                    return;
+                }
+
+                using var buffer = new MemoryStream();
+                _renderer.Render(layout, buffer);
+
+                buffer.Position = 0;
+                AtomicFileWriter.Write(outputPath, buffer, layout.ReportCode, layout.SheetName);
+            }
+            catch (FontNotAvailableException ex) when (LacksContext(ex))
+            {
+                throw WithContext(ex, ProcessingStage.Rendering, layout.ReportCode, layout.SheetName);
+            }
+        }
+
+        /// <summary>
+        /// フォントの解決(<see cref="FontResolver"/>)は帳票を知らないため、帳票コード・シート名を持たない
+        /// <see cref="FontNotAvailableException"/> を投げる。ファサードで補う必要があるかどうか。
+        /// </summary>
+        private static bool LacksContext(FontNotAvailableException ex) => ex.ReportCode is null || ex.SheetName is null;
+
+        /// <summary>
+        /// 帳票コード・シート名・処理段階を補った <see cref="FontNotAvailableException"/> で包み直す。
+        /// 例外の型は変えず、元の例外は <see cref="Exception.InnerException"/> に入れる。
+        /// </summary>
+        private static FontNotAvailableException WithContext(
+            FontNotAvailableException ex, ProcessingStage stage, string reportCode, string sheetName) =>
+            new(ex.FontName, ex.Message, stage, ex.ReportCode ?? reportCode, ex.SheetName ?? sheetName, ex);
+
+        /// <summary>
+        /// PDF描画の手前まで(Parsing → ReportDefinition → Substitution → Layout)を実行する。
+        /// </summary>
+        /// <remarks>
+        /// ゴールデンテストは描画結果のバイナリではなくこのレイアウト結果を比較対象とするため、
+        /// 公開メソッドとして切り出している(design.md「テスト戦略」)。
+        /// </remarks>
+        public PagedLayout ComputeLayout(
+            string reportCode,
+            Stream xlsxStream,
+            IReadOnlyDictionary<string, string> values,
+            IReadOnlyDictionary<string, string>? cellOverrides = null)
+        {
+            ValidateConvertArguments(reportCode, xlsxStream, values);
 
             var definition = _definitions.Load(reportCode);
 
@@ -282,10 +405,7 @@ namespace Utsushi
             string? documentName = null,
             double? maxDigitWidthPx = null)
         {
-            if (maxDigitWidthPx is { } mdw && (mdw <= 0 || double.IsNaN(mdw) || double.IsInfinity(mdw)))
-            {
-                throw new ArgumentOutOfRangeException(nameof(maxDigitWidthPx), mdw, "最大数字幅は正の数である必要があります。");
-            }
+            ValidateMaxDigitWidth(maxDigitWidthPx);
 
             if (xlsxStream is null)
             {
@@ -333,7 +453,15 @@ namespace Utsushi
                 substituted = _substitutor.ApplyCellOverrides(substituted, cellOverrides);
             }
 
-            return _layoutEngine.Compute(substituted);
+            try
+            {
+                return _layoutEngine.Compute(substituted);
+            }
+            catch (FontNotAvailableException ex) when (LacksContext(ex))
+            {
+                // レイアウト計算中の文字幅の計測(SkiaFontMetricsProvider)で起きた場合は、Stage=Layout として伝える。
+                throw WithContext(ex, ProcessingStage.Layout, definition.ReportCode, definition.SheetName);
+            }
         }
 
         /// <summary>

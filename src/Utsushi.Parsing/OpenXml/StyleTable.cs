@@ -154,7 +154,8 @@ namespace Utsushi.Parsing.OpenXml
                 }
 
                 var name = font.FontName?.Val?.Value ?? FontStyle.Default.Name;
-                var size = font.FontSize?.Val?.Value ?? FontStyle.Default.SizePt;
+                // NaN・無限大・範囲外のサイズは既定のサイズに戻す(要件6.9)。
+                var size = OpenXmlWorkbookReader.ValidFontSizeOrDefault(font.FontSize?.Val?.Value);
                 var bold = IsOn(font.Bold);
                 var italic = IsOn(font.Italic);
                 var strike = IsOn(font.Strike);

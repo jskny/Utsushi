@@ -27,16 +27,39 @@ namespace Utsushi.Rendering
         private readonly Dictionary<(FontStyle Font, string Text), ShapedText> _shaped;
         private readonly Dictionary<SKTypeface, SubsetGroup> _subsets;
 
+        /// <summary>描画に使う <see cref="SKFont"/>(書体・サイズ・斜体の合成の有無ごと)。文書を閉じた後に解放する。</summary>
+        private readonly Dictionary<(SKTypeface Typeface, double SizePt, bool SynthesizeItalic), SKFont> _fonts = new();
+
+        /// <summary>罫線の破線パターン(線種・線幅ごと)。実線は null。</summary>
+        private readonly Dictionary<(LineDashStyle Dash, double WidthPt), SKPathEffect?> _dashEffects = new();
+
+        /// <summary>
+        /// デコード済みの画像(画像のバイナリの配列ごと。同じ配列かどうかで比べる)。印刷タイトルの行にある画像は
+        /// 全ページで同じ配列を共有するため、デコードは1回で済み、PDFにも1回だけ埋め込まれる。
+        /// </summary>
+        private readonly Dictionary<byte[], SKImage> _images = new(ReferenceEqualityComparer.Instance);
+
+        /// <summary>
+        /// 2回以上描く画像のバイナリ。これらだけを <see cref="_images"/> に残す。1回しか描かない画像まで残すと、
+        /// 出力を終えるまで全画像のデコード結果を抱え、画像1枚ごとのピクセル数の上限(ピクセル爆弾対策)が
+        /// 「画像の枚数×上限」に膨らむ(code-reviewer指摘)。
+        /// </summary>
+        private readonly HashSet<byte[]> _repeatedImages;
+
+        private SKPaint? _linePaint;
+
         private RenderContext(
             string reportCode,
             string sheetName,
             Dictionary<(FontStyle, string), ShapedText> shaped,
-            Dictionary<SKTypeface, SubsetGroup> subsets)
+            Dictionary<SKTypeface, SubsetGroup> subsets,
+            HashSet<byte[]> repeatedImages)
         {
             ReportCode = reportCode;
             SheetName = sheetName;
             _shaped = shaped;
             _subsets = subsets;
+            _repeatedImages = repeatedImages;
         }
 
         public string ReportCode { get; }
@@ -83,7 +106,46 @@ namespace Utsushi.Rendering
                 }
             }
 
-            return new RenderContext(layout.ReportCode, layout.SheetName, shaped, subsets);
+            return new RenderContext(layout.ReportCode, layout.SheetName, shaped, subsets, FindRepeatedImages(layout));
+        }
+
+        /// <summary>全ページを通して2回以上描く画像のバイナリ(同じ配列かどうかで比べる)。</summary>
+        private static HashSet<byte[]> FindRepeatedImages(PagedLayout layout)
+        {
+            var seen = new HashSet<byte[]>(ReferenceEqualityComparer.Instance);
+            var repeated = new HashSet<byte[]>(ReferenceEqualityComparer.Instance);
+            foreach (var page in layout.Pages)
+            {
+                foreach (var data in EnumerateImageData(page.Commands))
+                {
+                    if (!seen.Add(data))
+                    {
+                        repeated.Add(data);
+                    }
+                }
+            }
+
+            return repeated;
+        }
+
+        private static IEnumerable<byte[]> EnumerateImageData(IReadOnlyList<DrawCommand> commands)
+        {
+            foreach (var command in commands)
+            {
+                switch (command)
+                {
+                    case ImageCommand image:
+                        yield return image.Data;
+                        break;
+                    case GroupCommand group:
+                        foreach (var child in EnumerateImageData(group.Children))
+                        {
+                            yield return child;
+                        }
+
+                        break;
+                }
+            }
         }
 
         /// <summary><see cref="Prepare"/> で変換済みの字形の並びを返す。</summary>
@@ -123,7 +185,99 @@ namespace Utsushi.Rendering
             }
         }
 
-        public void Dispose() => DisposeSubsets(_subsets);
+        /// <summary>
+        /// 計測・描画用の <see cref="SKFont"/> を返す(<see cref="GlyphShaper.CreateFont"/> と同じ設定)。
+        /// 同じ書体・サイズでは同じインスタンスを返す。呼び出し側で設定を変えたり解放したりしないこと。
+        /// </summary>
+        public SKFont GetFont(ResolvedTypeface face, double sizePt, SKTypeface? typefaceOverride = null)
+        {
+            var typeface = typefaceOverride ?? face.Typeface;
+            var key = (typeface, sizePt, face.SynthesizeItalic);
+            if (!_fonts.TryGetValue(key, out var font))
+            {
+                font = GlyphShaper.CreateFont(face, sizePt, typeface);
+                _fonts[key] = font;
+            }
+
+            return font;
+        }
+
+        /// <summary>
+        /// 罫線の描画に使う <see cref="SKPaint"/>。1回の出力で使い回すため、呼び出し側が描くたびに
+        /// 色・線幅・端の形・破線パターンをすべて設定し直すこと。
+        /// </summary>
+        public SKPaint LinePaint => _linePaint ??= new SKPaint();
+
+        /// <summary>
+        /// 破線パターンを返す(実線は null)。同じ線種・線幅では同じインスタンスを返す。呼び出し側で解放しないこと。
+        /// </summary>
+        public SKPathEffect? GetDashEffect(LineDashStyle dash, double widthPt, Func<LineDashStyle, double, SKPathEffect?> create)
+        {
+            var key = (dash, widthPt);
+            if (!_dashEffects.TryGetValue(key, out var effect))
+            {
+                effect = create(dash, widthPt);
+                _dashEffects[key] = effect;
+            }
+
+            return effect;
+        }
+
+        /// <summary>
+        /// デコード済みの画像を返す。2回以上描く画像は初回に <paramref name="decode"/> でデコードして記録し、以降は使い回す
+        /// (<paramref name="owned"/> は false。呼び出し側で解放しないこと)。1回しか描かない画像は記録せず、
+        /// <paramref name="owned"/> を true にして返す(呼び出し側が描画後に解放する)。
+        /// </summary>
+        public SKImage GetImage(byte[] data, Func<byte[], SKImage> decode, out bool owned)
+        {
+            if (_images.TryGetValue(data, out var image))
+            {
+                owned = false;
+                return image;
+            }
+
+            image = decode(data);
+            if (_repeatedImages.Contains(data))
+            {
+                _images[data] = image;
+                owned = false;
+            }
+            else
+            {
+                owned = true;
+            }
+
+            return image;
+        }
+
+        public void Dispose()
+        {
+            _linePaint?.Dispose();
+            _linePaint = null;
+
+            foreach (var font in _fonts.Values)
+            {
+                font.Dispose();
+            }
+
+            _fonts.Clear();
+
+            foreach (var effect in _dashEffects.Values)
+            {
+                effect?.Dispose();
+            }
+
+            _dashEffects.Clear();
+
+            foreach (var image in _images.Values)
+            {
+                image.Dispose();
+            }
+
+            _images.Clear();
+
+            DisposeSubsets(_subsets);
+        }
 
         /// <summary>
         /// 書体ごとに使った字形を集め、サブセットフォントを作る。

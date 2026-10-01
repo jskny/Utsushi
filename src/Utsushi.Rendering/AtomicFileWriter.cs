@@ -21,14 +21,38 @@ namespace Utsushi.Rendering
         /// <param name="content">書き出す内容(呼び出し側で完全に用意済みのストリーム)。</param>
         /// <param name="reportCode">エラーに含める帳票コード(判明している場合)。</param>
         /// <param name="sheetName">エラーに含めるシート名(判明している場合)。</param>
-        /// <exception cref="PdfRenderingException">書き込みに失敗した場合。</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="path"/> または <paramref name="content"/> が null の場合。</exception>
+        /// <exception cref="PdfRenderingException">
+        /// 書き込みに失敗した場合。出力先のパスが不正な場合(NUL文字を含む、途中に既存のファイルがある等)や、
+        /// 出力先ディレクトリを作成できない場合も含む。
+        /// </exception>
         public static void Write(string path, Stream content, string? reportCode = null, string? sheetName = null)
         {
-            var fullPath = Path.GetFullPath(path);
-            var directory = Path.GetDirectoryName(fullPath);
-            if (!string.IsNullOrEmpty(directory))
+            if (path is null)
             {
-                Directory.CreateDirectory(directory!);
+                throw new ArgumentNullException(nameof(path));
+            }
+
+            if (content is null)
+            {
+                throw new ArgumentNullException(nameof(content));
+            }
+
+            // パスの正規化・出力先ディレクトリの作成で起きる例外も、書き込みの失敗として UtsushiException 階層へそろえる
+            // (例: 「既存のファイル/out.pdf」への出力は Directory.CreateDirectory が IOException を投げる)。
+            string fullPath;
+            try
+            {
+                fullPath = Path.GetFullPath(path);
+                var directory = Path.GetDirectoryName(fullPath);
+                if (!string.IsNullOrEmpty(directory))
+                {
+                    Directory.CreateDirectory(directory!);
+                }
+            }
+            catch (Exception ex) when (IsPathOrIoFailure(ex))
+            {
+                throw new PdfRenderingException($"PDFの出力先を用意できません: {path}", reportCode, sheetName, ex);
             }
 
             // 同一ディレクトリ上の一時ファイルへ書いてから置き換える。
@@ -49,7 +73,7 @@ namespace Utsushi.Rendering
                 // TOCTOU(競合)の隙を無くす。
                 File.Move(temporaryPath, fullPath, overwrite: true);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (IsPathOrIoFailure(ex))
             {
                 TryDelete(temporaryPath);
                 throw new PdfRenderingException($"PDFの書き出しに失敗しました: {fullPath}", reportCode, sheetName, ex);
@@ -60,6 +84,18 @@ namespace Utsushi.Rendering
                 throw;
             }
         }
+
+        /// <summary>
+        /// 出力先のパスやファイルシステムに起因する失敗かどうか。
+        /// </summary>
+        /// <remarks>
+        /// <see cref="ArgumentException"/>(NUL文字などを含む不正なパス)・<see cref="NotSupportedException"/>
+        /// (形式が不正なパス)も、呼び出し元が指定した出力先の問題として同じく扱う
+        /// (null は呼び出し側の契約違反として事前に <see cref="ArgumentNullException"/> にしている)。
+        /// </remarks>
+        private static bool IsPathOrIoFailure(Exception ex) =>
+            ex is IOException or UnauthorizedAccessException or NotSupportedException
+            || (ex is ArgumentException && ex is not ArgumentNullException);
 
         private static void TryDelete(string path)
         {

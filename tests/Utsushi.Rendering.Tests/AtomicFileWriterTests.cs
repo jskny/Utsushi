@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Text;
+using Utsushi.Core;
+using Utsushi.Core.Exceptions;
 using Xunit;
 
 namespace Utsushi.Rendering.Tests
@@ -85,6 +87,52 @@ namespace Utsushi.Rendering.Tests
                     Directory.Delete(directory, recursive: true);
                 }
             }
+        }
+
+        [Fact]
+        public void 出力先の途中に既存のファイルがあればPdfRenderingExceptionになる()
+        {
+            // 「既存のファイル/out.pdf」への出力は、出力先ディレクトリの作成(Directory.CreateDirectory)が
+            // IOException を投げる。以前は try の外だったため UtsushiException 階層の外へ漏れていた。
+            var directory = Path.Combine(Path.GetTempPath(), "utsushi-test-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var existingFile = Path.Combine(directory, "existing.txt");
+            File.WriteAllText(existingFile, "ファイル");
+
+            try
+            {
+                using var content = new MemoryStream(Encoding.UTF8.GetBytes("hello"));
+                var ex = Assert.Throws<PdfRenderingException>(
+                    () => AtomicFileWriter.Write(Path.Combine(existingFile, "out.pdf"), content, "invoice", "請求書"));
+
+                Assert.IsAssignableFrom<IOException>(ex.InnerException);
+                Assert.Equal(ProcessingStage.Rendering, ex.Stage);
+                Assert.Equal("invoice", ex.ReportCode);
+                Assert.Equal("請求書", ex.SheetName);
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void NUL文字を含むパスはPdfRenderingExceptionになる()
+        {
+            using var content = new MemoryStream(Encoding.UTF8.GetBytes("hello"));
+
+            var ex = Assert.Throws<PdfRenderingException>(
+                () => AtomicFileWriter.Write(Path.Combine(Path.GetTempPath(), "a\0b.pdf"), content));
+
+            Assert.IsAssignableFrom<ArgumentException>(ex.InnerException);
+        }
+
+        [Fact]
+        public void パスがnullならArgumentNullExceptionになる()
+        {
+            using var content = new MemoryStream();
+
+            Assert.Throws<ArgumentNullException>(() => AtomicFileWriter.Write(null!, content));
         }
     }
 }

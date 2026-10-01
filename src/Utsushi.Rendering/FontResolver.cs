@@ -51,14 +51,44 @@ namespace Utsushi.Rendering
         {
             _options = options ?? FontResolverOptions.Strict;
 
-            foreach (var (key, path) in _options.FontFiles)
+            try
             {
-                RegisterFontFile(key, path);
-            }
+                foreach (var (key, path) in _options.FontFiles)
+                {
+                    RegisterFontFile(key, path);
+                }
 
-            foreach (var directory in _options.FontDirectories)
+                foreach (var directory in _options.FontDirectories)
+                {
+                    RegisterFontDirectory(directory);
+                }
+            }
+            catch
             {
-                RegisterFontDirectory(directory);
+                // 途中のフォントで失敗した場合、それまでに登録した書体(ネイティブ資源)を呼び出し元は解放できない
+                // (インスタンスが返らない)ため、ここで解放してから例外を伝える。
+                Dispose();
+                ConstructionFailedForTesting?.Invoke(this);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// テスト専用: コンストラクタが失敗して後始末をした直後に、そのインスタンスを受け取る。
+        /// </summary>
+        /// <remarks>失敗したコンストラクタは呼び出し元にインスタンスを返さないため、解放を確かめる手段として使う。</remarks>
+        [ThreadStatic]
+        internal static Action<FontResolver>? ConstructionFailedForTesting;
+
+        /// <summary>テスト専用: 解放の対象として保持している(明示登録した)書体の数。</summary>
+        internal int OwnedTypefaceCountForTesting
+        {
+            get
+            {
+                lock (_registrationLock)
+                {
+                    return _owned.Count;
+                }
             }
         }
 
@@ -372,11 +402,7 @@ namespace Utsushi.Rendering
                 ?? throw new FontNotAvailableException(
                     key.Name, $"フォントファイルを読み込めません(対応していない形式の可能性があります): {path}");
 
-            lock (_registrationLock)
-            {
-                _owned.Add(typeface);
-                _registered[key] = typeface;
-            }
+            AddRegistered(key, typeface);
         }
 
         /// <summary>ディレクトリ内のフォントファイルを、その内部のファミリ名で一括登録する。</summary>
@@ -404,13 +430,34 @@ namespace Utsushi.Rendering
                 {
                     // ファイル自身が申告するスタイルで登録する。太字ファイルは太字キーに入る。
                     var key = new FontKey(typeface.FamilyName, typeface.IsBold, typeface.IsItalic);
-
-                    lock (_registrationLock)
-                    {
-                        _owned.Add(typeface);
-                        _registered[key] = typeface;
-                    }
+                    AddRegistered(key, typeface);
                 }
+            }
+        }
+
+        /// <summary>
+        /// 書体を登録し、解決結果のキャッシュを捨てる。
+        /// </summary>
+        /// <remarks>
+        /// 解決済みのキー(インストール済みフォントや代替フォントで解決したもの、外字用の代替書体の一覧)を
+        /// キャッシュしたままだと、解決の後に登録したフォントがそのキーに反映されない。
+        /// ロックは <see cref="Resolve(FontStyle, bool)"/>・<see cref="Dispose"/> と同じ順(解決 → 登録)で取る。
+        /// </remarks>
+        private void AddRegistered(FontKey key, SKTypeface typeface)
+        {
+            lock (_resolveLock)
+            {
+                ThrowIfDisposed();
+
+                lock (_registrationLock)
+                {
+                    _owned.Add(typeface);
+                    _registered[key] = typeface;
+                }
+
+                _cache.Clear();
+                _glyphFallbacks.Clear();
+                _substituted.Clear();
             }
         }
 
