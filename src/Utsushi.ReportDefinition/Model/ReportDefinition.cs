@@ -84,7 +84,28 @@ namespace Utsushi.ReportDefinitions.Model
         /// <summary>許容誤差の既定値(mm)。</summary>
         public const double DefaultToleranceMm = 0.5;
 
+        /// <summary>
+        /// <see cref="TryGetField"/> 用の索引(遅延構築)。
+        /// </summary>
+        /// <remarks>
+        /// 状態ではなくキャッシュであるため、<c>with</c>(コピーコンストラクタ)では引き継がず、
+        /// 等値比較(<see cref="Equals(ReportDefinition?)"/>・<see cref="GetHashCode"/>)の対象にもしない。
+        /// 既定の合成実装に任せると、<c>with { SubstitutionFields = ... }</c> の後も古い索引が使われ、
+        /// また索引を構築済みかどうかで等しい定義同士が等しくないと判定されてしまう。
+        /// </remarks>
         private Dictionary<string, SubstitutionFieldDefinition>? _fieldsByKey;
+
+        /// <summary><c>with</c> 式で使われるコピーコンストラクタ。索引のキャッシュは引き継がない。</summary>
+        private ReportDefinition(ReportDefinition original)
+        {
+            ReportCode = original.ReportCode;
+            SheetName = original.SheetName;
+            SubstitutionFields = original.SubstitutionFields;
+            ToleranceMm = original.ToleranceMm;
+            UnsupportedElements = original.UnsupportedElements;
+            MaxDigitWidthPx = original.MaxDigitWidthPx;
+            PrintAreaOverride = original.PrintAreaOverride;
+        }
 
         /// <summary>
         /// 帳票定義なしモード(要件12)で使う、既定値だけからなる帳票定義を合成する。
@@ -157,6 +178,34 @@ namespace Utsushi.ReportDefinitions.Model
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// 位置パラメーターだけで等値比較する(索引のキャッシュは比較しない)。
+        /// </summary>
+        public bool Equals(ReportDefinition? other) =>
+            other is not null
+            && (ReferenceEquals(this, other)
+                || (string.Equals(ReportCode, other.ReportCode, StringComparison.Ordinal)
+                    && string.Equals(SheetName, other.SheetName, StringComparison.Ordinal)
+                    && EqualityComparer<IReadOnlyList<SubstitutionFieldDefinition>>.Default.Equals(SubstitutionFields, other.SubstitutionFields)
+                    && ToleranceMm.Equals(other.ToleranceMm)
+                    && UnsupportedElements == other.UnsupportedElements
+                    && MaxDigitWidthPx.Equals(other.MaxDigitWidthPx)
+                    && Nullable.Equals(PrintAreaOverride, other.PrintAreaOverride)));
+
+        /// <inheritdoc />
+        public override int GetHashCode()
+        {
+            var hash = default(HashCode);
+            hash.Add(ReportCode, StringComparer.Ordinal);
+            hash.Add(SheetName, StringComparer.Ordinal);
+            hash.Add(SubstitutionFields);
+            hash.Add(ToleranceMm);
+            hash.Add(UnsupportedElements);
+            hash.Add(MaxDigitWidthPx);
+            hash.Add(PrintAreaOverride);
+            return hash.ToHashCode();
         }
 
         private static Dictionary<string, SubstitutionFieldDefinition> BuildIndex(

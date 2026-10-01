@@ -111,6 +111,7 @@ namespace Utsushi.ReportDefinitions
 
             var fields = new List<SubstitutionFieldDefinition>();
             var seenKeys = new HashSet<string>(StringComparer.Ordinal);
+            var keyByCell = new Dictionary<CellAddress, string>();
             var index = 0;
 
             foreach (var element in array.EnumerateArray())
@@ -134,6 +135,18 @@ namespace Utsushi.ReportDefinitions
                         $"'{cellText}' はセル番地として解釈できません(A1形式で指定してください)。",
                         reportCode, definitionPath, $"{path}.cell");
                 }
+
+                // 別のキーが同じセルを指すと、差し込み時に後のキーの値だけが黙って採用される。
+                // "B1"・"b1"・"$B$1" のような表記の違いも、正規化した CellAddress で同一セルとして検出する。
+                if (keyByCell.TryGetValue(cell, out var otherKey))
+                {
+                    throw Schema(
+                        $"置換キー '{key}' のセル '{cellText}' は、置換キー '{otherKey}' と同じセル {cell} を指しています。"
+                            + "1つのセルに対応する置換キーは1つにしてください。",
+                        reportCode, definitionPath, $"{path}.cell");
+                }
+
+                keyByCell.Add(cell, key);
 
                 var required = ReadOptionalBool(element, "required", reportCode, definitionPath, path) ?? false;
                 var overflow = ReadOverflow(element, reportCode, definitionPath, path);

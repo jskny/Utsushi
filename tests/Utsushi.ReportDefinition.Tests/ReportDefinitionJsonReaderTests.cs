@@ -132,6 +132,40 @@ namespace Utsushi.ReportDefinition.Tests
             Assert.Equal("substitutionFields[1].key", ex.PropertyPath);
         }
 
+        [Theory]
+        [InlineData("B1")]
+        [InlineData("b1")]
+        [InlineData("$B$1")]
+        public void 別のキーが同じセルを指す定義は拒否する(string secondCell)
+        {
+            var json = @"{
+          ""schemaVersion"": 1, ""reportCode"": ""x"", ""sheetName"": ""s"",
+          ""substitutionFields"": [
+            { ""key"": ""K1"", ""cell"": ""B1"" },
+            { ""key"": ""K2"", ""cell"": """ + secondCell + @""" }
+          ]
+        }";
+
+            var ex = Assert.Throws<ReportDefinitionSchemaException>(() => ReportDefinitionJsonReader.Read(json));
+
+            Assert.Equal("substitutionFields[1].cell", ex.PropertyPath);
+            Assert.Contains("K1", ex.Message);
+            Assert.Contains("K2", ex.Message);
+        }
+
+        [Fact]
+        public void ASCII以外の英字を含むセル番地は拒否する()
+        {
+            var json = @"{
+          ""schemaVersion"": 1, ""reportCode"": ""x"", ""sheetName"": ""s"",
+          ""substitutionFields"": [ { ""key"": ""K"", ""cell"": ""é1"" } ]
+        }";
+
+            var ex = Assert.Throws<ReportDefinitionSchemaException>(() => ReportDefinitionJsonReader.Read(json));
+
+            Assert.Equal("substitutionFields[0].cell", ex.PropertyPath);
+        }
+
         [Fact]
         public void overflowの値が不正なら拒否する()
         {

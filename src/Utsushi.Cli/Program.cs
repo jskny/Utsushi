@@ -16,11 +16,11 @@ namespace Utsushi.Cli
     /// </remarks>
     internal static class Program
     {
-        private const int ExitSuccess = 0;
-        private const int ExitUsageError = 2;
-        private const int ExitConversionError = 3;
+        internal const int ExitSuccess = 0;
+        internal const int ExitUsageError = 2;
+        internal const int ExitConversionError = 3;
 
-        private static int Main(string[] args)
+        internal static int Main(string[] args)
         {
             var options = CommandLineOptions.Parse(args, out var error);
             if (options is null)
@@ -76,6 +76,14 @@ namespace Utsushi.Cli
                 }
 
                 return ExitConversionError;
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+            {
+                // 引数の解釈では弾けない不正な値(NUL文字を含むパス、形式が不正なパスなど)を、
+                // 未処理の例外でプロセスを落とさず使い方エラーとして報告する。
+                Console.Error.WriteLine("エラー: 引数の値が不正です: " + ex.Message);
+                Console.Error.WriteLine("使い方は --help を参照してください。");
+                return ExitUsageError;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -214,6 +222,12 @@ namespace Utsushi.Cli
 
                         case "--definitions" or "-d":
                             if (!TryTakeValue(args, ref i, "--definitions", out var root, out error)) { return null; }
+                            if (string.IsNullOrWhiteSpace(root))
+                            {
+                                error = "--definitions の値が空です。";
+                                return null;
+                            }
+
                             definitionRoot = root!;
                             definitionRootSpecified = true;
                             break;
@@ -340,7 +354,15 @@ namespace Utsushi.Cli
                     return false;
                 }
 
-                destination[pair.Substring(0, separator)] = pair.Substring(separator + 1);
+                var key = pair.Substring(0, separator);
+                if (destination.ContainsKey(key))
+                {
+                    // 同じキーを重ねて指定すると、後の値だけが黙って採用されてしまう。
+                    error = $"{optionName} で '{key}' が重複して指定されています。1つにしてください。";
+                    return false;
+                }
+
+                destination.Add(key, pair.Substring(separator + 1));
                 error = null;
                 return true;
             }
