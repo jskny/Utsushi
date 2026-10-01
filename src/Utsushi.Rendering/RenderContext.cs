@@ -27,6 +27,20 @@ namespace Utsushi.Rendering
         private readonly Dictionary<(FontStyle Font, string Text), ShapedText> _shaped;
         private readonly Dictionary<SKTypeface, SubsetGroup> _subsets;
 
+        /// <summary>描画に使う <see cref="SKFont"/>(書体・サイズ・斜体の合成の有無ごと)。文書を閉じた後に解放する。</summary>
+        private readonly Dictionary<(SKTypeface Typeface, double SizePt, bool SynthesizeItalic), SKFont> _fonts = new();
+
+        /// <summary>罫線の破線パターン(線種・線幅ごと)。実線は null。</summary>
+        private readonly Dictionary<(LineDashStyle Dash, double WidthPt), SKPathEffect?> _dashEffects = new();
+
+        /// <summary>
+        /// デコード済みの画像(画像のバイナリの配列ごと。同じ配列かどうかで比べる)。印刷タイトルの行にある画像は
+        /// 全ページで同じ配列を共有するため、デコードは1回で済み、PDFにも1回だけ埋め込まれる。
+        /// </summary>
+        private readonly Dictionary<byte[], SKImage> _images = new(ReferenceEqualityComparer.Instance);
+
+        private SKPaint? _linePaint;
+
         private RenderContext(
             string reportCode,
             string sheetName,
@@ -123,7 +137,87 @@ namespace Utsushi.Rendering
             }
         }
 
-        public void Dispose() => DisposeSubsets(_subsets);
+        /// <summary>
+        /// 計測・描画用の <see cref="SKFont"/> を返す(<see cref="GlyphShaper.CreateFont"/> と同じ設定)。
+        /// 同じ書体・サイズでは同じインスタンスを返す。呼び出し側で設定を変えたり解放したりしないこと。
+        /// </summary>
+        public SKFont GetFont(ResolvedTypeface face, double sizePt, SKTypeface? typefaceOverride = null)
+        {
+            var typeface = typefaceOverride ?? face.Typeface;
+            var key = (typeface, sizePt, face.SynthesizeItalic);
+            if (!_fonts.TryGetValue(key, out var font))
+            {
+                font = GlyphShaper.CreateFont(face, sizePt, typeface);
+                _fonts[key] = font;
+            }
+
+            return font;
+        }
+
+        /// <summary>
+        /// 罫線の描画に使う <see cref="SKPaint"/>。1回の出力で使い回すため、呼び出し側が描くたびに
+        /// 色・線幅・端の形・破線パターンをすべて設定し直すこと。
+        /// </summary>
+        public SKPaint LinePaint => _linePaint ??= new SKPaint();
+
+        /// <summary>
+        /// 破線パターンを返す(実線は null)。同じ線種・線幅では同じインスタンスを返す。呼び出し側で解放しないこと。
+        /// </summary>
+        public SKPathEffect? GetDashEffect(LineDashStyle dash, double widthPt, Func<LineDashStyle, double, SKPathEffect?> create)
+        {
+            var key = (dash, widthPt);
+            if (!_dashEffects.TryGetValue(key, out var effect))
+            {
+                effect = create(dash, widthPt);
+                _dashEffects[key] = effect;
+            }
+
+            return effect;
+        }
+
+        /// <summary>
+        /// デコード済みの画像を返す。初めての画像は <paramref name="decode"/> でデコードして記録する。
+        /// 呼び出し側で解放しないこと。
+        /// </summary>
+        public SKImage GetImage(byte[] data, Func<byte[], SKImage> decode)
+        {
+            if (!_images.TryGetValue(data, out var image))
+            {
+                image = decode(data);
+                _images[data] = image;
+            }
+
+            return image;
+        }
+
+        public void Dispose()
+        {
+            _linePaint?.Dispose();
+            _linePaint = null;
+
+            foreach (var font in _fonts.Values)
+            {
+                font.Dispose();
+            }
+
+            _fonts.Clear();
+
+            foreach (var effect in _dashEffects.Values)
+            {
+                effect?.Dispose();
+            }
+
+            _dashEffects.Clear();
+
+            foreach (var image in _images.Values)
+            {
+                image.Dispose();
+            }
+
+            _images.Clear();
+
+            DisposeSubsets(_subsets);
+        }
 
         /// <summary>
         /// 書体ごとに使った字形を集め、サブセットフォントを作る。

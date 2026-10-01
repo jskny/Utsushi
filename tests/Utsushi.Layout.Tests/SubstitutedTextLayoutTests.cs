@@ -243,5 +243,63 @@ namespace Utsushi.Layout.Tests
 
             Assert.Single(layout.Pages);
         }
+
+        // -- 印刷範囲内での検証結果の共有(印刷タイトルの行に置いた差し込みセル) ---------
+
+        private static PageCommandBuilder Builder(ReportModel report, ISet<CellAddress> validated) =>
+            new(
+                report,
+                SheetGrid.Create(report.Sheet, CellRange.Parse("A1:A1"), report.Definition.MaxDigitWidthPx),
+                new ApproximateFontMetricsProvider(),
+                1.0,
+                report.Sheet.PageSetup.Margins,
+                validatedSubstitutedCells: validated);
+
+        [Fact]
+        public void 検証済みとして記録した差し込みセルは同じ印刷範囲の別のページで検証し直さない()
+        {
+            var sheet = SingleCellSheet("あいうえおかきくけこさしすせそ", wrap: true, rowHeightPt: 20.0);
+            var report = ReportModel.Create(Definition(), sheet) with { SubstitutedCells = new HashSet<CellAddress> { A1 } };
+            var rows = new[] { 1 };
+
+            // 記録が無ければ、セルに収まらない差し込み値はエラーになる。
+            Assert.Throws<LayoutComputationException>(() => Builder(report, new HashSet<CellAddress>()).Build(rows, rows));
+
+            // 記録済みのセル(同じ印刷範囲の先のページで確かめ終えたもの)は検証を省く。
+            var validated = new HashSet<CellAddress> { A1 };
+            Assert.NotEmpty(Builder(report, validated).Build(rows, rows));
+        }
+
+        [Fact]
+        public void 収まることを確かめた差し込みセルを検証済みとして記録する()
+        {
+            var sheet = SingleCellSheet("あいう", wrap: true);
+            var report = ReportModel.Create(Definition(), sheet) with { SubstitutedCells = new HashSet<CellAddress> { A1 } };
+            var validated = new HashSet<CellAddress>();
+            var rows = new[] { 1 };
+
+            Builder(report, validated).Build(rows, rows);
+
+            Assert.Equal(new[] { A1 }, validated);
+        }
+
+        [Fact]
+        public void 印刷タイトルの行の差し込み値は複数ページでも正しく出力される()
+        {
+            // 1行目(印刷タイトル)に差し込み値、2〜120行目に本文。各ページの先頭に差し込み値が繰り返し出る。
+            var sheet = UniformSheet(
+                rows: 120, columns: 1, columnWidth: 40.0, rowHeightPt: 20.0,
+                pageSetup: NoMarginA4(printTitles: new PrintTitles(1, 1, null, null)));
+            var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells)
+            {
+                [A1] = new("株式会社サンプル 御中", CellValueKind.Text, CellStyle.Default with { WrapText = true }, "株式会社サンプル 御中"),
+            };
+
+            var layout = Compute(sheet with { Cells = cells }, A1);
+
+            Assert.True(layout.Pages.Count > 1);
+            Assert.All(layout.Pages, page =>
+                Assert.Equal("株式会社サンプル 御中", string.Concat(Texts(page).Where(t => t.Origin.Y < 20.0).Select(t => t.Text))));
+        }
     }
 }

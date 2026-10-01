@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Text;
 using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.Layout.Model;
@@ -31,6 +30,7 @@ namespace Utsushi.Layout
         private readonly double _originY;
         private readonly RectPt? _printableArea;
         private readonly MergedCellIndex? _mergedIndex;
+        private readonly ISet<CellAddress>? _validatedSubstitutedCells;
 
         /// <summary>
         /// 2セルアンカー画像の幅/高さ計算で合算する列/行数の上限。対角セルにセル番地の上限
@@ -52,7 +52,7 @@ namespace Utsushi.Layout
         private readonly List<DrawCommand> _borders = new();
         private readonly List<DrawCommand> _texts = new();
         private readonly List<DrawCommand> _drawingObjects = new();
-        private readonly HashSet<string> _emittedBorders = new(StringComparer.Ordinal);
+        private readonly HashSet<BorderLineKey> _emittedBorders = new();
 
         /// <param name="report">帳票。</param>
         /// <param name="grid">印刷対象の格子。</param>
@@ -71,6 +71,12 @@ namespace Utsushi.Layout
         /// セル→結合範囲の索引(<paramref name="grid"/> の行を登録したもの)。null の場合はページごとに作る。
         /// 同じ格子の複数ページで使い回すため、呼び出し側で1度だけ作って渡す。
         /// </param>
+        /// <param name="validatedSubstitutedCells">
+        /// 表示されることを確かめ終えた差し込みセル(要件2.13, 2.14)の記録。同じ印刷範囲の全ページで共有し、
+        /// 印刷タイトルの行/列のように複数ページに繰り返し現れるセルを、ページごとに検証し直さないようにする。
+        /// 検証の結果はセルの番地・書式・(同じ印刷範囲で共通の)拡大縮小率だけで決まるため、1度確かめれば十分である。
+        /// null の場合は記録せず、現れるたびに検証する。
+        /// </param>
         public PageCommandBuilder(
             ReportModel report,
             SheetGrid grid,
@@ -79,7 +85,8 @@ namespace Utsushi.Layout
             PageMargins margins,
             PointPt centeringOffset = default,
             RectPt? printableArea = null,
-            MergedCellIndex? mergedIndex = null)
+            MergedCellIndex? mergedIndex = null,
+            ISet<CellAddress>? validatedSubstitutedCells = null)
         {
             _report = report;
             _sheet = report.Sheet;
@@ -90,6 +97,7 @@ namespace Utsushi.Layout
             _originY = margins.TopPt + centeringOffset.Y;
             _printableArea = printableArea;
             _mergedIndex = mergedIndex;
+            _validatedSubstitutedCells = validatedSubstitutedCells;
         }
 
         /// <summary>はみ出し表示の文字を切り取る矩形(このページの本文の矩形)。<see cref="Build"/> で決まる。</summary>
@@ -730,9 +738,11 @@ namespace Utsushi.Layout
             var text = cell?.DisplayValue;
 
             // 差し込み値は、矩形が空(行高・列幅が0)で何も描かれない場合も含めて検証する(要件2.13, 2.14)。
-            if (!string.IsNullOrEmpty(text) && _report.SubstitutedCells.Contains(address))
+            if (!string.IsNullOrEmpty(text) && _report.SubstitutedCells.Contains(address)
+                && _validatedSubstitutedCells?.Contains(address) != true)
             {
                 EnsureSubstitutedTextFits(address, style, text!, rect, mergedRange);
+                _validatedSubstitutedCells?.Add(address);
             }
 
             if (rect.IsEmpty)
@@ -895,12 +905,7 @@ namespace Utsushi.Layout
         /// </summary>
         private void AddLine(PointPt from, PointPt to, ArgbColor color, double widthPt, LineDashStyle dash)
         {
-            var key = string.Format(
-                System.Globalization.CultureInfo.InvariantCulture,
-                "{0:0.###},{1:0.###},{2:0.###},{3:0.###},{4},{5:0.###},{6}",
-                from.X, from.Y, to.X, to.Y, color, widthPt, dash);
-
-            if (!_emittedBorders.Add(key))
+            if (!_emittedBorders.Add(new BorderLineKey(from, to, color, widthPt, dash)))
             {
                 return;
             }
@@ -1133,46 +1138,9 @@ namespace Utsushi.Layout
             return font with { SizePt = shrunkSize };
         }
 
-        /// <summary>セル幅に合わせてテキストを折り返す。</summary>
-        /// <remarks>
-        /// 改行は LF・CRLF・CR 単独のいずれも段落区切りとして扱う。折り返し位置は書記素クラスタ
-        /// (サロゲートペア・結合文字・異体字セレクタを含む、利用者が1文字と認識する単位)の境界に限る
-        /// (要件4.6)。UTF-16 の1単位ごとに区切ると、「𠮷」のようなサロゲートペアの途中で改行され、
-        /// 両側が文字化けする。
-        /// </remarks>
-        private List<string> WrapLines(FontStyle font, string text, double availableWidthPt)
-        {
-            var lines = new List<string>();
-            var unified = text.IndexOf('\r') < 0 ? text : text.Replace("\r\n", "\n").Replace('\r', '\n');
-
-            foreach (var paragraph in unified.Split('\n'))
-            {
-                if (paragraph.Length == 0)
-                {
-                    lines.Add(string.Empty);
-                    continue;
-                }
-
-                var current = new StringBuilder();
-                var elements = StringInfo.GetTextElementEnumerator(paragraph);
-                while (elements.MoveNext())
-                {
-                    var element = elements.GetTextElement();
-                    if (current.Length > 0
-                        && _fontMetrics.MeasureTextWidth(font, current.ToString() + element) > availableWidthPt)
-                    {
-                        lines.Add(current.ToString());
-                        current.Clear();
-                    }
-
-                    current.Append(element);
-                }
-
-                lines.Add(current.ToString());
-            }
-
-            return lines.Count == 0 ? new List<string> { string.Empty } : lines;
-        }
+        /// <summary>セル幅に合わせてテキストを折り返す(<see cref="TextWrapper"/>)。</summary>
+        private List<string> WrapLines(FontStyle font, string text, double availableWidthPt) =>
+            TextWrapper.Wrap(_fontMetrics, font, text, availableWidthPt);
 
         // ---------------------------------------------------------------------
         // 座標計算

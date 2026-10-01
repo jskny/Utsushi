@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using SkiaSharp;
 using Utsushi.Rendering.Fonts;
 using Utsushi.Layout.Text;
@@ -18,7 +19,16 @@ namespace Utsushi.Rendering
         /// <summary>斜体を合成するときの傾き。一般的な斜体の角度(約12度)に合わせる。</summary>
         internal const float ItalicSkew = -0.21f;
 
+        /// <summary><see cref="GetMetrics"/> の結果を記録する数の上限。超えたら記録を捨てて作り直す。</summary>
+        internal const int MaxCachedMetrics = 1024;
+
         private readonly FontResolver _fontResolver;
+
+        /// <summary>
+        /// <see cref="GetMetrics"/> の結果(書体・サイズ・斜体の合成の有無ごと)。複数スレッドから同時に変換しても壊れないよう、
+        /// スレッドセーフな辞書にする。
+        /// </summary>
+        private readonly ConcurrentDictionary<(SKTypeface Typeface, double SizePt, bool SynthesizeItalic), FontMetrics> _metricsCache = new();
 
         public SkiaFontMetricsProvider(FontResolver fontResolver)
         {
@@ -27,9 +37,21 @@ namespace Utsushi.Rendering
         }
 
         /// <inheritdoc />
+        /// <remarks>
+        /// 結果は書体・サイズ・斜体の合成の有無ごとに記録して使い回す(レイアウト計算ではセルごとに呼ばれるため)。
+        /// 書体の解決(<see cref="FontResolver.Resolve"/>)は毎回行うため、厳格モードでフォントが見つからない場合の例外は
+        /// 従来どおり呼び出しのたびに発生する。
+        /// </remarks>
         public FontMetrics GetMetrics(FontStyle font)
         {
-            using var skFont = CreateFont(font, out _);
+            var resolved = _fontResolver.Resolve(font);
+            var key = (resolved.Typeface, font.SizePt, resolved.SynthesizeItalic);
+            if (_metricsCache.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+
+            using var skFont = GlyphShaper.CreateFont(resolved, font.SizePt);
             var metrics = skFont.Metrics;
 
             // Skia は Ascent を負値、Descent を正値で返す。Utsushi 側は両方とも正の距離として扱う。
@@ -37,7 +59,16 @@ namespace Utsushi.Rendering
             var descent = metrics.Descent;
             var lineSpacing = ascent + descent + metrics.Leading;
 
-            return new FontMetrics(ascent, descent, lineSpacing);
+            var result = new FontMetrics(ascent, descent, lineSpacing);
+
+            // 縮小表示(Excel の「縮小して全体を表示する」)ではサイズが連続的に変わるため、記録する数に上限を設ける。
+            if (_metricsCache.Count >= MaxCachedMetrics)
+            {
+                _metricsCache.Clear();
+            }
+
+            _metricsCache[key] = result;
+            return result;
         }
 
         /// <inheritdoc />
@@ -69,43 +100,6 @@ namespace Utsushi.Rendering
             }
 
             return width;
-        }
-
-        /// <summary>
-        /// <see cref="FontStyle"/> から SkiaSharp のフォントを作る。
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// PDF の座標系は1単位=1ポイントであり、Skia の <c>TextSize</c> もその単位で解釈される。
-        /// そのためフォントサイズ(pt)をそのまま渡してよい。
-        /// </para>
-        /// <para>
-        /// 斜体の字形を持たないフォントには、ここで傾き(<see cref="SKFont.SkewX"/>)を与えて斜体を再現する。
-        /// 太字は文字送り幅に影響させないため、描画時の輪郭の太らせで再現する
-        /// (<paramref name="synthesizeBold"/> が true のとき)。
-        /// </para>
-        /// </remarks>
-        /// <param name="font">帳票側のフォント指定。</param>
-        /// <param name="synthesizeBold">
-        /// 描画側で輪郭を太らせて太字を再現する必要があるかどうか。
-        /// </param>
-        internal SKFont CreateFont(FontStyle font, out bool synthesizeBold)
-        {
-            var resolved = _fontResolver.Resolve(font);
-            synthesizeBold = resolved.SynthesizeBold;
-
-            var skFont = new SKFont(resolved.Typeface, (float)font.SizePt)
-            {
-                Subpixel = true,
-                Edging = SKFontEdging.Antialias,
-            };
-
-            if (resolved.SynthesizeItalic)
-            {
-                skFont.SkewX = ItalicSkew;
-            }
-
-            return skFont;
         }
     }
 }

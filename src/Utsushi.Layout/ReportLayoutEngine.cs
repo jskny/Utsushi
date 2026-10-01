@@ -619,6 +619,9 @@ namespace Utsushi.Layout
                 ? EnumerateOverThenDown(rowBands.Count, columnBands.Count)
                 : EnumerateDownThenOver(rowBands.Count, columnBands.Count);
 
+            // 差し込みセルの検証(要件2.13, 2.14)は、印刷タイトルとして繰り返し現れるセルでも印刷範囲ごとに1回で済ませる。
+            var validatedSubstitutedCells = new HashSet<CellAddress>();
+
             var pageNumber = firstPageNumber;
             foreach (var (rowBandIndex, columnBandIndex) in order)
             {
@@ -649,7 +652,7 @@ namespace Utsushi.Layout
 
                 var commands = new PageCommandBuilder(
                         report, grid, _fontMetrics, scale, pageSetup.Margins, new PointPt(offsetX, offsetY), printableArea,
-                        plan.MergedIndex)
+                        plan.MergedIndex, validatedSubstitutedCells)
                     .Build(pageRows, pageColumns);
 
                 pages.Add(new PageLayout(
