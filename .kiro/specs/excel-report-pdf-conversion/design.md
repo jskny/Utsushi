@@ -1211,7 +1211,11 @@ public sealed record PagedLayout(
     IReadOnlyList<PageLayout> Pages, string ReportCode, string SheetName)
 {
     public IReadOnlyList<FitIssue> FitIssues { get; init; }  // 文字の収まりの確認(要件13)。描画には使わない
+    public bool FitIssuesTruncated { get; init; }            // FitIssues を件数の上限(10,000件)で打ち切ったか
 }
+
+// ファサードの CheckFit / CheckFitWithoutDefinition の戻り値
+public sealed record FitCheckResult(IReadOnlyList<FitIssue> Issues, bool IsTruncated);
 
 public sealed record FitIssue(
     FitIssueKind Kind,          // OverlapsNeighborValue / CutAtPageEdge / NumberTooWide / Clipped / ExceedsCellHeight
