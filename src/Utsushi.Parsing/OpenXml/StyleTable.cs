@@ -32,6 +32,9 @@ namespace Utsushi.Parsing.OpenXml
             DefaultFont = defaultFont;
         }
 
+        /// <summary>ブックの標準の書式(<c>cellXfs</c> 索引0)。セルが無い位置に使う(要件1.10)。</summary>
+        public CellStyle DefaultCellStyle => _fallback;
+
         /// <summary>ブックの標準フォント(<c>cellXfs</c> 索引0のフォント)。列幅換算の基準に用いる。</summary>
         public FontStyle DefaultFont { get; }
 

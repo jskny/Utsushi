@@ -57,6 +57,23 @@ namespace Utsushi.Golden.Tests
                 }
             }
 
+            // 文字の収まりの確認(要件13)。検出の回帰も描画命令と同じく差分で確かめる。
+            if (layout.FitIssues.Count > 0)
+            {
+                sb.AppendLine();
+                sb.Append("## fit issues count=").Append(layout.FitIssues.Count).AppendLine();
+                foreach (var issue in layout.FitIssues)
+                {
+                    sb.Append("fit ").Append(issue.Kind)
+                      .Append(" cell=").Append(issue.Cell)
+                      .Append(" page=").Append(issue.PageNumber)
+                      .Append(" substituted=").Append(issue.IsSubstituted ? "yes" : "no")
+                      .Append(" key=").Append(issue.SubstitutionKey ?? "-")
+                      .Append(" text=").Append(Quote(issue.Text))
+                      .AppendLine();
+                }
+            }
+
             return sb.ToString();
         }
 

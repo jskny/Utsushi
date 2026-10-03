@@ -11,12 +11,14 @@
 - `tests/` — 各レイヤー・CLIの引数解釈のユニットテストとゴールデン(回帰)テスト
 - `samples/reports/<帳票コード>/` — 帳票定義(`definition.json`)とテンプレート(`template.xlsx`)
 - `tools/Utsushi.SampleGenerator/` — サンプル帳票 `.xlsx` の生成ツール(製品コードからは参照されない)
+- `samples/edge-cases/<帳票コード>/` — 利用者が作りがちなテンプレートを再現したエッジケース検証用サンプル(`tools/edge-case-samples/generate.py` で生成。Python + openpyxl)
 - `.kiro/steering/` — 常時適用される方針(製品概要・技術方針・プロジェクト構成)
 - `.kiro/specs/excel-report-pdf-conversion/` — 中核機能の要件定義書・設計書・実装タスクリスト
 - `docs/テンプレート作成ガイド.md` — Excelでテンプレートを作る担当者向けの注意点(フォント・差し込みセルの設定・再現できる機能/できない機能)
 - `docs/帳票定義スキーマ.md` — `definition.json` のスキーマ
 - `docs/ライブラリの使い方.md` — ファサード `Utsushi`(`ReportPdfConverter`)のAPI・例外の使い方
 - `docs/開発環境メモ.md` — Claude Code on the web実行環境で裏取りした環境固有の注意点(SDKセットアップ、日本語フォント、`pkill -f`の自己マッチ問題など)
+- `docs/エッジケース検証レポート.md` — エッジケース検証用サンプルによる検証の結果(利用者に影響するExcelとの差異と、呼び出し側への推奨事項)
 - `docs/実装設計失敗事例集.md` — 過去の不具合・設計ミス・検出漏れとその原因・対応・教訓の記録。実装・レビュー着手前に関連する節を確認する
 
 > **サンプル帳票について**: 実運用の帳票テンプレートは社内データのためリポジトリに含められない。
@@ -66,6 +68,10 @@ dotnet build --no-incremental -p:UtsushiVs2019Compiler=true
 
 # 帳票サンプル(.xlsx)を再生成する
 dotnet run --project tools/Utsushi.SampleGenerator -- samples/reports
+
+# エッジケース検証用サンプル(.xlsx)を再生成する(Python 3 + openpyxl)
+pip install -r tools/edge-case-samples/requirements.txt
+python3 tools/edge-case-samples/generate.py samples/edge-cases
 
 # ゴールデンファイルの期待値を更新する(差分は必ずレビューしてからコミット)
 UTSUSHI_UPDATE_GOLDEN=1 dotnet test

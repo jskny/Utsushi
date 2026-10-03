@@ -11,7 +11,7 @@ namespace Utsushi.Parsing.OpenXml
     /// <remarks>
     /// 対応するのは自社帳票で使う範囲、すなわち
     /// 桁区切り(<c>,</c>)・小数桁(<c>0</c>/<c>#</c>/<c>?</c>)・百分率(<c>%</c>)・
-    /// リテラル(<c>"..."</c>、<c>\x</c>)・色指定(<c>[Red]</c> 等、表示上は無視)である。
+    /// リテラル(<c>"..."</c>、<c>\x</c>)・色指定(<c>[Red]</c> 等。文字列には影響せず、色は <see cref="NumberFormatter.ResolveColor"/> が別に解決する。要件4.12)である。
     /// 指数表記・分数表記は対象外で、その場合は <see cref="Format"/> が General 相当の文字列を返す。
     /// 解析結果は不変であり、複数スレッドから共有してよい(<see cref="NumberFormatter"/> がキャッシュする)。
     /// </remarks>
@@ -82,7 +82,7 @@ namespace Utsushi.Parsing.OpenXml
 
                     case '[':
                         {
-                            // [Red] や [$¥-411] 等。色・ロケール指定は表示に反映しない。
+                            // [Red] や [$¥-411] 等。色(要件4.12。NumberFormatter.ResolveColor)・ロケール指定は表示文字列に反映しない。
                             var end = section.IndexOf(']', i);
                             var content = end < 0 ? string.Empty : section.Substring(i + 1, end - i - 1);
                             if (content.StartsWith("$", StringComparison.Ordinal))

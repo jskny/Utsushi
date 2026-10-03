@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "reportCode": "edge-schedule",
+  "sheetName": "工程表",
+  "unsupportedElements": "error",
+  "maxDigitWidthPx": 8,
+  "substitutionFields": [
+    { "key": "ProjectName", "cell": "A2", "required": true },
+    { "key": "Author",      "cell": "A3", "required": false }
+  ]
+}

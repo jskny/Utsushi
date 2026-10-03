@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using Utsushi.Core;
 
 namespace Utsushi.Parsing.OpenXml
 {
@@ -144,6 +145,13 @@ namespace Utsushi.Parsing.OpenXml
                 return FormatGeneral(value);
             }
 
+            // 解釈できない書式は General 相当にフォールバックする。
+            return TryFormatSection(value, parsed, section, out var text) ? text : FormatGeneral(value);
+        }
+
+        /// <summary>選んだセクションで書式を適用する。解釈できない書式・書式で表せない値なら false。</summary>
+        private static bool TryFormatSection(double value, ParsedFormat parsed, FormatSection section, out string text)
+        {
             // セクションが複数あり負数セクションが選ばれた場合、値の絶対値に対して書式を適用する
             // (符号はセクション側のリテラル "-" が担うため)。
             // セクションが1つだけの場合は負号付きのまま渡し、NumericSection が出力全体の先頭に負号を付ける。
@@ -151,15 +159,114 @@ namespace Utsushi.Parsing.OpenXml
 
             try
             {
-                return section.Kind == SectionKind.DateTime
+                text = section.Kind == SectionKind.DateTime
                     ? FormatDateTime(target, section.Text)
                     : section.Numeric!.Format(target);
+                return true;
             }
             catch (Exception ex) when (ex is FormatException or ArgumentException or OverflowException)
             {
-                // 解釈できない書式は General 相当にフォールバックする。
-                return FormatGeneral(value);
+                text = string.Empty;
+                return false;
             }
+        }
+
+        /// <summary>
+        /// 数値に書式を適用するときに使うセクションの色の指定(要件4.12)を返す。色の指定が無い、
+        /// または <see cref="FormatNumber"/> が General で表示する場合は null。
+        /// </summary>
+        /// <param name="value">セルの生の数値。</param>
+        /// <param name="formatCode">数値書式文字列。</param>
+        public static ArgbColor? ResolveColor(double value, string? formatCode)
+        {
+            if (string.IsNullOrWhiteSpace(formatCode) || IsGeneral(formatCode!))
+            {
+                return null;
+            }
+
+            var parsed = GetParsedFormat(formatCode!);
+            var section = parsed.Select(value);
+            if (section?.Color is not { } color || section.Kind == SectionKind.General)
+            {
+                return null;
+            }
+
+            // FormatNumber が General の表示に戻す値(負の経過時間・明治より前の和暦など)は、色も付けない。
+            return TryFormatSection(value, parsed, section, out _) ? color : null;
+        }
+
+        /// <summary>
+        /// セクション内の角括弧の指定から色を探す。英語の色名・日本語版Excelの色名・<c>[ColorN]</c>(1〜56)を解釈し、
+        /// それ以外(ロケール <c>[$-411]</c>・経過時間 <c>[h]</c>・条件 <c>[&gt;100]</c> など)は無視する。
+        /// </summary>
+        private static ArgbColor? ParseSectionColor(string section)
+        {
+            var inQuotes = false;
+            for (var i = 0; i < section.Length; i++)
+            {
+                var c = section[i];
+                if (c == '\\')
+                {
+                    i++;
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inQuotes = !inQuotes;
+                    continue;
+                }
+
+                if (inQuotes || c != '[')
+                {
+                    continue;
+                }
+
+                var end = section.IndexOf(']', i + 1);
+                if (end < 0)
+                {
+                    return null;
+                }
+
+                if (TryParseColorName(section.Substring(i + 1, end - i - 1), out var color))
+                {
+                    return color;
+                }
+
+                i = end;
+            }
+
+            return null;
+        }
+
+        private static bool TryParseColorName(string name, out ArgbColor color)
+        {
+            uint? argb = name.ToUpperInvariant() switch
+            {
+                "BLACK" or "黒" => 0xFF000000,
+                "WHITE" or "白" => 0xFFFFFFFF,
+                "RED" or "赤" => 0xFFFF0000,
+                "GREEN" or "緑" => 0xFF00FF00,
+                "BLUE" or "青" => 0xFF0000FF,
+                "YELLOW" or "黄" => 0xFFFFFF00,
+                "MAGENTA" or "紫" => 0xFFFF00FF,
+                "CYAN" or "水" => 0xFF00FFFF,
+                _ => null,
+            };
+
+            if (argb is null
+                && name.StartsWith("COLOR", StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(name.Substring(5), NumberStyles.None, CultureInfo.InvariantCulture, out var index)
+                && index >= 1 && index <= 56)
+            {
+                // [ColorN] はインデックスカラーの N+7 番(Excel の既定のパレット)。
+                argb = ColorResolver.DefaultIndexedPalette[index + 7];
+            }
+
+            color = argb is { } v
+                ? new ArgbColor((byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)v)
+                : default;
+            return argb is not null;
         }
 
         private static bool IsGeneral(string formatCode) =>
@@ -720,6 +827,7 @@ namespace Utsushi.Parsing.OpenXml
             public FormatSection(string text)
             {
                 Text = text;
+                Color = ParseSectionColor(text);
                 if (IsGeneral(text))
                 {
                     Kind = SectionKind.General;
@@ -736,6 +844,9 @@ namespace Utsushi.Parsing.OpenXml
             }
 
             public string Text { get; }
+
+            /// <summary>色の指定(要件4.12)。無ければ null。</summary>
+            public ArgbColor? Color { get; }
 
             public SectionKind Kind { get; }
 

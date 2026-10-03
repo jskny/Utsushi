@@ -232,6 +232,7 @@ namespace Utsushi.Parsing.OpenXml
             var cells = new Dictionary<CellAddress, CellModel>();
             var rowHeights = new List<double>();
             var hiddenRows = new HashSet<int>();
+            var rowStyles = new Dictionary<int, CellStyle>();
 
             var sheetFormat = worksheet.GetFirstChild<X.SheetFormatProperties>();
             // NaN・無限大・0以下・上限超えの既定行高は無視し、Excel の既定値にする(要件6.9)。
@@ -277,6 +278,12 @@ namespace Utsushi.Parsing.OpenXml
                         hiddenRows.Add(rowIndex);
                     }
 
+                    // 行全体に設定した書式。customFormat が真の行だけが、セルの無い位置に書式を適用する(要件1.10)。
+                    if (row.CustomFormat?.Value == true && row.StyleIndex?.Value is { } rowStyleIndex)
+                    {
+                        rowStyles[rowIndex] = styles.GetCellStyle((int)Math.Min(rowStyleIndex, int.MaxValue));
+                    }
+
                     var previousColumn = 0;
                     foreach (var cell in row.Elements<X.Cell>())
                     {
@@ -294,7 +301,8 @@ namespace Utsushi.Parsing.OpenXml
                 }
             }
 
-            var (columnWidths, hiddenColumns) = ReadColumns(worksheet, defaultColumnWidth, name, options.ReportCode);
+            var (columnWidths, hiddenColumns, columnStyles) = ReadColumns(
+                worksheet, defaultColumnWidth, styles, name, options.ReportCode);
             var mergedRanges = ReadMergedRanges(name, worksheet, options);
             var pageSetup = ReadPageSetup(name, worksheet, definedNames, options.ReportCode);
             var drawingObjects = ReadDrawingObjects(name, worksheetPart, drawingColors, options);
@@ -311,7 +319,12 @@ namespace Utsushi.Parsing.OpenXml
                 hiddenRows,
                 pageSetup,
                 drawingObjects,
-                (int)Math.Min(sheetFormat?.BaseColumnWidth?.Value ?? 8U, 255U));
+                (int)Math.Min(sheetFormat?.BaseColumnWidth?.Value ?? 8U, 255U))
+            {
+                DefaultCellStyle = styles.DefaultCellStyle,
+                RowStyles = rowStyles,
+                ColumnStyles = columnStyles,
+            };
         }
 
         /// <summary>
@@ -390,24 +403,28 @@ namespace Utsushi.Parsing.OpenXml
             if (double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
             {
                 var formatted = NumberFormatter.FormatNumber(number, style.NumberFormat);
-                return new CellModel(rawValue, CellValueKind.Number, style, formatted, hasFormula);
+                return new CellModel(rawValue, CellValueKind.Number, style, formatted, hasFormula)
+                {
+                    FormatColor = NumberFormatter.ResolveColor(number, style.NumberFormat),
+                };
             }
 
             return new CellModel(rawValue, CellValueKind.Text, style, rawValue, hasFormula);
         }
 
-        private static (List<double> Widths, HashSet<int> Hidden) ReadColumns(
-            X.Worksheet worksheet, double defaultWidth, string sheetName, string? reportCode)
+        private static (List<double> Widths, HashSet<int> Hidden, List<ColumnStyleRange> Styles) ReadColumns(
+            X.Worksheet worksheet, double defaultWidth, StyleTable styles, string sheetName, string? reportCode)
         {
             var expansions = 0;
 
             var widths = new List<double>();
             var hidden = new HashSet<int>();
+            var columnStyles = new List<ColumnStyleRange>();
 
             var columns = worksheet.GetFirstChild<X.Columns>();
             if (columns is null)
             {
-                return (widths, hidden);
+                return (widths, hidden, columnStyles);
             }
 
             foreach (var column in columns.Elements<X.Column>())
@@ -431,6 +448,13 @@ namespace Utsushi.Parsing.OpenXml
 
                 expansions += max - min + 1;
                 EnsureColumnExpansionsWithinLimit(expansions, MaxColumnExpansionsPerSheet, sheetName, reportCode);
+
+                // 列全体に設定した書式(要件1.10)。範囲のまま持ち、列ごとに展開しない。
+                if (column.Style?.Value is { } columnStyleIndex)
+                {
+                    columnStyles.Add(new ColumnStyleRange(
+                        min, max, styles.GetCellStyle((int)Math.Min(columnStyleIndex, int.MaxValue))));
+                }
 
                 var isHidden = column.Hidden?.Value == true;
                 // NaN・無限大・負・上限超えの幅は、幅の指定が無いものとして扱う(要件6.9)。
@@ -457,7 +481,41 @@ namespace Utsushi.Parsing.OpenXml
                 }
             }
 
-            return (widths, hidden);
+            return (widths, hidden, NormalizeColumnStyles(columnStyles));
+        }
+
+        /// <summary>
+        /// 列の書式の範囲を列番号の昇順に並べ、手前の範囲と重なる部分を取り除く(不正なファイルで重なる場合は、開始列が小さい範囲、同じなら先に現れた範囲を優先する)(<see cref="SheetModel.ColumnStyles"/> は
+        /// 重ならない昇順の範囲であることを前提に二分探索する。Excel が保存する <c>col</c> は元々重ならない)。
+        /// </summary>
+        private static List<ColumnStyleRange> NormalizeColumnStyles(List<ColumnStyleRange> ranges)
+        {
+            if (ranges.Count < 2)
+            {
+                return ranges;
+            }
+
+            var ordered = ranges
+                .Select((range, order) => (Range: range, Order: order))
+                .OrderBy(x => x.Range.FirstColumn)
+                .ThenBy(x => x.Order)
+                .Select(x => x.Range);
+
+            var result = new List<ColumnStyleRange>(ranges.Count);
+            var lastColumn = 0;
+            foreach (var range in ordered)
+            {
+                var first = Math.Max(range.FirstColumn, lastColumn + 1);
+                if (first > range.LastColumn)
+                {
+                    continue;
+                }
+
+                result.Add(first == range.FirstColumn ? range : range with { FirstColumn = first });
+                lastColumn = Math.Max(lastColumn, range.LastColumn);
+            }
+
+            return result;
         }
 
         /// <summary>

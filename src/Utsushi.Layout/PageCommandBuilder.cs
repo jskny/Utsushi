@@ -31,6 +31,9 @@ namespace Utsushi.Layout
         private readonly RectPt? _printableArea;
         private readonly MergedCellIndex? _mergedIndex;
         private readonly ISet<CellAddress>? _validatedSubstitutedCells;
+        private readonly FitIssueCollector? _fitIssues;
+        private readonly int _pageNumber;
+        private readonly StyledBlankPositionCounter? _styledBlanks;
 
         /// <summary>
         /// 2セルアンカー画像の幅/高さ計算で合算する列/行数の上限。対角セルにセル番地の上限
@@ -80,6 +83,11 @@ namespace Utsushi.Layout
         /// 検証の結果はセルの番地・書式・(同じ印刷範囲で共通の)拡大縮小率だけで決まるため、1度確かめれば十分である。
         /// null の場合は記録せず、現れるたびに検証する。
         /// </param>
+        /// <param name="fitIssues">文字の収まりの確認(要件13)の記録先。null の場合は確認しない。</param>
+        /// <param name="pageNumber">このページの通し番号(1始まり。<paramref name="fitIssues"/> に記録する)。</param>
+        /// <param name="styledBlanks">
+        /// セルが無い位置を行・列の書式で描いた数の上限の確認(要件1.10、<see cref="StyledBlankPositionCounter"/>)。null の場合は数えない。
+        /// </param>
         public PageCommandBuilder(
             ReportModel report,
             SheetGrid grid,
@@ -89,7 +97,10 @@ namespace Utsushi.Layout
             PointPt centeringOffset = default,
             RectPt? printableArea = null,
             MergedCellIndex? mergedIndex = null,
-            ISet<CellAddress>? validatedSubstitutedCells = null)
+            ISet<CellAddress>? validatedSubstitutedCells = null,
+            FitIssueCollector? fitIssues = null,
+            int pageNumber = 1,
+            StyledBlankPositionCounter? styledBlanks = null)
         {
             _report = report;
             _sheet = report.Sheet;
@@ -101,10 +112,19 @@ namespace Utsushi.Layout
             _printableArea = printableArea;
             _mergedIndex = mergedIndex;
             _validatedSubstitutedCells = validatedSubstitutedCells;
+            _fitIssues = fitIssues;
+            _pageNumber = pageNumber;
+            _styledBlanks = styledBlanks;
         }
 
         /// <summary>はみ出し表示の文字を切り取る矩形(このページの本文の矩形)。<see cref="Build"/> で決まる。</summary>
         private RectPt _pageBodyRect;
+
+        /// <summary>このページの列の並び・各列の開始オフセット・結合範囲の索引(文字の収まりの確認で隣のセルを調べる。要件13)。</summary>
+        private IReadOnlyList<int> _pageColumns = Array.Empty<int>();
+        private IReadOnlyDictionary<int, int> _pageColumnIndex = new Dictionary<int, int>();
+        private double[] _pageColumnOffsets = Array.Empty<double>();
+        private MergedCellIndex? _pageMergedIndex;
 
         /// <summary>ページに含まれる行・列からの描画命令を生成する。</summary>
         public IReadOnlyList<DrawCommand> Build(IReadOnlyList<int> rows, IReadOnlyList<int> columns)
@@ -120,6 +140,11 @@ namespace Utsushi.Layout
             // セルごとに結合範囲を線形探索しないよう、索引を引く(印刷範囲ごとに作った索引を
             // 呼び出し側で使い回すのが既定。無ければこのページの列について作る)。
             var mergedIndex = _mergedIndex ?? MergedCellIndex.Create(_sheet.MergedRanges, columns);
+
+            _pageColumns = columns;
+            _pageColumnIndex = columnIndex;
+            _pageColumnOffsets = columnOffsets;
+            _pageMergedIndex = mergedIndex;
 
             // 同一ページ上で同じ結合範囲を二重に描かないための記録。
             var emittedMergedRanges = new HashSet<CellRange>();
@@ -148,7 +173,7 @@ namespace Utsushi.Layout
 
                         var anchorCell = _sheet.GetCell(merged.Anchor);
                         var borders = ResolveMergedBorders(
-                            merged.Range, anchorCell?.Style.Borders ?? BorderSet.None, rowIndex, columnIndex);
+                            merged.Range, _sheet.GetEffectiveStyle(merged.Anchor).Borders, rowIndex, columnIndex);
                         EmitCell(merged.Anchor, anchorCell, mergedRect.Value, borders, merged.Range);
                         continue;
                     }
@@ -739,7 +764,8 @@ namespace Utsushi.Layout
         private void EmitCell(
             CellAddress address, CellModel? cell, RectPt rect, BorderSet? bordersOverride = null, CellRange? mergedRange = null)
         {
-            var style = cell?.Style ?? CellStyle.Default;
+            // セルが無い位置も、行・列・ブックの標準の書式の塗りつぶし・罫線を描く(要件1.10)。
+            var style = cell?.Style ?? _sheet.GetEffectiveStyle(address);
             var text = cell?.DisplayValue;
 
             // 差し込み値は、矩形が空(行高・列幅が0)で何も描かれない場合も含めて検証する(要件2.13, 2.14)。
@@ -755,17 +781,44 @@ namespace Utsushi.Layout
                 return;
             }
 
-            if (!style.BackgroundColor.IsTransparent)
+            var borders = bordersOverride ?? style.Borders;
+            if (cell is null && (!style.BackgroundColor.IsTransparent || borders.HasAnyVisibleEdge))
             {
-                _fills.Add(new FillRectCommand(rect, style.BackgroundColor));
+                _styledBlanks?.Count();
             }
 
-            EmitBorders(rect, bordersOverride ?? style.Borders);
+            if (!style.BackgroundColor.IsTransparent)
+            {
+                AddFill(rect, style.BackgroundColor);
+            }
+
+            EmitBorders(rect, borders);
 
             if (!string.IsNullOrEmpty(text))
             {
                 EmitText(address, cell!, style, rect, text!, mergedRange);
             }
+        }
+
+        /// <summary>
+        /// 塗りつぶしを追加する。直前の塗りつぶしと同じ色で、同じ行の高さに左右で接していれば、1つの矩形にまとめる
+        /// (行全体・列全体の書式で並ぶ塗りつぶしを、セルの数だけの矩形にしない。PDFビューアで境目に細い線が見えるのも防ぐ)。
+        /// </summary>
+        private void AddFill(RectPt rect, ArgbColor color)
+        {
+            const double EpsilonPt = 1e-9;
+            if (_fills.Count > 0
+                && _fills[_fills.Count - 1] is FillRectCommand last
+                && last.Color == color
+                && Math.Abs(last.Rect.Top - rect.Top) < EpsilonPt
+                && Math.Abs(last.Rect.Bottom - rect.Bottom) < EpsilonPt
+                && Math.Abs(last.Rect.Right - rect.Left) < EpsilonPt)
+            {
+                _fills[_fills.Count - 1] = last with { Rect = RectPt.FromBounds(last.Rect.Left, last.Rect.Top, rect.Right, rect.Bottom) };
+                return;
+            }
+
+            _fills.Add(new FillRectCommand(rect, color));
         }
 
         /// <summary>
@@ -819,7 +872,7 @@ namespace Utsushi.Layout
             var boundedLastRow = Math.Min(lastRow, firstRow + MaxSpanCells);
             for (var row = firstRow; row <= boundedLastRow; row++)
             {
-                var edge = selector(_sheet.GetCell(new CellAddress(row, column))?.Style.Borders ?? BorderSet.None);
+                var edge = selector(_sheet.GetEffectiveStyle(new CellAddress(row, column)).Borders);
                 if (edge.IsVisible)
                 {
                     return edge;
@@ -835,7 +888,7 @@ namespace Utsushi.Layout
             var boundedLastColumn = Math.Min(lastColumn, firstColumn + MaxSpanCells);
             for (var column = firstColumn; column <= boundedLastColumn; column++)
             {
-                var edge = selector(_sheet.GetCell(new CellAddress(row, column))?.Style.Borders ?? BorderSet.None);
+                var edge = selector(_sheet.GetEffectiveStyle(new CellAddress(row, column)).Borders);
                 if (edge.IsVisible)
                 {
                     return edge;
@@ -1016,7 +1069,12 @@ namespace Utsushi.Layout
             var overflow = ResolveOverflow(address, style);
 
             // 拡大縮小率はフォントサイズにも適用する(座標だけを縮めると文字が収まらなくなるため)。
-            var scaledFont = style.Font with { SizePt = style.Font.SizePt * _scale };
+            // 数値書式の色の指定(要件4.12)があれば、フォントの色の代わりに使う。
+            var scaledFont = style.Font with
+            {
+                SizePt = style.Font.SizePt * _scale,
+                Color = cell.FormatColor ?? style.Font.Color,
+            };
 
             // 折り返し表示でないセルでは、Excelは改行を表示せず1行につなげて表示する(要件4.7)。
             // 改行文字をそのまま描画すると、フォントによって豆腐や空白になる。
@@ -1040,6 +1098,11 @@ namespace Utsushi.Layout
                 || mergedRange is not null;
             var clipRect = clipsToCell ? rect : _pageBodyRect;
 
+            if (_fitIssues is not null)
+            {
+                CheckFit(address, cell, style, rect, contentRect, text, lines, scaledFont, metrics, hAlign, overflow, mergedRange);
+            }
+
             for (var i = 0; i < lines.Count; i++)
             {
                 var baselineY = firstBaselineY + (metrics.LineSpacingPt * i);
@@ -1047,6 +1110,261 @@ namespace Utsushi.Layout
                 _texts.Add(new TextCommand(new PointPt(x, baselineY), lines[i], scaledFont, anchor, clipRect));
             }
         }
+
+        /// <summary>
+        /// 描画と同じフォントで、文字がセルの表示領域に収まるかを確かめ、収まらなければ記録する(要件13)。描画命令は変えない。
+        /// </summary>
+        /// <remarks>
+        /// 結合範囲は、改ページで一部しか見えないページでも、シート上の本来の大きさで判定する(要件2.14の
+        /// <see cref="EnsureSubstitutedTextFits"/> と同じ基準)。見えている部分で判定すると、範囲全体なら収まる文字を
+        /// 「結合範囲の幅で切れる」と誤って報告するため(code-reviewer指摘)。
+        /// </remarks>
+        private void CheckFit(
+            CellAddress address,
+            CellModel cell,
+            CellStyle style,
+            RectPt rect,
+            RectPt contentRect,
+            string text,
+            IReadOnlyList<string> lines,
+            FontStyle font,
+            FontMetrics metrics,
+            HorizontalAlignment hAlign,
+            OverflowBehavior overflow,
+            CellRange? mergedRange)
+        {
+            // 縮小表示は文字を縮めて収めるため対象にしない(要件13補足)。
+            if (overflow == OverflowBehavior.Shrink)
+            {
+                return;
+            }
+
+            var (contentWidthPt, heightPt) = mergedRange is { } range
+                ? (SumBounded(range.FirstColumn, range.LastColumn, RawColumnWidthPt) * _scale
+                       - (rect.Width - contentRect.Width),
+                   SumBounded(range.FirstRow, range.LastRow, RawRowHeightPt) * _scale)
+                : (contentRect.Width, rect.Height);
+
+            // Excel は数値を折り返さず、はみ出させもしない。表示形式があれば ####、標準(General)なら桁を減らして表示する。
+            if (cell.ValueKind == CellValueKind.Number)
+            {
+                if (_fitIssues!.Accepts(address, FitIssueKind.NumberTooWide)
+                    && IsWider(RemoveLineBreaks(text), font, contentWidthPt))
+                {
+                    var excel = IsGeneralFormat(style.NumberFormat)
+                        ? "Excel では桁を減らすか指数で表示されます"
+                        : "Excel では #### と表示されます";
+                    AddFitIssue(FitIssueKind.NumberTooWide, address, RemoveLineBreaks(text),
+                        $"数値がセルの幅に収まりません({excel})。列幅を広げてください。");
+                }
+
+                return;
+            }
+
+            if (overflow == OverflowBehavior.Wrap)
+            {
+                CheckWrappedHeight(address, style, text, lines, font, metrics, contentWidthPt, heightPt, mergedRange);
+                return;
+            }
+
+            var line = lines[0];
+            if (overflow == OverflowBehavior.Clip || mergedRange is not null)
+            {
+                if (_fitIssues!.Accepts(address, FitIssueKind.Clipped) && IsWider(line, font, contentWidthPt))
+                {
+                    var where = mergedRange is not null ? $"結合範囲 {mergedRange.Value} の幅" : "セルの幅";
+                    AddFitIssue(FitIssueKind.Clipped, address, line,
+                        $"文字が{where}で切れます。列幅を広げるか、文字数を減らしてください。");
+                }
+
+                return;
+            }
+
+            CheckOverflow(address, contentRect, line, font, hAlign);
+        }
+
+        /// <summary>はみ出し表示の文字が、値を持つ隣のセルに重なるか、ページの本文の範囲で切れるかを確かめる。</summary>
+        private void CheckOverflow(CellAddress address, RectPt contentRect, string line, FontStyle font, HorizontalAlignment hAlign)
+        {
+            if (!_fitIssues!.Accepts(address, FitIssueKind.OverlapsNeighborValue)
+                && !_fitIssues.Accepts(address, FitIssueKind.CutAtPageEdge))
+            {
+                return;
+            }
+
+            var width = _fontMetrics.MeasureTextWidth(font, line);
+            if (width <= contentRect.Width + FitTolerancePt)
+            {
+                return;
+            }
+
+            // 描画(ResolveTextOrigin)と同じ位置。均等割り付け・両端揃え・繰り返しは左揃えとして描くため(design.md「未決事項」)、
+            // Excel でははみ出さないこれらの配置も、描画どおり左揃えのはみ出しとして判定する。
+            var (textLeft, textRight) = hAlign switch
+            {
+                HorizontalAlignment.Right => (contentRect.Right - width, contentRect.Right),
+                HorizontalAlignment.Center or HorizontalAlignment.CenterContinuous =>
+                    (contentRect.Left + ((contentRect.Width - width) / 2.0), contentRect.Left + ((contentRect.Width + width) / 2.0)),
+                _ => (contentRect.Left, contentRect.Left + width),
+            };
+
+            if (FindOverlappedNeighbor(address, textLeft, textRight) is { } neighbor)
+            {
+                AddFitIssue(FitIssueKind.OverlapsNeighborValue, address, line,
+                    $"文字がセルからはみ出し、値のある隣のセル {neighbor} に重なります"
+                    + "(Excel では隣のセルの手前で切れて表示されます)。列幅を広げるか、「縮小して全体を表示する」にしてください。");
+            }
+
+            if (textLeft < _pageBodyRect.Left - FitTolerancePt || textRight > _pageBodyRect.Right + FitTolerancePt)
+            {
+                AddFitIssue(FitIssueKind.CutAtPageEdge, address, line,
+                    "文字がセルからはみ出し、ページの端(余白の内側)で切れます。列幅を広げるか、「縮小して全体を表示する」にしてください。");
+            }
+        }
+
+        /// <summary>
+        /// このページで同じ行に並ぶ列のうち、横方向の範囲 [<paramref name="textLeft"/>, <paramref name="textRight"/>] にかかる
+        /// 隣のセルで、値を持つもの(結合範囲ならアンカーの値)を探す。見つからなければ null。
+        /// </summary>
+        private CellAddress? FindOverlappedNeighbor(CellAddress address, double textLeft, double textRight)
+        {
+            if (!_pageColumnIndex.TryGetValue(address.Column, out var position))
+            {
+                return null;
+            }
+
+            // 右側
+            for (var i = position + 1; i < _pageColumns.Count; i++)
+            {
+                if (ColumnLeft(i) >= textRight - FitTolerancePt)
+                {
+                    break;
+                }
+
+                if (HasValueAt(new CellAddress(address.Row, _pageColumns[i])) is { } found)
+                {
+                    return found;
+                }
+            }
+
+            // 左側
+            for (var i = position - 1; i >= 0; i--)
+            {
+                if (ColumnLeft(i + 1) <= textLeft + FitTolerancePt)
+                {
+                    break;
+                }
+
+                if (HasValueAt(new CellAddress(address.Row, _pageColumns[i])) is { } found)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>このページの <paramref name="position"/> 番目の列の左端(用紙座標)。</summary>
+        private double ColumnLeft(int position) => _originX + (_pageColumnOffsets[position] * _scale);
+
+        /// <summary>
+        /// 指定位置に、Excel がはみ出しを止める値があれば、その値を持つセル(結合範囲ならアンカー)を返す。
+        /// 数式のセルは、結果が空文字(<c>=IF(…,"",…)</c> など)でも Excel ははみ出しを止めるため、値があるものとして扱う
+        /// (layout-fidelity-reviewer指摘)。
+        /// </summary>
+        private CellAddress? HasValueAt(CellAddress address)
+        {
+            var merged = _pageMergedIndex?.Find(address);
+            var owner = merged?.Anchor ?? address;
+            return _sheet.GetCell(owner) is { } cell && (!cell.IsBlank || cell.HasFormula) ? owner : null;
+        }
+
+        /// <summary>テンプレートに入力されている文字の折り返しが、セルの高さに収まるかを確かめる。</summary>
+        private void CheckWrappedHeight(
+            CellAddress address,
+            CellStyle style,
+            string text,
+            IReadOnlyList<string> lines,
+            FontStyle font,
+            FontMetrics metrics,
+            double contentWidthPt,
+            double heightPt,
+            CellRange? mergedRange)
+        {
+            // 差し込んだ値は EnsureSubstitutedTextFits が収まらなければエラーにしている(要件2.14)。
+            if (_report.SubstitutedCells.Contains(address) || !_fitIssues!.Accepts(address, FitIssueKind.ExceedsCellHeight))
+            {
+                return;
+            }
+
+            // 結合範囲は本来の幅で折り返し直す(描画は見えている部分の幅で折り返すが、判定は範囲全体の大きさで行う)。
+            var lineCount = mergedRange is not null ? WrapLines(font, text, contentWidthPt).Count : lines.Count;
+            if (!WrappedLinesFit(style.VAlign, heightPt, metrics, lineCount))
+            {
+                AddFitIssue(FitIssueKind.ExceedsCellHeight, address, text,
+                    $"文字を折り返すと {lineCount} 行になり、セルの高さに収まりません。行の高さを広げてください。");
+            }
+        }
+
+        /// <summary>
+        /// 折り返した <paramref name="lineCount"/> 行が、高さ <paramref name="heightPt"/> のセルに収まるか(要件2.14、13.3(e))。
+        /// 描画と同じ縦位置に置いたとき、どの行の字面も、字面の高さの4分の1を超えてセルの外に出なければ収まるとみなす。
+        /// </summary>
+        private static bool WrappedLinesFit(VerticalAlignment vAlign, double heightPt, FontMetrics metrics, int lineCount)
+        {
+            var cellRect = new RectPt(0, 0, 1, heightPt);
+            var firstBaselineY = ResolveFirstBaselineY(vAlign, cellRect, metrics, metrics.LineSpacingPt * lineCount);
+            var tolerancePt = (metrics.AscentPt + metrics.DescentPt) / 4.0;
+
+            for (var i = 0; i < lineCount; i++)
+            {
+                var baselineY = firstBaselineY + (metrics.LineSpacingPt * i);
+                if (baselineY - metrics.AscentPt < cellRect.Top - tolerancePt
+                    || baselineY + metrics.DescentPt > cellRect.Bottom + tolerancePt)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private bool IsWider(string text, FontStyle font, double availableWidthPt) =>
+            _fontMetrics.MeasureTextWidth(font, text) > availableWidthPt + FitTolerancePt;
+
+        private static bool IsGeneralFormat(string? numberFormat) =>
+            string.IsNullOrWhiteSpace(numberFormat)
+            || numberFormat!.Trim().Equals("General", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// 収まらない箇所を記録する。説明の文にはセルの文字列を入れない(宛名などの個人情報がログへ流れないようにする。
+        /// security-reviewer指摘)。文字列は <see cref="FitIssue.Text"/> で参照できる。
+        /// </summary>
+        private void AddFitIssue(FitIssueKind kind, CellAddress address, string text, string description)
+        {
+            var isSubstituted = _report.SubstitutedCells.Contains(address);
+
+            // 置換キーで差し込んだセルだけに置換キーを付ける(セル番地直接指定で上書きしたセルは除く。要件13.4)。
+            var key = isSubstituted && !_report.OverriddenCells.Contains(address) ? FindSubstitutionKey(address) : null;
+            var subject = key is not null ? $"セル {address}(置換キー '{key}')" : $"セル {address}";
+            _fitIssues!.Add(new FitIssue(kind, address, _pageNumber, text, isSubstituted, key, $"{subject}: {description}"));
+        }
+
+        private string? FindSubstitutionKey(CellAddress address)
+        {
+            foreach (var field in _report.Definition.SubstitutionFields)
+            {
+                if (field.Cell == address)
+                {
+                    return field.Key;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>文字の収まりの判定の許容誤差(pt)。幅の計算の浮動小数点誤差で、ちょうど収まる文字を検出しないようにする。</summary>
+        private const double FitTolerancePt = 0.01;
 
         /// <summary>
         /// 差し込み値がセル内に表示されることを確かめる(要件2.13, 2.14)。
@@ -1092,20 +1410,8 @@ namespace Utsushi.Layout
             var font = style.Font with { SizePt = style.Font.SizePt * _scale };
             var lineCount = WrapLines(font, text, contentWidthPt).Count;
             var metrics = _fontMetrics.GetMetrics(font);
-            var cellRect = new RectPt(0, 0, widthPt, heightPt);
-            var firstBaselineY = ResolveFirstBaselineY(style.VAlign, cellRect, metrics, metrics.LineSpacingPt * lineCount);
-            var tolerancePt = (metrics.AscentPt + metrics.DescentPt) / 4.0;
-
-            for (var i = 0; i < lineCount; i++)
+            if (!WrappedLinesFit(style.VAlign, heightPt, metrics, lineCount))
             {
-                var baselineY = firstBaselineY + (metrics.LineSpacingPt * i);
-                var glyphTop = baselineY - metrics.AscentPt;
-                var glyphBottom = baselineY + metrics.DescentPt;
-                if (glyphTop >= cellRect.Top - tolerancePt && glyphBottom <= cellRect.Bottom + tolerancePt)
-                {
-                    continue;
-                }
-
                 throw new LayoutComputationException(
                     string.Format(
                         CultureInfo.InvariantCulture,

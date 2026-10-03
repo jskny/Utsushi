@@ -36,6 +36,12 @@ namespace Utsushi.ReportDefinitions.Model
         /// </remarks>
         public IReadOnlySet<CellAddress> SubstitutedCells { get; init; } = new HashSet<CellAddress>();
 
+        /// <summary>
+        /// セル番地直接指定(要件2.7)で値を上書きしたセル。置換キーで差し込んだ後に同じセルを上書きした場合も含む。
+        /// 文字の収まりの確認(要件13.4)で、置換キーによる置換とセル番地直接指定を区別するために使う。
+        /// </summary>
+        public IReadOnlySet<CellAddress> OverriddenCells { get; init; } = new HashSet<CellAddress>();
+
         /// <summary>指定セルのはみ出し挙動を返す。置換対象でない場合は null。</summary>
         public OverflowBehavior? GetOverflowBehavior(CellAddress address) =>
             OverflowByCell.TryGetValue(address, out var behavior) ? behavior : null;

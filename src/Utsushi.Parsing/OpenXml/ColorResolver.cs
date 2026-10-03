@@ -17,7 +17,7 @@ namespace Utsushi.Parsing.OpenXml
         /// Excel の既定インデックスカラーパレット。
         /// ブックに <c>indexedColors</c> が無い場合に使う(ECMA-376 の既定値)。
         /// </summary>
-        private static readonly uint[] DefaultIndexedPalette =
+        internal static readonly IReadOnlyList<uint> DefaultIndexedPalette = new uint[]
         {
         0xFF000000, 0xFFFFFFFF, 0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFFFFFF00, 0xFFFF00FF, 0xFF00FFFF,
         0xFF000000, 0xFFFFFFFF, 0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFFFFFF00, 0xFFFF00FF, 0xFF00FFFF,

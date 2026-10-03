@@ -1005,3 +1005,30 @@
     - `[Content_Types].xml` を `ToUpperInvariant` の比較で特定する。図形テキストの段落の区切りを文字数に数える。
       同じ画像パートを参照する画像はバイト列を共有する。数値書式のキャッシュは上限に達したら空にして登録し直す
     - _Requirements: 4.11, 6.6, 6.7_
+
+- [x] 29. エッジケース検証の検出事項への対応と、文字の収まりの確認(`docs/エッジケース検証レポート.md`)
+  - [x] 29.1 requirements.md に要件1.10, 1.11, 4.12, 13を追加し、design.md に設計を書く
+    - _Requirements: 1.10, 1.11, 4.12, 13.1, 13.2, 13.3, 13.4, 13.5_
+  - [x] 29.2 Parsing: 数値書式の色の指定(色名・日本語の色名・`[ColorN]`)を `CellModel.FormatColor` に読み取る。
+        Layout はその色で数値を描き、置換(`WithText`)で色を消す
+    - _Requirements: 4.12_
+  - [x] 29.3 Parsing: 行・列の書式(`row/@s`・`col/@style`)とブックの標準の書式を `SheetModel` に読み取り、
+        `GetEffectiveStyle` で解決する。Layout(セルが無い位置の塗りつぶし・罫線、結合範囲の外周の罫線)と
+        Substitution(セルが無い位置への置換)で使う
+    - _Requirements: 1.10_
+  - [x] 29.4 ReportDefinition: 置換キーの対象セルが使用範囲の外にあるときのエラーのメッセージに対処を加える
+    - _Requirements: 1.11_
+  - [x] 29.5 Layout・ファサード: 文字の収まりの確認(`FitIssue`・`PagedLayout.FitIssues`・`ReportPdfConverter.CheckFit`/`CheckFitWithoutDefinition`)
+    - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5_
+  - [x] 29.6 テストを追加し、ゴールデンを更新する。エッジケース検証用サンプルのテストで検出事項の対応を確かめる
+    - _Requirements: 1.10, 1.11, 4.12, 13.3_
+  - [x] 29.7 docs(テンプレート作成ガイド・ライブラリの使い方・エッジケース検証レポート)を更新する
+    - _Requirements: 1.10, 1.11, 4.12, 13.1_
+  - [x] 29.8 レビュー対応(code-reviewer・layout-fidelity-reviewer・security-reviewer・spec-compliance-reviewer)
+    - セルが無い位置を行・列の書式で描く回数に上限(200,000か所)を設ける。同じ色の塗りつぶしを行ごとにまとめる
+    - PDFへの変換では文字の収まりの確認を省く(`IReportLayoutEngine.Compute(report, checkFit)`)
+    - 説明の文にセルの文字列を入れない。セル番地直接指定で上書きしたセルには置換キーを付けない(`ReportModel.OverriddenCells`)
+    - 結合範囲は本来の大きさで判定する。折り返しの高さは要件2.14と同じ判定(`WrappedLinesFit`)にする。数式のある隣のセルは値ありとする。
+      標準の表示形式の数値の説明を直す。件数の上限で打ち切ったことを `FitCheckResult.IsTruncated` で示す
+    - 数値書式の色は、General に戻す値には付けない。使用範囲の外のエラーのメッセージに「そのセル自体に」を加える
+    - _Requirements: 1.10, 1.11, 4.12, 6.9, 13.3, 13.4, 13.5_
