@@ -105,10 +105,12 @@ namespace Utsushi.Layout
                 paperWidthPt - pageSetup.Margins.RightPt,
                 paperHeightPt - pageSetup.Margins.BottomPt);
 
+            // 文字の収まりの確認(要件13)は、印刷範囲をまたいで同じセルを1件にまとめる。
+            var fitIssues = new FitIssueCollector();
             var pages = new List<PageLayout>();
             foreach (var plan in plans)
             {
-                pages.AddRange(BuildPages(report, plan, pageSetup, printableArea, firstPageNumber: pages.Count + 1));
+                pages.AddRange(BuildPages(report, plan, pageSetup, printableArea, firstPageNumber: pages.Count + 1, fitIssues));
             }
 
             if (pages.Count == 0)
@@ -123,7 +125,7 @@ namespace Utsushi.Layout
             // ヘッダー/フッターは全ページを組み立てたあとに付け足す(要件3.8)。
             pages = AppendHeadersAndFooters(report, pages);
 
-            return new PagedLayout(pages, definition.ReportCode, sheet.Name);
+            return new PagedLayout(pages, definition.ReportCode, sheet.Name) { FitIssues = fitIssues.Issues };
         }
 
         /// <summary>
@@ -606,7 +608,8 @@ namespace Utsushi.Layout
             RangePlan plan,
             PageSetupModel pageSetup,
             RectPt printableArea,
-            int firstPageNumber)
+            int firstPageNumber,
+            FitIssueCollector fitIssues)
         {
             var pages = new List<PageLayout>();
             var (paperWidthPt, paperHeightPt) = pageSetup.PaperSizePt;
@@ -652,7 +655,7 @@ namespace Utsushi.Layout
 
                 var commands = new PageCommandBuilder(
                         report, grid, _fontMetrics, scale, pageSetup.Margins, new PointPt(offsetX, offsetY), printableArea,
-                        plan.MergedIndex, validatedSubstitutedCells)
+                        plan.MergedIndex, validatedSubstitutedCells, fitIssues, pageNumber)
                     .Build(pageRows, pageColumns);
 
                 pages.Add(new PageLayout(

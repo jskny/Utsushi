@@ -1,3 +1,5 @@
+using Utsushi.Core;
+
 namespace Utsushi.Parsing.Model
 {
     /// <summary>セルに格納されている値の型。</summary>
@@ -32,8 +34,24 @@ namespace Utsushi.Parsing.Model
 
         public bool IsBlank => ValueKind == CellValueKind.Blank || string.IsNullOrEmpty(DisplayValue);
 
-        /// <summary>値のみを差し替えた複製を返す(書式は変更しない。要件2.2)。</summary>
+        /// <summary>
+        /// 数値書式の表示に使ったセクションの色の指定(<c>[Red]</c> など。要件4.12)。指定が無ければ null で、
+        /// フォントの色(<see cref="CellStyle.Font"/>)で描く。
+        /// </summary>
+        public ArgbColor? FormatColor { get; init; }
+
+        /// <summary>
+        /// 値のみを差し替えた複製を返す(書式は変更しない。要件2.2)。差し込んだ文字列は数値書式で表示しないため、
+        /// 数値書式の色(<see cref="FormatColor"/>)は消す(要件4.12)。
+        /// </summary>
         public CellModel WithText(string text) =>
-            this with { Value = text, ValueKind = CellValueKind.Text, FormattedValue = text, HasFormula = false };
+            this with
+            {
+                Value = text,
+                ValueKind = CellValueKind.Text,
+                FormattedValue = text,
+                HasFormula = false,
+                FormatColor = null,
+            };
     }
 }

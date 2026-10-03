@@ -75,8 +75,9 @@ namespace Utsushi.Substitution
                 }
 
                 var existing = sheet.GetCell(field.Cell);
+                // セルが無い位置は、行・列・ブックの標準の書式で新しいセルを作る(要件1.10。Excel で入力した場合と同じ書式)。
                 cells[field.Cell] = existing is null
-                    ? new CellModel(replacement, CellValueKind.Text, CellStyle.Default, replacement)
+                    ? new CellModel(replacement, CellValueKind.Text, sheet.GetEffectiveStyle(field.Cell), replacement)
                     : existing.WithText(replacement);
                 MarkSubstituted(substitutedCells, field.Cell, replacement);
 
@@ -133,7 +134,7 @@ namespace Utsushi.Substitution
             {
                 var existing = sheet.GetCell(address);
                 cells[address] = existing is null
-                    ? new CellModel(replacement, CellValueKind.Text, CellStyle.Default, replacement)
+                    ? new CellModel(replacement, CellValueKind.Text, sheet.GetEffectiveStyle(address), replacement)
                     : existing.WithText(replacement);
                 MarkSubstituted(substitutedCells, address, replacement);
 

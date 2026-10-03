@@ -94,8 +94,17 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   ```
 - OpenXml SDK以外の型(`SpreadsheetDocument` 等)を `WorkbookModel` の外に漏らさない。上位レイヤーは `WorkbookModel` のみを参照する。
 - 取得するページ設定: 印刷範囲(`definedNames` の `_xlnm.Print_Area`)、手動改ページ(`rowBreaks`/`colBreaks`)、用紙サイズ・余白・拡大縮小(`pageSetup`)、印刷タイトル(`_xlnm.Print_Titles`)、印刷順序。
+- **セルが無い位置の書式(要件1.10)**: `row/@s`(`@customFormat` が真の行だけ)を `SheetModel.RowStyles`(行番号 → 書式)、
+  `col/@style` を `SheetModel.ColumnStyles`(`ColumnStyleRange(FirstColumn, LastColumn, Style)` の範囲のリスト。
+  `col` 要素をそのまま持ち、16,384 列ぶんに展開しない)、`cellXfs` の0番を `SheetModel.DefaultCellStyle` に読み取る。
+  `SheetModel.GetEffectiveStyle(address)` が「セルの書式 → 行の書式 → 列の書式 → 標準の書式」の順で解決し、
+  Layout(セルが無い位置の塗りつぶし・罫線、結合範囲の外周の罫線)と Substitution(セルが無い位置への置換)が
+  同じ規則を使う。3つのプロパティは `init` とし、既定値(書式なし・`CellStyle.Default`)で既存の生成箇所を変えずに済むようにした。
+  行・列の書式は `GetUsedRange`(使用範囲)に含めない(要件1.10補足)。行の書式の件数は `row` 要素の数と行番号の上限、
+  列の書式の件数は `col` 要素の数の既存の上限に収まる。
 - **数式セル**: 数式は評価せず、OOXMLにキャッシュされている計算結果の値のみを読み取る(要件1.6)。
 - **数値書式**: `numFmt` を適用した表示文字列を `CellModel.FormattedValue` に持たせる。
+  表示に使うセクションの色の指定(要件4.12)は `CellModel.FormatColor` に持たせる(下記「数値書式の色」)。
   汎用の数値書式エンジンではなく、自社帳票が使う範囲(金額・数量・日付・パーセント)のサブセット実装とする。
   解釈できない書式(指数表記・分数表記など)は例外にせず General 相当へフォールバックし、
   表示の崩れはゴールデンテストで検出する。
@@ -108,6 +117,11 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   - **和暦**: `[$-411]` 等のロケール指定は表示に反映しないが、`g`(英字1文字 `R`)・`gg`(漢字1文字 `令`)・`ggg`(元号名 `令和`)・
     `e`(元号の年)・`ee`(2桁)を、明治(Excelの扱いに合わせ1868/1/1開始)〜令和の元号表で解釈する。明治より前の日付は General にする。
     1年は「1」と表示し、「元年」には対応しない。解釈できない英字の書式指定子(`b` 等)は、書式文字をそのまま出さず General にする。
+  - **数値書式の色(要件4.12)**: `FormatSection` が、セクション内の `[...]` のうち色名(英語の8色・日本語版の8色)と
+    `[ColorN]`(1〜56。既定のインデックスカラーの N+7 番)を色として解析して持つ。`NumberFormatter.ResolveColor(value, formatCode)` が
+    `FormatNumber` と同じ規則でセクションを選び、その色を返す(色が無い・General にフォールバックする場合は null)。
+    `OpenXmlWorkbookReader` は数値セルにだけこれを `CellModel.FormatColor` として持たせ、`CellModel.WithText`(置換)は
+    `FormatColor` を消す。Layout は `FormatColor` があればフォントの色の代わりに使う。
   - **セクションと負号**: `@` を含むセクションは文字列の表示用であり、数値の表示には使わない(数値に使えるセクションが無ければ General)。
     セクションが複数あり負数セクションが選ばれた場合は絶対値に書式を適用し、セクションが1つだけの場合は負号を出力全体の
     先頭に付ける(`"¥"#,##0` で `-¥1,000`)。小数部の `#` は不要な0を出さず、`?` は空白にする。
@@ -474,7 +488,9 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   既存の`ReportModel.Create`/`with`式の呼び出し側を変えずに済むようにした。
 - はみ出し時の挙動(`overflow: overflow|shrink|clip|wrap`)は帳票定義の値をそのままLayoutレイヤーに引き渡すためのフラグとして `ReportModel` に保持する(実際の折り返し/縮小計算はLayoutレイヤーの責務)。
 - `ApplyCellOverrides` は、帳票定義の置換キー(`SubstitutionFields`)を経由せず、セル番地(A1形式の文字列。キーは `CellAddress.TryParse` で解釈する)を直接指定して値を書き換える第二の経路(要件2.7, 2.8)。
-  - `Apply` と同じく `CellModel.WithText` で値のみを差し替え、書式には触れない。対象セルが未存在(空セル)の場合は既定スタイルの新規セルを作る点も `Apply` と同一。
+  - `Apply` と同じく `CellModel.WithText` で値のみを差し替え、書式には触れない。対象セルが未存在(空セル)の場合は
+    `SheetModel.GetEffectiveStyle` の書式(行・列・ブックの標準の書式。要件1.10)で新規セルを作る点も `Apply` と同一。
+    以前は `CellStyle.Default`(Calibri 11pt)で作っていたため、テンプレートで使っていない Calibri を厳格モードのフォント解決が要求していた。
   - `Apply` と同様、全入力を検証してから一括で書き換える二段階構成(`ParseAndValidateAddresses` → 書き換え)を取る。
   - `Apply` の未知キー検証(要件2.3)・必須キー検証(要件2.4)の対象外。帳票定義に登録の無いセルも指定できる。
   - セル番地がA1形式として解釈できない場合は `InvalidCellOverrideAddressException`(Stage=Substitution)を送出する(要件2.8)。
@@ -543,6 +559,22 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     印刷範囲外と同様にエラーにする。判定の結果はセルの番地・書式・(印刷範囲で共通の)拡大縮小率で決まるため、
     確かめ終えたセルは印刷範囲ごとに記録し、印刷タイトルの行/列として複数ページに繰り返し現れるセルを
     ページごとに検証し直さない。
+  - **文字の収まりの確認(要件13)**: `PageCommandBuilder.EmitText` で、描画と同じ内容矩形・行・フォントを使って
+    収まらない箇所を `FitIssueCollector` に記録する。描画命令は変えない。判定は次のとおり(幅は `MeasureTextWidth`)。
+    - 数値セル(`CellValueKind.Number`)で縮小表示でないもの: 1行の幅が内容矩形の幅を超えれば `NumberTooWide`。
+      数値はこの判定だけを行う(Excelは数値を折り返さず、はみ出させもせず `####` にするため)。
+    - はみ出し表示(結合範囲でない): 文字がはみ出す側(左揃え → 右、右揃え → 左、中央揃え → 両側)の、同じ行で
+      このページに並ぶ隣の列を、はみ出した幅に届くまで順に見る。値を持つセル(結合範囲ならアンカーの値)に
+      かかれば `OverlapsNeighborValue`。はみ出した先がページの本文の矩形の外に出れば `CutAtPageEdge`。
+    - 切り取り表示、およびはみ出し表示の結合範囲: 1行の幅が内容矩形の幅を超えれば `Clipped`。
+    - 折り返し表示: 行の数 × 行送りがセル(見えている矩形)の高さを超えれば `ExceedsCellHeight`。差し込みセルは
+      `EnsureSubstitutedTextFits` が先にエラーにするため、テンプレートの文字だけが対象になる。字面の4分の1の許容量は
+      `EnsureSubstitutedTextFits` と同じ考え方で、最後の行の字面の4分の1を超えて外に出る場合とする。
+    記録は印刷範囲をまたいで1つの `FitIssueCollector` で行い、(セル, 種類) が同じものは最初に現れたページの1件にまとめる。
+    `ReportLayoutEngine.Compute` が `PagedLayout.FitIssues` に入れて返し、ファサードの `CheckFit` /
+    `CheckFitWithoutDefinition` が `ComputeLayout` と同じ経路で計算してこれだけを返す。PDFへの変換(`Convert`)も
+    同じ計算を行うが、結果は使わない(計測は描画で行う計測に1回足す程度で、変換の時間への影響は小さい)。
+    ゴールデンのスナップショットにも出力し、検出結果の回帰を確かめる。
   - **ヘッダー/フッターの改行**: 複数行のヘッダー/フッターは未対応のため、改行を取り除いて1行に配置する
     (`HeaderFooterCommandBuilder.ScaleRuns`。以前は改行文字がそのまま描画され豆腐や空白になっていた)。
   - ページヘッダー/フッターの書式コード展開と配置(要件3.7〜3.9, 3.15, 3.16)。
@@ -985,7 +1017,13 @@ public sealed record SheetModel(
     IReadOnlySet<int> HiddenColumns,      // 非表示行/列は印刷されないため保持する
     IReadOnlySet<int> HiddenRows,
     PageSetupModel PageSetup,
-    IReadOnlyList<DrawingObjectModel> DrawingObjects); // シート上の画像・図形・接続線・グループ(要件9, 10)。drawing.xmlの出現順(=重なり順)。
+    IReadOnlyList<DrawingObjectModel> DrawingObjects) // シート上の画像・図形・接続線・グループ(要件9, 10)。drawing.xmlの出現順(=重なり順)。
+{
+    // セルが無い位置の書式(要件1.10)。GetEffectiveStyle(address) がセル → 行 → 列 → 標準の順に解決する。
+    public CellStyle DefaultCellStyle { get; init; }                      // cellXfs[0]
+    public IReadOnlyDictionary<int, CellStyle> RowStyles { get; init; }   // customFormat の行
+    public IReadOnlyList<ColumnStyleRange> ColumnStyles { get; init; }    // col/@style
+}
 
 // シートに浮かぶ描画オブジェクト(画像・図形)の共通の位置決め情報。
 public abstract record DrawingObjectModel(
@@ -1126,7 +1164,10 @@ public sealed record CellModel(
     CellValueKind ValueKind,              // Blank/Text/Number/Boolean/Error
     CellStyle Style,
     string? FormattedValue = null,        // 数値書式を適用した表示文字列
-    bool HasFormula = false);
+    bool HasFormula = false)
+{
+    public ArgbColor? FormatColor { get; init; }   // 数値書式の色の指定(要件4.12)。WithText で消える
+}
 
 public sealed record CellStyle(
     FontStyle Font,
@@ -1148,7 +1189,19 @@ public sealed record ReportModel(
 
 // --- Layout レイヤー ---
 public sealed record PagedLayout(
-    IReadOnlyList<PageLayout> Pages, string ReportCode, string SheetName);
+    IReadOnlyList<PageLayout> Pages, string ReportCode, string SheetName)
+{
+    public IReadOnlyList<FitIssue> FitIssues { get; init; }  // 文字の収まりの確認(要件13)。描画には使わない
+}
+
+public sealed record FitIssue(
+    FitIssueKind Kind,          // OverlapsNeighborValue / CutAtPageEdge / NumberTooWide / Clipped / ExceedsCellHeight
+    CellAddress Cell,
+    int PageNumber,             // 最初に現れるページ
+    string Text,                // 描画する文字列
+    bool IsSubstituted,         // 置換キー・セル番地直接指定で値を置き換えたセル
+    string? SubstitutionKey,    // 置換キーによる置換ならそのキー
+    string Message);            // 説明の文(ログ用)
 
 public sealed record PageLayout(
     PaperSize Paper,
@@ -1354,10 +1407,11 @@ public sealed record GroupCommand(
     サポート外要素としての検出対象にもなっていない。
   - 横位置「均等割り付け」「両端揃え」「繰り返し」は左揃え、「選択範囲内で中央」は自セル内の中央揃え、
     縦位置「均等割り付け」「両端揃え」は中央揃えとして扱う。インデントは常に左側に加算される。
-  - はみ出し表示(`overflow`)は、Excelと違い隣のセルに値があっても止まらず重なって描画される。
+  - はみ出し表示(`overflow`)は、Excelと違い隣のセルに値があっても止まらず重なって描画される(描画は変えず、
+    要件13の文字の収まりの確認で重なる箇所を検出できるようにした)。
   - 禁則処理・英単語単位の折り返しは行わない(書記素クラスタ単位の単純な幅基準)。Excelとは行数が
     1行ずれることがあり、要件2.14の判定もこの行数に基づく。
-  - 横方向の欠落は検出しない。`clip`のセルでは長い氏名・住所が右側で切り詰められ、`overflow`のセルでは
+  - 横方向の欠落は例外にしない(要件13の文字の収まりの確認で検出できる)。`clip`のセルでは長い氏名・住所が右側で切り詰められ、`overflow`のセルでは
     このページの本文の範囲(余白の内側。要件4.9)の外にはみ出した部分が欠ける。結合セルの文字ははみ出さず結合範囲で切れる。要件2.14は縦方向(折り返し行)のみを対象とする。
   - 複数行のヘッダー/フッターは未対応(改行を取り除いて1行に配置する)。
   - 文字の合成(シェーピング)は、異体字セレクタ(要件11.3)と仮名の濁点・半濁点(要件11.4)に限って行う。
@@ -1374,7 +1428,7 @@ public sealed record GroupCommand(
     はみ出し表示をページ本文(余白の内側)で切り取ること、ページ中央の対象に印刷タイトルを含めること、
     印刷範囲より下(右)にあるタイトルを付けないこと、太い実線の罫線がT字に交わる箇所の端の形、
     回転(75〜89・92)・横送りの用紙と横向き(`landscape`)の組み合わせ。
-  - 未対応: 数値がセル幅に収まらない場合の`####`表示(数値の文字列をそのまま配置する)、45〜135度回転した画像の
+  - 未対応: 数値がセル幅に収まらない場合の`####`表示(数値の文字列をそのまま配置する。要件13の確認で検出できる)、45〜135度回転した画像の
     配置矩形(この角度ではアンカーが幅と高さを入れ替えた矩形を表すとされるが、Utsushiは入れ替えずに扱う。実機では未確認)、最終行(列)が非表示の結合範囲で外周の罫線の辺が欠けること、
     和暦の「元年」表示。
 - **改ページをまたぐ結合セルの文字位置**: 結合範囲がページ境界をまたぐ場合、現状は

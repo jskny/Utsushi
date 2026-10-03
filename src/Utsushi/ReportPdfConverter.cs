@@ -437,6 +437,39 @@ namespace Utsushi
             return BuildLayout(workbook, definition, NoValues, cellOverrides);
         }
 
+        /// <summary>
+        /// PDFを出力せずに、文字がセルの表示領域に収まらない箇所(隣の値と重なる・切れる・Excelなら <c>####</c> になる)を返す(要件13)。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 変換(<see cref="Convert"/>)と同じ入力で <see cref="ComputeLayout"/> と同じ計算を行い、その結果の
+        /// <see cref="PagedLayout.FitIssues"/> を返す。変換の結果(PDF)は変わらない。変換がエラーになる入力では、変換と同じ例外を送出する。
+        /// PDF化の直前に呼び、結果を処理ログに残す用途を想定している。
+        /// </para>
+        /// <para>
+        /// 文字の幅は描画と同じフォントで測るため、PDFを作るサーバーと同じフォント構成で呼ぶこと。
+        /// </para>
+        /// </remarks>
+        /// <returns>収まらない箇所。1件も無ければ空のリスト。</returns>
+        public IReadOnlyList<FitIssue> CheckFit(
+            string reportCode,
+            Stream xlsxStream,
+            IReadOnlyDictionary<string, string> values,
+            IReadOnlyDictionary<string, string>? cellOverrides = null) =>
+            ComputeLayout(reportCode, xlsxStream, values, cellOverrides).FitIssues;
+
+        /// <summary>
+        /// 帳票定義を使わずに、文字がセルの表示領域に収まらない箇所を返す(要件12, 13)。
+        /// 引数と例外は <see cref="ComputeLayoutWithoutDefinition"/> と同じ。
+        /// </summary>
+        /// <returns>収まらない箇所。1件も無ければ空のリスト。</returns>
+        public IReadOnlyList<FitIssue> CheckFitWithoutDefinition(
+            Stream xlsxStream,
+            IReadOnlyDictionary<string, string>? cellOverrides = null,
+            string? documentName = null,
+            double? maxDigitWidthPx = null) =>
+            ComputeLayoutWithoutDefinition(xlsxStream, cellOverrides, documentName, maxDigitWidthPx).FitIssues;
+
         private static readonly IReadOnlyDictionary<string, string> NoValues = new Dictionary<string, string>();
 
         private PagedLayout BuildLayout(

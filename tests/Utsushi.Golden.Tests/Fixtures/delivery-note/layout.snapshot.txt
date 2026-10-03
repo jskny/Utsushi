@@ -1277,3 +1277,7 @@ text   origin=(511.88,31.28) anchor=Left font=MS PGothic@11pt/#FF000000 clip=non
 text   origin=(50.4,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="2026/04/20"
 text   origin=(264.64,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="2 / 2 ページ"
 text   origin=(499.56,817.87) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="サンプル"
+
+## fit issues count=2
+fit OverlapsNeighborValue cell=D3 page=1 substituted=no key=- text="納品番号"
+fit Clipped cell=E4 page=1 substituted=yes key=DeliveryDate text="2026年4月15日"

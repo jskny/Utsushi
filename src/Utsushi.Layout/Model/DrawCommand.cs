@@ -175,5 +175,10 @@ namespace Utsushi.Layout.Model
     public sealed record PagedLayout(IReadOnlyList<PageLayout> Pages, string ReportCode, string SheetName)
     {
         public int PageCount => Pages.Count;
+
+        /// <summary>
+        /// 文字がセルの表示領域に収まらない箇所(要件13)。描画には使わない。セルが現れる順(ページ順)に並ぶ。
+        /// </summary>
+        public IReadOnlyList<FitIssue> FitIssues { get; init; } = System.Array.Empty<FitIssue>();
     }
 }

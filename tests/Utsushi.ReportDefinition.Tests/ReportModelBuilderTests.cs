@@ -98,6 +98,9 @@ namespace Utsushi.ReportDefinition.Tests
 
             Assert.Equal(CellAddress.Parse("Z100"), ex.CellAddress);
             Assert.Contains("Far", ex.Message);
+
+            // 何をすればよいかをメッセージに含める(要件1.11)。
+            Assert.Contains("値か書式", ex.Message);
         }
 
         [Fact]

@@ -72,7 +72,8 @@ namespace Utsushi.ReportDefinitions
                 {
                     throw new ReportStructureMismatchException(
                         $"置換キー '{field.Key}' の対象セル {field.Cell} が、"
-                        + $"シート '{sheet.Name}' の使用範囲{(usedRange is null ? "(空)" : " " + usedRange.Value)}の外にあります。",
+                        + $"シート '{sheet.Name}' の使用範囲(値か書式のあるセルの範囲){(usedRange is null ? "(空)" : " " + usedRange.Value)}の外にあります。"
+                        + "テンプレートで、このセルに値か書式(罫線・フォントなど)を設定してください(要件1.11)。",
                         definition.ReportCode,
                         sheet.Name,
                         field.Cell);

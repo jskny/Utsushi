@@ -40,6 +40,66 @@ namespace Utsushi.Parsing.Model
         IReadOnlyList<DrawingObjectModel> DrawingObjects,
         int BaseColumnWidth = 8)
     {
+        private static readonly IReadOnlyDictionary<int, CellStyle> NoRowStyles = new Dictionary<int, CellStyle>();
+
+        /// <summary>
+        /// ブックの標準の書式(<c>cellXfs</c> の0番)。ファイルにセルも行・列の書式も無い位置に使う(要件1.10)。
+        /// </summary>
+        public CellStyle DefaultCellStyle { get; init; } = CellStyle.Default;
+
+        /// <summary>行の書式(<c>row/@s</c>。<c>@customFormat</c> が真の行だけ)。キーは1始まりの行番号(要件1.10)。</summary>
+        public IReadOnlyDictionary<int, CellStyle> RowStyles { get; init; } = NoRowStyles;
+
+        /// <summary>
+        /// 列の書式(<c>col/@style</c>)。列番号の昇順に並び、範囲は重ならない(要件1.10)。
+        /// 16,384 列までの <c>col</c> 要素を列ごとに展開せず、範囲のまま持つ。
+        /// </summary>
+        public IReadOnlyList<ColumnStyleRange> ColumnStyles { get; init; } = Array.Empty<ColumnStyleRange>();
+
+        /// <summary>
+        /// 指定位置に適用される書式を返す。セルがあればセルの書式、無ければ行の書式、列の書式、
+        /// ブックの標準の書式の順に最初に見つかったもの(Excel と同じ。要件1.10)。
+        /// </summary>
+        public CellStyle GetEffectiveStyle(CellAddress address)
+        {
+            if (Cells.TryGetValue(address, out var cell))
+            {
+                return cell.Style;
+            }
+
+            if (RowStyles.TryGetValue(address.Row, out var rowStyle))
+            {
+                return rowStyle;
+            }
+
+            return FindColumnStyle(address.Column) ?? DefaultCellStyle;
+        }
+
+        private CellStyle? FindColumnStyle(int column)
+        {
+            var low = 0;
+            var high = ColumnStyles.Count - 1;
+            while (low <= high)
+            {
+                var mid = low + ((high - low) / 2);
+                var range = ColumnStyles[mid];
+                if (column < range.FirstColumn)
+                {
+                    high = mid - 1;
+                }
+                else if (column > range.LastColumn)
+                {
+                    low = mid + 1;
+                }
+                else
+                {
+                    return range.Style;
+                }
+            }
+
+            return null;
+        }
+
         /// <summary>指定セルを取得する。存在しない場合は null。</summary>
         public CellModel? GetCell(CellAddress address) =>
             Cells.TryGetValue(address, out var cell) ? cell : null;
@@ -105,7 +165,10 @@ namespace Utsushi.Parsing.Model
             return false;
         }
 
-        /// <summary>セルが存在する範囲(使用範囲)。セルが1つも無い場合は null。</summary>
+        /// <summary>
+        /// セルが存在する範囲(使用範囲)。セルが1つも無い場合は null。
+        /// 行・列の書式(<see cref="RowStyles"/>・<see cref="ColumnStyles"/>)は含めない(要件1.10補足)。
+        /// </summary>
         public CellRange? GetUsedRange()
         {
             var hasAny = false;
@@ -132,4 +195,10 @@ namespace Utsushi.Parsing.Model
             return hasAny ? new CellRange(minRow, minCol, maxRow, maxCol) : null;
         }
     }
+
+    /// <summary>列の書式(<c>col/@style</c>)を持つ列の範囲(要件1.10)。</summary>
+    /// <param name="FirstColumn">先頭の列番号(1始まり)。</param>
+    /// <param name="LastColumn">末尾の列番号(1始まり、両端を含む)。</param>
+    /// <param name="Style">書式。</param>
+    public sealed record ColumnStyleRange(int FirstColumn, int LastColumn, CellStyle Style);
 }

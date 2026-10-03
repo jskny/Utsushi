@@ -270,3 +270,7 @@ connector rect=[380.4,132.5 30x30] preset=Straight rotation=0 flipH=False flipV=
 group  center=(272.9,149.5) rotation=-8 children=2
   shape  rect=[240.4,132.5 65x34] preset=Ellipse rotation=0 fill=none outline=#FFC00000/1pt text=[]
   shape  rect=[252.4,141.5 41x16] preset=Rect rotation=0 fill=none outline=#FFC00000/1pt text=[]
+
+## fit issues count=2
+fit Clipped cell=F3 page=1 substituted=yes key=InvoiceNo text="INV-2026-0417"
+fit NumberTooWide cell=F5 page=1 substituted=no key=- text="2026年4月30日"

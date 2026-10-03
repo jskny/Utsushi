@@ -209,6 +209,9 @@ def generate_cover_letter(root):
         ws.column_dimensions[col].width = width
 
     ws.row_dimensions[1].height = 30
+    # 表題の下の帯: 行番号をクリックして行全体を塗りつぶした行(セルは作らない。行の書式として保存される)
+    ws.row_dimensions[2].height = 6
+    ws.row_dimensions[2].fill = PatternFill("solid", fgColor=Color(theme=4, tint=0.3999755851924192))
     ws.merge_cells("A1:H1")
     put(ws, "A1", "書類送付のご案内", f=font(18, True, name="ＭＳ 明朝"),
         align=Alignment(horizontal="center", vertical="center"))
