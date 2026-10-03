@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "reportCode": "edge-order-form",
+  "sheetName": "注文書",
+  "unsupportedElements": "ignore",
+  "maxDigitWidthPx": 8,
+  "substitutionFields": [
+    { "key": "SupplierName", "cell": "A3",  "required": true, "overflow": "shrink" },
+    { "key": "OrderNo",      "cell": "G4",  "required": true },
+    { "key": "PaymentTerms", "cell": "B5",  "required": false },
+    { "key": "Approver",     "cell": "C24", "required": false }
+  ]
+}

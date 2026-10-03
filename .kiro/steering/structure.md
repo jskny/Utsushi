@@ -57,9 +57,11 @@ Utsushi/
 │   └── Utsushi.Golden.Tests/       # 登録済み帳票サンプルによるゴールデン(回帰)テスト
 │       └── Fixtures/<帳票コード>/  # レビュー済みの期待出力
 ├── tools/
-│   └── Utsushi.SampleGenerator/    # 帳票サンプル(.xlsx)の生成ツール。製品コードからは参照されない
+│   ├── Utsushi.SampleGenerator/    # 帳票サンプル(.xlsx)の生成ツール。製品コードからは参照されない
+│   └── edge-case-samples/          # エッジケース検証用サンプルの生成スクリプト(Python + openpyxl。開発用のみ)
 ├── samples/
-│   └── reports/<帳票コード>/       # definition.json(手書き)と template.xlsx(生成物)
+│   ├── reports/<帳票コード>/       # definition.json(手書き)と template.xlsx(生成物)
+│   └── edge-cases/<帳票コード>/    # エッジケース検証用(利用者が作りがちなテンプレート)。登録済み帳票ではない
 ├── docs/                           # 人が読む補足ドキュメント
 ├── .kiro/
 │   ├── steering/                   # 本ファイル群。プロジェクト全体に常時適用される方針

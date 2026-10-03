@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "reportCode": "edge-cover-letter",
+  "sheetName": "送付状",
+  "unsupportedElements": "error",
+  "maxDigitWidthPx": 8,
+  "substitutionFields": [
+    { "key": "PostalCode",     "cell": "A3",  "required": true },
+    { "key": "Address",        "cell": "A4",  "required": true },
+    { "key": "CompanyName",    "cell": "A7",  "required": true },
+    { "key": "Department",     "cell": "A8",  "required": false, "overflow": "clip" },
+    { "key": "PersonName",     "cell": "C8",  "required": false },
+    { "key": "SendDate",       "cell": "H3",  "required": true },
+    { "key": "DocumentNo",     "cell": "H4",  "required": true },
+    { "key": "Sender",         "cell": "F5",  "required": true },
+    { "key": "Item1",          "cell": "B15", "required": true },
+    { "key": "Item1Copies",    "cell": "G15", "required": true },
+    { "key": "Item1Note",      "cell": "H15", "required": false },
+    { "key": "Item2",          "cell": "B16", "required": false },
+    { "key": "Item2Copies",    "cell": "G16", "required": false },
+    { "key": "Item2Note",      "cell": "H16", "required": false },
+    { "key": "AmountGeneral",  "cell": "G21", "required": false },
+    { "key": "AmountRight",    "cell": "G22", "required": false },
+    { "key": "Remarks",        "cell": "A25", "required": false },
+    { "key": "LatinFontCell",  "cell": "B31", "required": false },
+    { "key": "UnformattedCell","cell": "B32", "required": false },
+    { "key": "ColumnStyleCell","cell": "C33", "required": false }
+  ]
+}

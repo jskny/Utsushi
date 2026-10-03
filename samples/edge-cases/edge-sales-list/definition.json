@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "reportCode": "edge-sales-list",
+  "sheetName": "売上一覧",
+  "unsupportedElements": "error",
+  "maxDigitWidthPx": 8,
+  "substitutionFields": [
+    { "key": "Period",     "cell": "A2", "required": true },
+    { "key": "Department", "cell": "J2", "required": false, "overflow": "shrink" }
+  ]
+}

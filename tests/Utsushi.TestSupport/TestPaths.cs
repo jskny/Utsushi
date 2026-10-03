@@ -10,6 +10,9 @@ namespace Utsushi.TestSupport
 
         public static string SampleReportsRoot { get; } = Path.Combine(RepositoryRoot, "samples", "reports");
 
+        /// <summary>エッジケース検証用の帳票サンプルのルート(`samples/edge-cases/README.md`)。</summary>
+        public static string EdgeCaseSamplesRoot { get; } = Path.Combine(RepositoryRoot, "samples", "edge-cases");
+
         /// <summary>ゴールデンファイルの配置ルート(`.kiro/steering/structure.md`「命名規則」)。</summary>
         public static string FixturesRoot { get; } =
             Path.Combine(RepositoryRoot, "tests", "Utsushi.Golden.Tests", "Fixtures");
