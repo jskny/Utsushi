@@ -165,7 +165,8 @@ def _patch_cell(xml, ref, value):
         escaped = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         replacement = '<c r="%s"%s t="str"><f>%s</f><v>%s</v></c>' % (ref, attrs, formula, escaped)
     else:
-        replacement = '<c r="%s"%s><f>%s</f><v>%s</v></c>' % (ref, attrs, formula, repr(float(value)))
+        number = str(value) if isinstance(value, int) else repr(float(value))
+        replacement = '<c r="%s"%s><f>%s</f><v>%s</v></c>' % (ref, attrs, formula, number)
     return xml[: match.start()] + replacement + xml[match.end():]
 
 
@@ -274,9 +275,10 @@ def generate_cover_letter(root):
     box_range(ws, "A25:H29", align=Alignment(wrap_text=True, vertical="top"))
 
     # 書式の作り方による違いを確かめるセル
-    #  A31: 英字フォント(Calibri)のセル。日本語の値を差し込むと日本語の部分は同梱フォントで描かれる
-    #  A32: テンプレートに存在しないセル(一度も入力・書式設定をしていない)
-    #  A33: 列全体に書式(太字・赤)を設定した列のセル(セル自体は未設定)
+    #  B31: 英字フォント(Calibri)のセル。日本語の値を差し込むと日本語の部分は同梱フォントで描かれる
+    #  B32: テンプレートに存在しないセル(一度も入力・書式設定をしていない)
+    #  C33: 列全体に書式(太字・赤)を設定した列のセル(セル自体は未設定)
+    #  (A列はラベル)
     put(ws, "A30", "以下は書式の作り方を変えた差し込みセル", f=font(9, color="808080"))
     put(ws, "B31", "", f=Font(name="Calibri", size=11))
     ws["A31"].value = "英字"
@@ -387,8 +389,8 @@ def generate_sales_list(root):
     ws.freeze_panes = "A5"
     path = os.path.join(root, "edge-sales-list", "template.xlsx")
     save(wb, path, {"売上一覧": cached})
-    _rewrite_sheet(path, "売上一覧", lambda xml: xml.replace(
-        '<row r="%d" customHeight="1">' % zero_height_row, '<row r="%d" ht="0" customHeight="1">' % zero_height_row))
+    _rewrite_sheet(path, "売上一覧", lambda xml: _replace_once(
+        xml, '<row r="%d" customHeight="1">' % zero_height_row, '<row r="%d" ht="0" customHeight="1">' % zero_height_row))
 
 
 # ---------------------------------------------------------------------------
@@ -661,10 +663,23 @@ def generate_order_form(root):
 
 def _write_error_value(path, sheet_name, ref, error):
     """Excel が保存するエラー値(t="e")を数式セルへ書き込む。"""
-    _rewrite_sheet(path, sheet_name, lambda xml: re.sub(
-        r'<c r="%s"([^>]*)><f>(.*?)</f></c>' % ref,
-        lambda m: '<c r="%s"%s t="e"><f>%s</f><v>%s</v></c>' % (ref, m.group(1), m.group(2), error),
-        xml))
+    def rewrite(xml):
+        result, count = re.subn(
+            r'<c r="%s"([^>]*)><f>(.*?)</f></c>' % re.escape(ref),
+            lambda m: '<c r="%s"%s t="e"><f>%s</f><v>%s</v></c>' % (ref, m.group(1), m.group(2), error),
+            xml)
+        if count != 1:
+            raise ValueError("エラー値を書き込む数式セルが見つからない: " + ref)
+        return result
+
+    _rewrite_sheet(path, sheet_name, rewrite)
+
+
+def _replace_once(xml, old, new):
+    """置換が空振りして意図しないブックができるのを防ぐため、ちょうど1か所であることを確かめて置き換える。"""
+    if xml.count(old) != 1:
+        raise ValueError("置換対象がちょうど1か所ではない: " + old)
+    return xml.replace(old, new)
 
 
 def _rewrite_sheet(path, sheet_name, rewrite):

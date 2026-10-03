@@ -56,7 +56,8 @@ inclusion: always
 | パッケージ | バージョン | ライセンス | 用途 |
 |---|---|---|---|
 | `openpyxl`(Python) | 3.1.5 | MIT | `tools/edge-case-samples/generate.py`。利用者が作りがちなテンプレート(テーマの色・条件付き書式・入力規則・グラフ等)を手早く再現するため |
-| `Pillow`(Python) | 12.x | MIT-CMU(HPND) | 同上。openpyxl で画像を貼るために必要 |
+| `et-xmlfile`(Python) | 2.0.0 | MIT | openpyxl の依存パッケージ |
+| `Pillow`(Python) | 12.3.0 | MIT-CMU(HPND) | 同上。openpyxl で画像を貼るために必要 |
 
 > **既知の制約(SkiaSharp / PDFのフォント)**: NuGetで配布される SkiaSharp のネイティブビルドは、
 > PDF出力時に**フォントのサブセット化を行わず、使用フォントを丸ごと埋め込む**(2.88系・3.x系とも実測確認)。

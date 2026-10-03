@@ -54,7 +54,7 @@ Utsushi/
 │   ├── Utsushi.Substitution.Tests/
 │   ├── Utsushi.Layout.Tests/
 │   ├── Utsushi.Rendering.Tests/
-│   └── Utsushi.Golden.Tests/       # 登録済み帳票サンプルによるゴールデン(回帰)テスト
+│   └── Utsushi.Golden.Tests/       # 登録済み帳票サンプルによるゴールデン(回帰)テストと、エッジケース検証用サンプルの変換テスト
 │       └── Fixtures/<帳票コード>/  # レビュー済みの期待出力
 ├── tools/
 │   ├── Utsushi.SampleGenerator/    # 帳票サンプル(.xlsx)の生成ツール。製品コードからは参照されない

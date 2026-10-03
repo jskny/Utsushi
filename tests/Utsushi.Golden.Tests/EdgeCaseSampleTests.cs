@@ -164,12 +164,12 @@ namespace Utsushi.Golden.Tests
             };
             yield return new object[]
             {
-                "折り返さないセルの改行(1行につながる)",
+                "折り返さないセルの改行",
                 CoverLetterValues(("PersonName", "山田\r\n太郎"), ("Address", "東京都\r\n千代田区")),
             };
             yield return new object[]
             {
-                "空白を含まない長いURL(文字単位で折り返す)",
+                "空白を含まない長いURL",
                 CoverLetterValues(("Remarks", "https://example.com/" + new string('a', 150) + "?query=1")),
             };
             yield return new object[]
@@ -194,12 +194,40 @@ namespace Utsushi.Golden.Tests
 
         [Theory]
         [MemberData(nameof(AcceptedCoverLetterValues))]
-        public void 送付状は極端な差し込み値でもPDFになる(string scenario, Dictionary<string, string> values)
+        public void 送付状は極端な差し込み値でも例外にならず1ページのPDFになる(string scenario, Dictionary<string, string> values)
         {
             var layout = ComputeLayout(CoverLetter, values);
             Assert.True(layout.PageCount == 1, $"{scenario}: 1ページに収まるはず(実際 {layout.PageCount} ページ)");
 
             AssertPdf(Convert(CoverLetter, values));
+        }
+
+        [Fact]
+        public void 折り返さないセルの改行は表示せず1行につなげる()
+        {
+            var layout = ComputeLayout(CoverLetter, CoverLetterValues(("PersonName", "山田\r\n太郎")));
+
+            Assert.Contains("山田太郎", Texts(layout));
+        }
+
+        [Fact]
+        public void 空白を含まない長いURLは文字単位で折り返す()
+        {
+            var url = "https://example.com/" + new string('a', 150) + "?query=1";
+
+            var texts = Texts(ComputeLayout(CoverLetter, CoverLetterValues(("Remarks", url))));
+
+            // 備考の各行は連続した描画命令になる。先頭行から、つなげると URL 全体になるまでを集める。
+            var first = texts.FindIndex(t => t.StartsWith("https://example.com/", StringComparison.Ordinal));
+            Assert.True(first >= 0, "備考の先頭行が描画されるはず");
+            var lines = new List<string>();
+            for (var i = first; i < texts.Count && string.Concat(lines).Length < url.Length; i++)
+            {
+                lines.Add(texts[i]);
+            }
+
+            Assert.True(lines.Count >= 2, $"複数行に折り返されるはず(実際 {lines.Count} 行)");
+            Assert.Equal(url, string.Concat(lines));
         }
 
         [Fact]
@@ -215,9 +243,11 @@ namespace Utsushi.Golden.Tests
         public static IEnumerable<object[]> RejectedSubstitutionValues()
         {
             yield return new object[] { "タブ文字(表計算ソフトからのコピー)", "Address", "東京都千代田区\t千代田1-1-1" };
-            yield return new object[] { "ゼロ幅スペース", "PersonName", "山田​太郎" };
-            yield return new object[] { "BOM", "PersonName", "﻿山田太郎" };
-            yield return new object[] { "対になっていないサロゲート", "PersonName", "山田\uD842" };
+            yield return new object[] { "ゼロ幅スペース", "PersonName", "山田\u200B太郎" };
+            yield return new object[] { "BOM", "PersonName", "\uFEFF山田太郎" };
+
+            // 対になっていないサロゲートは xUnit がテストケースをシリアライズする際に U+FFFD へ化ける
+            // (Visual Studio のテストエクスプローラーで実行した場合)ため、別の [Fact] で確かめる。
         }
 
         [Theory]
@@ -228,7 +258,17 @@ namespace Utsushi.Golden.Tests
 
             var ex = Assert.Throws<InvalidSubstitutionValueException>(() => ComputeLayout(CoverLetter, values));
 
-            Assert.True(ex.Message.Contains(key, StringComparison.Ordinal), $"{scenario}: 置換キーがメッセージに含まれるはず: {ex.Message}");
+            Assert.True(ex.Target == key, $"{scenario}: 例外の Target は置換キー {key} のはず(実際 {ex.Target})");
+        }
+
+        [Fact]
+        public void 対になっていないサロゲートを含む差し込み値は例外で止まる()
+        {
+            var values = CoverLetterValues(("PersonName", "山田\uD842"));
+
+            var ex = Assert.Throws<InvalidSubstitutionValueException>(() => ComputeLayout(CoverLetter, values));
+
+            Assert.Equal("PersonName", ex.Target);
         }
 
         [Fact]
@@ -252,13 +292,17 @@ namespace Utsushi.Golden.Tests
         [Fact]
         public void 帳票定義に無い置換キーは例外で止まる()
         {
-            Assert.Throws<SubstitutionKeyNotFoundException>(
+            var ex = Assert.Throws<SubstitutionKeyNotFoundException>(
                 () => ComputeLayout(CoverLetter, CoverLetterValues(("CustomerNmae", "綴りを誤ったキー"))));
+
+            Assert.Equal("CustomerNmae", ex.Key);
         }
 
         [Fact]
         public void どのフォントにも無い絵文字は豆腐にせず例外で止まる()
         {
+            // 外字用の代替フォントの既定(同梱のBIZ UDPゴシック → IPAmj明朝)に絵文字が無いことに依存する。
+            // 既定の一覧に絵文字を持つフォントを加えた場合は、このテストを見直す。
             var values = CoverLetterValues(("PersonName", "山田 太郎 \U0001F647"));
 
             Assert.Throws<MissingGlyphException>(() => Convert(CoverLetter, values));
@@ -300,7 +344,8 @@ namespace Utsushi.Golden.Tests
             var texts = Texts(layout);
             Assert.DoesNotContain("原価(社外秘)", texts);
 
-            // 25行ごとに隠した行(No.25, 50, …)と、高さ0の行(No.11)は出ない
+            // 25行ごとに隠した行(No.25, 50, …)と、高さ0の行(No.11)は出ない。
+            // No. 以外の列は数量が1〜9、金額が「¥」付き、日付が「/」区切りのため、No. の値と文字列が一致しない。
             foreach (var hiddenNo in new[] { "11", "25", "50", "75", "100", "125", "150" })
             {
                 Assert.DoesNotContain(hiddenNo, texts);
@@ -340,12 +385,13 @@ namespace Utsushi.Golden.Tests
             // 先頭ページ番号5から数え、先頭ページだけ別のヘッダー/フッターを使う
             Assert.Contains("工程表(表紙ページ)", Texts(layout.Pages[0]));
             Assert.Contains("- 5 -", Texts(layout.Pages[0]));
+            // 総ページ数(&N)を最後のページの番号にすること(要件3.15)は Excel 実機との突き合わせが未実施。
             Assert.Contains("6 / 12", Texts(layout.Pages[1]));
         }
 
         // ---- 注文書: よく使われる Excel の機能 ----
 
-        private static readonly Dictionary<string, string> OrderFormValues = new()
+        private static readonly IReadOnlyDictionary<string, string> OrderFormValues = new Dictionary<string, string>
         {
             ["SupplierName"] = "株式会社サンプル文具オフィスサプライ東日本ロジスティクスセンター",
             ["OrderNo"] = "PO-2026-0001",
@@ -369,11 +415,11 @@ namespace Utsushi.Golden.Tests
             Assert.Contains("1,235千円", texts);      // #,##0,"千円"
             Assert.Contains("▲5", texts);             // 0;"▲"0
             Assert.Contains("0012", texts);           // 0000
-            Assert.Contains("2026年4月30日 (厳守)", texts); // リッチテキストは1つの書式の文字列になる
+            Assert.Contains("2026年4月30日 (厳守)", texts); // リッチテキストは1つの書式の文字列になる(ガイドに記載の既知の制限)
         }
 
         [Fact]
-        public void 注文書の画像は出力しグラフは既定の設定では黙って出力しない()
+        public void 注文書はunsupportedElementsがignoreなら画像だけを出力しグラフで止まらない()
         {
             var layout = ComputeLayout(OrderForm, OrderFormValues);
 
@@ -405,7 +451,7 @@ namespace Utsushi.Golden.Tests
                 var ex = Assert.Throws<UnsupportedWorkbookElementException>(
                     () => converter.ComputeLayout(OrderForm, input, OrderFormValues));
 
-                Assert.Contains("chart", ex.Message, StringComparison.Ordinal);
+                Assert.Equal("Chart", ex.ElementKind);
             }
             finally
             {
