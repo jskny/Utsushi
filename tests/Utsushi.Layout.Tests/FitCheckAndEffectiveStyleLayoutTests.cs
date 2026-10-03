@@ -308,6 +308,34 @@ namespace Utsushi.Layout.Tests
             Assert.Equal(FitIssueCollector.MaxIssues, collector.Issues.Count);
         }
 
+        [Fact]
+        public void 折り返し表示のセルの数値は折り返さずセルで切り取り収まらなければ検出する()
+        {
+            // Excel は数値を折り返さず、隣のセルへはみ出させもしない(要件14.3)。
+            var wrap = CellStyle.Default with { WrapText = true };
+            var layout = Compute(Sheet(null, ("A1", Text("見出し")), ("B1", Number("1234567890123456789", wrap))));
+
+            var page = Assert.Single(layout.Pages);
+            var number = Assert.Single(Texts(page), t => t.Text == "1234567890123456789");
+            Assert.NotNull(number.ClipRect);
+
+            // B1 のセルの矩形(列幅10文字、約56pt)で切り取り、左隣の A1 の見出しへは描かない。
+            Assert.True(number.ClipRect!.Value.Width < 60.0, "セルの矩形で切り取るはず");
+            Assert.True(number.ClipRect.Value.Left > 50.0, "A1 の上には描かないはず");
+
+            var issue = Assert.Single(layout.FitIssues);
+            Assert.Equal(FitIssueKind.NumberTooWide, issue.Kind);
+        }
+
+        [Fact]
+        public void 折り返し表示のセルの文字列は従来どおり折り返す()
+        {
+            var wrap = CellStyle.Default with { WrapText = true };
+            var page = Assert.Single(Compute(Sheet(null, ("A1", Text("ABCDEFGHIJABCDEF", wrap)))).Pages);
+
+            Assert.True(Texts(page).Count() >= 2);
+        }
+
         // --- 要件1.10: セルが無い位置の書式 -----------------------------------------
 
         [Fact]

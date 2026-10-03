@@ -253,13 +253,17 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
-        public void 折り返し表示のセルでも数値は折り返さない()
+        public void 帳票定義で折り返しを指定したセルに数値を設定しても行数の検証でエラーにならない()
         {
-            // A29:F33 は「折り返して全体を表示する」の結合セル(備考)。Excel は数値を折り返さない。
-            using var pdf = new Excel2Pdf(Invoice, FallbackFonts());
-            pdf.SetValue("A29", 12345678901234);
+            // 請求書の Remarks(A29)は overflow: wrap。文字列なら折り返し、行数が高さを超えるとエラー(要件2.14)になるが、
+            // 数値は折り返さない(Excel と同じ)。
+            using var pdf = new Excel2Pdf(Invoice, "invoice", TestPaths.SampleReportsRoot, FallbackFonts());
+            pdf.SetField("CustomerName", "株式会社テスト製作所 御中")
+               .SetField("InvoiceNo", "INV-0001")
+               .SetField("TotalAmount", "¥1,000")
+               .SetValue("A29", 1234.5);
 
-            Assert.Single(Texts(pdf), t => t.Contains("1234", StringComparison.Ordinal));
+            Assert.Single(Texts(pdf), t => t == "1234.5");
         }
 
         [Fact]

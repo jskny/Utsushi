@@ -1491,9 +1491,10 @@ namespace Utsushi.Layout
         /// はみ出し時の挙動を決定する。帳票定義で置換対象に指定された挙動が、セル書式より優先される。
         /// </summary>
         /// <remarks>
-        /// 数値は折り返さない(Excel は「折り返して全体を表示する」のセルでも数値を折り返さず、収まらなければ <c>####</c> などにする)。
-        /// 折り返しになる数値のセルははみ出し表示として1行で描く(要件14.3。呼び出し元が設定した数値を、差し込み値の折り返しの
-        /// 行数の検証(要件2.14)でエラーにしないため。収まらない数値は文字の収まりの確認(要件13)の NumberTooWide で分かる)。
+        /// 数値は折り返さない(Excel は「折り返して全体を表示する」のセルでも数値を折り返さず、はみ出させもせず、収まらなければ
+        /// <c>####</c> などにする)。折り返しになる数値のセルは切り取り表示として1行で描き、セルの外へは出さない(要件14.3。
+        /// 呼び出し元が設定した数値を、差し込み値の折り返しの行数の検証(要件2.14)でエラーにしないため。収まらない数値は
+        /// 文字の収まりの確認(要件13)の NumberTooWide で分かる。layout-fidelity-reviewer指摘)。
         /// </remarks>
         private OverflowBehavior ResolveOverflow(CellAddress address, CellStyle style, CellValueKind kind)
         {
@@ -1503,7 +1504,7 @@ namespace Utsushi.Layout
                     ? OverflowBehavior.Wrap
                     : style.ShrinkToFit ? OverflowBehavior.Shrink : OverflowBehavior.Overflow;
 
-            return behavior == OverflowBehavior.Wrap && kind == CellValueKind.Number ? OverflowBehavior.Overflow : behavior;
+            return behavior == OverflowBehavior.Wrap && kind == CellValueKind.Number ? OverflowBehavior.Clip : behavior;
         }
 
         /// <summary>
