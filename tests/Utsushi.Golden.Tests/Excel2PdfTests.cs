@@ -361,8 +361,69 @@ namespace Utsushi.Golden.Tests
         {
             using var stream = new MemoryStream(new byte[1001]);
 
-            var ex = Assert.Throws<InvalidExcelFileException>(() => Excel2Pdf.TemplateSource.FromStream(stream, limit: 1000));
+            var ex = Assert.Throws<InvalidExcelFileException>(() => Excel2Pdf.TemplateSource.FromStream(stream, "invoice", limit: 1000));
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
+            Assert.Equal("invoice", ex.ReportCode);
+
+            // シークできるストリームは、読み始める前に残りの長さで拒否する。
+            Assert.Equal(0, stream.Position);
+
+            // シークできないストリームも、読みながら上限を確かめる。ちょうど上限は受け付ける。
+            Assert.Throws<InvalidExcelFileException>(
+                () => Excel2Pdf.TemplateSource.FromStream(new NonSeekableStream(new byte[1001]), null, limit: 1000));
+            Excel2Pdf.TemplateSource.FromStream(new NonSeekableStream(new byte[1000]), null, limit: 1000);
+
+            Assert.Throws<InvalidExcelFileException>(() => Excel2Pdf.TemplateSource.FromBytes(new byte[1001], null, limit: 1000));
+        }
+
+        [Fact]
+        public void 引数が不正ならストリームを読み始めない()
+        {
+            using var stream = File.OpenRead(Invoice);
+
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(
+                stream, "invoice", TestPaths.SampleReportsRoot, new Excel2PdfOptions { SheetName = "請求書" }));
+            Assert.Throws<ArgumentNullException>(() => new Excel2Pdf(stream, "invoice", null!));
+
+            Assert.Equal(0, stream.Position);
+        }
+
+        [Fact]
+        public void シークできないストリームと途中の位置のストリームは現在位置から読む()
+        {
+            var content = File.ReadAllBytes(Invoice);
+            using (var pdf = new Excel2Pdf(new NonSeekableStream(content), FallbackFonts()))
+            {
+                Assert.Contains("請求書", Texts(pdf));
+            }
+
+            var withPrefix = new byte[content.Length + 3];
+            content.CopyTo(withPrefix, 3);
+            using var stream = new MemoryStream(withPrefix) { Position = 3 };
+            using var fromMiddle = new Excel2Pdf(stream, FallbackFonts());
+            Assert.Contains("請求書", Texts(fromMiddle));
+        }
+
+        [Fact]
+        public void 読み取れないストリームは引数のエラーにする()
+        {
+            var closed = new MemoryStream(File.ReadAllBytes(Invoice));
+            closed.Dispose();
+
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(closed, FallbackFonts()));
+        }
+
+        /// <summary>シークできないストリーム(ネットワークのストリームなど)。</summary>
+        private sealed class NonSeekableStream : MemoryStream
+        {
+            public NonSeekableStream(byte[] buffer)
+                : base(buffer)
+            {
+            }
+
+            public override bool CanSeek => false;
+
+            public override long Length => throw new NotSupportedException();
         }
 
         // ---- 要件14.11: シートの指定 ----
@@ -384,6 +445,18 @@ namespace Utsushi.Golden.Tests
             });
             Assert.Equal("表紙", cover.ComputeLayout(checkFit: false).SheetName);
             Assert.Contains("この表紙シートは印刷対象ではない", Texts(cover));
+
+            // 非表示のシートも、名前で指定すれば変換する(アクティブシートの自動選択では選ばない)。
+            using var hidden = new Excel2Pdf(OrderForm, new Excel2PdfOptions
+            {
+                Fonts = FontResolverOptions.AllowFallback(),
+                SheetName = "マスタ",
+            });
+            Assert.Equal("マスタ", hidden.ComputeLayout(checkFit: false).SheetName);
+            Assert.Contains("コピー用紙", Texts(hidden));
+
+            // 収まりの確認も指定したシートで行う。
+            Assert.NotNull(cover.CheckFit());
         }
 
         [Fact]
@@ -427,6 +500,24 @@ namespace Utsushi.Golden.Tests
 
             pdf.Clear("Z99");   // 設定していないセルは何もしない
             Assert.Throws<InvalidCellOverrideAddressException>(() => pdf.Clear("1A"));
+
+            pdf.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => pdf.Clear());
+            Assert.Throws<ObjectDisposedException>(() => pdf.ToPdfBytes());
+        }
+
+        [Fact]
+        public void 置換キーの設定を1つずつ消せる()
+        {
+            using var pdf = new Excel2Pdf(Invoice, "invoice", TestPaths.SampleReportsRoot, FallbackFonts());
+            pdf.SetField("CustomerName", "株式会社テスト製作所 御中")
+               .SetField("InvoiceNo", "INV-0001")
+               .SetField("TotalAmount", "¥1,000")
+               .SetField("Subject", "件名: 消す値");
+
+            pdf.ClearField("Subject").ClearField("NotSet");
+
+            Assert.DoesNotContain("件名: 消す値", Texts(pdf));
         }
 
         [Fact]
