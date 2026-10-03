@@ -111,6 +111,17 @@ namespace Utsushi.Substitution
                 return report;
             }
 
+            // 件数の上限(要件2.16)は、文字列の直接指定(ApplyCellOverrides)と合わせて数える。
+            var total = report.OverriddenCells.Count + numericOverrides.Count;
+            if (total > MaxCellOverrideCount)
+            {
+                throw new InvalidSubstitutionValueException(
+                    "cellOverrides",
+                    $"セル番地の直接指定が文字列・数値の合計で {total} 件あり、上限({MaxCellOverrideCount} 件)を超えています。",
+                    report.Definition.ReportCode,
+                    report.Sheet.Name);
+            }
+
             var asText = new Dictionary<string, string>(numericOverrides.Count, StringComparer.Ordinal);
             foreach (var (addressText, value) in numericOverrides)
             {
@@ -120,7 +131,8 @@ namespace Utsushi.Substitution
                         addressText ?? string.Empty,
                         $"セル番地 '{addressText}' に指定した数値 {value.ToString(CultureInfo.InvariantCulture)} はセルに表示できません。",
                         report.Definition.ReportCode,
-                        report.Sheet.Name);
+                        report.Sheet.Name,
+                        CellAddress.TryParse(addressText, out var invalidAt) ? invalidAt : null);
                 }
 
                 asText[addressText!] = value.ToString("R", CultureInfo.InvariantCulture);
@@ -135,15 +147,12 @@ namespace Utsushi.Substitution
             foreach (var (addressText, value) in numericOverrides)
             {
                 var address = CellAddress.Parse(addressText);
-                var style = cells[address].Style;
-                cells[address] = new CellModel(
+                var cell = cells[address];
+                var format = cell.Style.NumberFormat;
+                cells[address] = cell.WithNumber(
                     asText[addressText],
-                    CellValueKind.Number,
-                    style,
-                    Parsing.NumberFormatting.Format(value, style.NumberFormat))
-                {
-                    FormatColor = Parsing.NumberFormatting.ResolveColor(value, style.NumberFormat),
-                };
+                    Parsing.NumberFormatting.Format(value, format),
+                    Parsing.NumberFormatting.ResolveColor(value, format));
             }
 
             return overridden with { Sheet = sheet with { Cells = cells } };

@@ -58,6 +58,22 @@ namespace Utsushi.Substitution.Tests
         }
 
         [Fact]
+        public void 件数の上限は文字列の直接指定と合わせて数える()
+        {
+            var overridden = new HashSet<CellAddress>();
+            for (var i = 1; i <= CellSubstitutor.MaxCellOverrideCount; i++)
+            {
+                overridden.Add(new CellAddress(i, 1));
+            }
+
+            var report = Report(Definition(), Sheet(("A1", "x", null))) with { OverriddenCells = overridden };
+
+            var ex = Assert.Throws<InvalidSubstitutionValueException>(
+                () => _substitutor.ApplyNumericCellOverrides(report, new Dictionary<string, double> { ["B1"] = 1 }));
+            Assert.Equal("cellOverrides", ex.Target);
+        }
+
+        [Fact]
         public void 番地の検証は文字列の直接指定と同じ()
         {
             var report = Report(Definition(), Sheet(("A1", "x", null)));

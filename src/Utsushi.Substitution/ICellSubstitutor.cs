@@ -45,7 +45,8 @@ namespace Utsushi.Substitution
         /// <summary>
         /// セル番地(A1形式)を直接指定して、数値で上書きした新しい <see cref="ReportModel"/> を返す(要件14.3)。
         /// 対象のセルは数値のセルになり、セルの数値書式(要件4.8)と色の指定(要件4.12)で表示される。
-        /// 番地の検証・例外は <see cref="ApplyCellOverrides"/> と同じ。
+        /// 番地の検証・例外は <see cref="ApplyCellOverrides"/> と同じ。件数の上限は <see cref="ApplyCellOverrides"/> で上書きした
+        /// セルと合わせて数える。<see cref="ApplyCellOverrides"/> と同じセルを指定した場合は、後から適用したこちらの値になる。
         /// </summary>
         /// <param name="report">上書き前の帳票モデル。</param>
         /// <param name="numericOverrides">セル番地(A1形式) → 数値。NaN・無限大は不可。</param>

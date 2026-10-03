@@ -1041,7 +1041,9 @@
   - [x] 30.3 ファサード: `Excel2Pdf`(`SetText`/`SetValue`/`SetField`/`Save`/`CheckFit`/`Dispose`)と `Excel2PdfOptions`
     - _Requirements: 14.1, 14.2, 14.4, 14.5, 14.6, 14.7, 14.8, 14.9_
   - [x] 30.4 テスト(ユニット・サンプル帳票での変換)
-    - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.8_
-  - [x] 30.5 docs(ライブラリの使い方)を更新する
-    - _Requirements: 14.1_
-
+    - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.8, 14.9_
+  - [x] 30.5 docs(ライブラリの使い方・README)を更新する
+    - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.8, 14.9_
+  - [x] 30.6 レビュー対応: 数値を折り返さない、文字列・数値の直接指定の件数を合わせて数える、`SetValue(TimeSpan)`、空白の帳票コードを拒否する、
+        `CellModel.WithNumber`、ドキュメントの整合
+    - _Requirements: 2.16, 14.2, 14.3, 14.4_

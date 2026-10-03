@@ -77,7 +77,10 @@ namespace Utsushi
         /// </summary>
         /// <param name="xlsxPath">入力の Excel ファイルのパス。</param>
         /// <param name="converter">変換に使うコンバータ。</param>
-        /// <param name="reportCode">帳票コード。null の場合は帳票定義なしの変換。</param>
+        /// <param name="reportCode">
+        /// 帳票コード。null の場合は帳票定義なしの変換。帳票定義ありで使う場合は、帳票定義のルートを指定して作ったコンバータ
+        /// (<see cref="ReportPdfConverter.CreateDefault(string, FontResolverOptions?, PdfRenderOptions?)"/>)を渡す。
+        /// </param>
         /// <param name="options">
         /// 帳票定義なしの変換の文書名・最大数字幅。フォント・PDF出力の設定(<see cref="Excel2PdfOptions.Fonts"/>・
         /// <see cref="Excel2PdfOptions.Render"/>)はコンバータのものを使うため、指定するとエラー。
@@ -117,6 +120,11 @@ namespace Utsushi
                     "帳票定義ありの変換では、最大数字幅は帳票定義の maxDigitWidthPx を使います。"
                         + $"{nameof(Excel2PdfOptions.MaxDigitWidthPx)} は指定できません。",
                     nameof(options));
+            }
+
+            if (reportCode is not null && string.IsNullOrWhiteSpace(reportCode))
+            {
+                throw new ArgumentException("帳票コードが空です。帳票定義なしで変換する場合は null を渡してください。", nameof(reportCode));
             }
 
             XlsxPath = xlsxPath;
@@ -197,15 +205,50 @@ namespace Utsushi
             return this;
         }
 
-        /// <summary>セルに数値(金額など)を設定する。<see cref="SetValue(string, double)"/> と同じ。</summary>
+        /// <summary>
+        /// セルに数値(金額など)を設定する。<see cref="SetValue(string, double)"/> と同じ。Excel のセルの値と同じく
+        /// <see cref="double"/> で扱うため、有効数字が15桁を超える部分は丸められる。
+        /// </summary>
         public Excel2Pdf SetValue(string cell, decimal value) => SetValue(cell, (double)value);
 
-        /// <summary>セルに整数を設定する。<see cref="SetValue(string, double)"/> と同じ。</summary>
+        /// <summary>
+        /// セルに整数を設定する。<see cref="SetValue(string, double)"/> と同じ。<see cref="double"/> で扱うため、
+        /// 絶対値が 2^53 を超える整数は丸められる。
+        /// </summary>
         public Excel2Pdf SetValue(string cell, long value) => SetValue(cell, (double)value);
+
+        /// <summary>
+        /// セルに時間(経過時間・時刻)を設定する。日数をシリアル値として設定し、セルの時刻の書式(<c>h:mm</c>・<c>[h]:mm</c> など)で表示される。
+        /// </summary>
+        /// <param name="cell">セル番地(A1形式)。</param>
+        /// <param name="value">時間。負の値は不可。</param>
+        /// <exception cref="InvalidSubstitutionValueException">負の時間の場合(Excel は負の時刻を表示できない)。</exception>
+        public Excel2Pdf SetValue(string cell, TimeSpan value)
+        {
+            ThrowIfDisposed();
+            var address = ParseCell(cell);
+            if (value < TimeSpan.Zero)
+            {
+                throw new InvalidSubstitutionValueException(
+                    cell,
+                    $"セル {address} に設定した時間 {value} は負のため、Excel の時刻として表せません。",
+                    DocumentLabel,
+                    sheetName: null,
+                    address);
+            }
+
+            _cells[address] = value.TotalDays;
+            return this;
+        }
 
         /// <summary>
         /// セルに日時を設定する(要件14.3)。Excel のシリアル値(1900年日付システム)として設定し、セルの日付・時刻の書式で表示される。
         /// </summary>
+        /// <remarks>
+        /// 表示形式が「標準」のセルではシリアル値(例: 46113)のまま表示される(Excel で日付を入力したときのような表示形式の
+        /// 自動設定は行わない)。テンプレートのセルに日付の表示形式を設定しておくこと。<see cref="DateTime.Kind"/> は考慮せず、
+        /// 年月日・時刻をそのまま使う。時刻だけを設定する場合は <see cref="SetValue(string, TimeSpan)"/> を使う。
+        /// </remarks>
         /// <param name="cell">セル番地(A1形式)。</param>
         /// <param name="value">日時。1900年1月1日より前は不可。</param>
         /// <exception cref="InvalidSubstitutionValueException">1900年1月1日より前の日時の場合(要件14.4)。</exception>
@@ -263,6 +306,10 @@ namespace Utsushi
         /// </summary>
         /// <param name="pdfPath">保存先のパス。</param>
         /// <exception cref="UtsushiException">入力ファイル・帳票定義・設定した値・レイアウト・描画・書き込みのいずれかで失敗した場合。</exception>
+        /// <exception cref="NotSupportedException">
+        /// 渡したコンバータの <see cref="Substitution.ICellSubstitutor"/> が数値の直接指定に対応しておらず、<see cref="SetValue(string, double)"/>
+        /// などで数値を設定した場合(既定のコンバータでは起きない)。
+        /// </exception>
         public void Save(string pdfPath)
         {
             ThrowIfDisposed();

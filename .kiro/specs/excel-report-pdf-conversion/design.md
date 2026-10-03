@@ -1023,24 +1023,33 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
 
 ```csharp
 using var pdf = new Utsushi.Excel2Pdf("input.xlsx");                       // 帳票定義なし(要件12)
-// new Excel2Pdf("input.xlsx", "invoice", "samples/reports")               // 帳票定義あり
 pdf.SetText("C2", "Hello World");
-pdf.SetValue("D5", 123.5);          // double / decimal / DateTime。セルの表示形式で表示する
-pdf.SetField("CustomerName", "…");  // 帳票定義ありのときだけ(置換キー)
+pdf.SetValue("D5", 123.5);          // double / decimal / long / DateTime / TimeSpan。セルの表示形式で表示する
 pdf.Save("output.pdf");
+
+using var invoice = new Utsushi.Excel2Pdf("template.xlsx", "invoice", "samples/reports");   // 帳票定義あり
+invoice.SetField("CustomerName", "…");  // 置換キー(帳票定義ありのときだけ)
+invoice.SetValue("F12", 320000);
+invoice.Save("invoice.pdf");
 ```
 
 - ファサードの `ReportPdfConverter` を内部で使う薄い入口。設定した値を「正規化したセル番地 → 文字列または数値」の辞書に溜め、
   `Save`(ファイル・ストリーム)と `CheckFit` のたびに、文字列は `cellOverrides`(要件2.7)、数値は数値の直接指定として変換に渡す。
   同じセルへの再設定は辞書の上書きで最後の値になる(要件14.6)。セル番地は設定の時点で `CellAddress.TryParse` で検証し、
-  解釈できなければ `InvalidCellOverrideAddressException`(要件14.5)。数値の NaN・無限大、1900年より前の日時は
+  解釈できなければ `InvalidCellOverrideAddressException`(要件14.5)。数値の NaN・無限大、1900年より前の日時、負の時間は
   `InvalidSubstitutionValueException`(要件14.4)。
-- **数値の直接指定**: `ICellSubstitutor.ApplyNumericCellOverrides`(既定の実装は `NotSupportedException`。既存の実装を壊さない)。
+- **数値の直接指定**: `ICellSubstitutor.ApplyNumericCellOverrides`(既定の実装は `NotSupportedException`。既存の実装を壊さない。
+  独自の実装を持つコンバータを `Excel2Pdf` に渡して数値を設定すると `Save` でこの例外になる)。
   `CellSubstitutor` は、番地の検証・差し込みセルの記録などを文字列の直接指定(`ApplyCellOverrides`)と共通にしたうえで、
-  セルを数値のセル(`CellValueKind.Number`)に置き換え、セルの書式の数値書式で表示文字列と色を求める
+  件数の上限を文字列の直接指定(`ReportModel.OverriddenCells`)と合わせて数え、
+  セルを数値のセル(`CellModel.WithNumber`)に置き換え、セルの書式の数値書式で表示文字列と色を求める
   (Parsing の公開ヘルパー `NumberFormatting.Format` / `ResolveColor`。`NumberFormatter` と同じ規則)。
   日時は `DateTime.ToOADate` の値を、Excel の1900年うるう年の扱い(1900年3月1日より前は1日ずれる)に合わせてシリアル値にする。
-- コンストラクタはファイルを開かない(パスの null・空だけを確かめる)。`Save` のたびに入力ファイルを開き直す(要件14.8)。
+  時間(`TimeSpan`)は日数をそのままシリアル値にする。
+- **数値は折り返さない**: Layout の `ResolveOverflow` は、折り返し表示になる数値のセルをはみ出し表示として扱う(Excel は数値を
+  折り返さない)。設定した数値が差し込み値の折り返しの検証(要件2.14)でエラーにならないようにするためでもある。
+- コンストラクタは Excel ファイルを開かない(パス・帳票コードの空白とオプションの組み合わせだけを確かめる。自身でコンバータを作る場合は
+  フォント解決を準備する)。`Save` のたびに入力ファイルを開き直す(要件14.8)。
   フォント解決(`FontResolver`)は自身が作った `ReportPdfConverter` ごと `Dispose` で解放し、呼び出し元が渡したコンバータは解放しない
   (要件14.9。大量に発行する場合は1つのコンバータを使い回す)。
 

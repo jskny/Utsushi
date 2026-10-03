@@ -183,12 +183,13 @@ namespace Utsushi.Golden.Tests
             pdf.SetField("CustomerName", "株式会社テスト製作所 御中")
                .SetField("InvoiceNo", "INV-0001")
                .SetField("TotalAmount", "¥1,000")
-               .SetValue("F12", 1000);
+               .SetValue("F12", 4321);
 
             var texts = Texts(pdf);
 
             Assert.Contains("株式会社テスト製作所 御中", texts);
-            Assert.Contains("¥1,000", texts);
+            Assert.Contains("¥1,000", texts);   // 置換キー(文字列)
+            Assert.Contains("¥4,321", texts);   // セル番地の数値(F12 の表示形式 "¥"#,##0)
             Assert.Equal("invoice", pdf.ReportCode);
         }
 
@@ -249,6 +250,69 @@ namespace Utsushi.Golden.Tests
 
             using var converter = ReportPdfConverter.CreateDefault(FontResolverOptions.AllowFallback());
             Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, converter, options: FallbackFonts()));
+        }
+
+        [Fact]
+        public void 折り返し表示のセルでも数値は折り返さない()
+        {
+            // A29:F33 は「折り返して全体を表示する」の結合セル(備考)。Excel は数値を折り返さない。
+            using var pdf = new Excel2Pdf(Invoice, FallbackFonts());
+            pdf.SetValue("A29", 12345678901234);
+
+            Assert.Single(Texts(pdf), t => t.Contains("1234", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void 時間はシリアル値の日数として設定し負の時間はエラーにする()
+        {
+            using var pdf = new Excel2Pdf(Invoice, FallbackFonts());
+            pdf.SetValue("B28", TimeSpan.FromHours(36));
+
+            Assert.Contains("1.5", Texts(pdf));   // 表示形式が標準のセル
+            Assert.Throws<InvalidSubstitutionValueException>(() => pdf.SetValue("B28", TimeSpan.FromMinutes(-1)));
+        }
+
+        [Fact]
+        public void 保存のたびに入力ファイルを読み直す()
+        {
+            var input = Path.Combine(Path.GetTempPath(), "utsushi-test-" + Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                File.Copy(Invoice, input);
+                using var pdf = new Excel2Pdf(input, FallbackFonts());
+                Assert.Contains("請求書", Texts(pdf));
+
+                File.Copy(TestPaths.SampleTemplate("receipt"), input, overwrite: true);
+                Assert.Contains("領 収 書", Texts(pdf));
+            }
+            finally
+            {
+                File.Delete(input);
+            }
+        }
+
+        [Fact]
+        public void 保存に失敗したときは出力ファイルを残さない()
+        {
+            var output = Path.Combine(Path.GetTempPath(), "utsushi-test-" + Guid.NewGuid().ToString("N") + ".pdf");
+            using var pdf = new Excel2Pdf(Invoice, "invoice", TestPaths.SampleReportsRoot, FallbackFonts());
+
+            Assert.Throws<RequiredSubstitutionValueMissingException>(() => pdf.Save(output));
+            Assert.False(File.Exists(output));
+        }
+
+        [Fact]
+        public void 帳票定義のルートを持つコンバータを渡して帳票定義ありで使える()
+        {
+            using var converter = ReportPdfConverter.CreateDefault(TestPaths.SampleReportsRoot, FontResolverOptions.AllowFallback());
+            using var pdf = new Excel2Pdf(Invoice, converter, "invoice");
+            pdf.SetField("CustomerName", "株式会社テスト製作所 御中")
+               .SetField("InvoiceNo", "INV-0001")
+               .SetField("TotalAmount", "¥1,000");
+
+            pdf.Save(new MemoryStream());
+
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, converter, " "));
         }
 
         [Fact]

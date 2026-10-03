@@ -13,6 +13,9 @@ pdf.SetValue("D5", 123.5);   // セルの表示形式(通貨・日付など)で�
 pdf.Save("output.pdf");
 ```
 
+上の例は帳票定義なしの変換(ベストエフォート。未対応の要素は黙って出力されない)。登録済みの帳票は
+`new Utsushi.Excel2Pdf("template.xlsx", "invoice", "samples/reports")` のように帳票コードと帳票定義のルートを渡して使う。
+
 呼び出し元プロダクトからの利用方法(API・例外の扱い)は [`docs/ライブラリの使い方.md`](docs/ライブラリの使い方.md) を参照。NuGetパッケージとしての配布は行っておらず、ソースツリー内から `src/Utsushi/Utsushi.csproj` への `ProjectReference` を前提とする。
 
 帳票定義(`definition.json`)の書き方は [`docs/帳票定義スキーマ.md`](docs/帳票定義スキーマ.md) を参照。
