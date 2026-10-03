@@ -429,7 +429,8 @@ namespace Utsushi
             string? documentName,
             double? maxDigitWidthPx,
             IReadOnlyDictionary<string, double>? numericOverrides,
-            bool checkFit)
+            bool checkFit,
+            string? sheetName = null)
         {
             ValidateMaxDigitWidth(maxDigitWidthPx);
 
@@ -442,17 +443,17 @@ namespace Utsushi
             var readOptions = new WorkbookReadOptions(
                 UnsupportedElementBehavior.Ignore,
                 name,
-                SheetNameFilter: null,
-                ActiveSheetOnly: true);
+                SheetNameFilter: sheetName,
+                ActiveSheetOnly: sheetName is null);
 
             var workbook = _workbookReader.Read(xlsxStream, readOptions);
-            if (workbook.Sheets.Count != 1)
+            if (workbook.Sheets.Count != 1 || (sheetName is not null && workbook.Sheets[0].Name != sheetName))
             {
-                // IWorkbookReader の契約(ActiveSheetOnly なら1枚だけ返す)に反する実装が差し替えられた場合に、
-                // アクティブでないシートを黙って変換しないよう止める。
+                // IWorkbookReader の契約(ActiveSheetOnly・SheetNameFilter なら対象の1枚だけ返す)に反する実装が
+                // 差し替えられた場合に、対象でないシートを黙って変換しないよう止める。
                 throw new InvalidOperationException(
-                    $"{nameof(IWorkbookReader)} が {nameof(WorkbookReadOptions.ActiveSheetOnly)} を指定したのに "
-                    + $"{workbook.Sheets.Count} 枚のシートを返しました。");
+                    $"{nameof(IWorkbookReader)} が変換対象の1枚(" + (sheetName is null ? "アクティブシート" : $"シート '{sheetName}'")
+                    + $")ではなく {workbook.Sheets.Count} 枚のシートを返しました。");
             }
 
             var definition = ReportDefinition.CreateWithoutDefinition(

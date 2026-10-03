@@ -1047,3 +1047,5 @@
   - [x] 30.6 レビュー対応: 数値を折り返さない、文字列・数値の直接指定の件数を合わせて数える、`SetValue(TimeSpan)`、空白の帳票コードを拒否する、
         `CellModel.WithNumber`、ドキュメントの整合
     - _Requirements: 2.16, 14.2, 14.3, 14.4_
+  - [x] 30.7 バイト列・ストリームの入力と `ToPdfBytes`、帳票定義なしのシートの指定(`Excel2PdfOptions.SheetName`)、設定の消去(`Clear`)
+    - _Requirements: 14.10, 14.11, 14.12_

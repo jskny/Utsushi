@@ -1049,6 +1049,16 @@ invoice.Save("invoice.pdf");
 - **数値は折り返さない**: Layout の `ResolveOverflow` は、折り返し表示になる数値のセルを切り取り表示として扱う(Excel は数値を
   折り返さず、はみ出させもしない。はみ出し表示にすると、セル内に収める意図で折り返しを設定したセルの数値が隣のセルに重なるため。
   layout-fidelity-reviewer指摘)。設定した数値が差し込み値の折り返しの検証(要件2.14)でエラーにならないようにするためでもある。
+- **入力と出力(要件14.10)**: パスの代わりに `byte[]`・`Stream` を受け取るコンストラクタを持つ。内容は作成の時点で `byte[]` に
+  写して保持し(呼び出し元が後で配列を書き換えても影響しないよう複製する。ストリームは読み終えるが閉じない)、保存のたびに
+  読み取り専用の `MemoryStream` から変換する。上限は `MaxTemplateBytes`(100MB)で、超えると `InvalidExcelFileException`
+  (`Reason=TooLarge`)。帳票定義なしの文書名は、指定が無ければ空文字列(要件12.5のストリームの場合と同じ)。
+  `ToPdfBytes()` は `Save(Stream)` で `MemoryStream` に書き出した内容を返す。
+- **シートの指定(要件14.11)**: `Excel2PdfOptions.SheetName` を `ReportPdfConverter` の帳票定義なしの経路
+  (`ComputeLayoutWithoutDefinitionCore` の `sheetName`)へ渡し、`WorkbookReadOptions.SheetNameFilter` で読む
+  (`ActiveSheetOnly` は使わない)。シートが無ければ Parsing の `InvalidExcelFileException`(`Reason=NoWorksheet`。
+  ブック内のシート名を含む)。帳票定義ありでは `ArgumentException`。
+- **設定の消去(要件14.12)**: `Clear()` はセル番地と置換キーの設定をすべて、`Clear(cell)` は1セルの設定を消す。
 - コンストラクタは Excel ファイルを開かない(パス・帳票コードの空白とオプションの組み合わせだけを確かめる。自身でコンバータを作る場合は
   フォント解決を準備する)。`Save` のたびに入力ファイルを開き直す(要件14.8)。
   フォント解決(`FontResolver`)は自身が作った `ReportPdfConverter` ごと `Dispose` で解放し、呼び出し元が渡したコンバータは解放しない

@@ -319,6 +319,129 @@ namespace Utsushi.Golden.Tests
             Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, converter, " "));
         }
 
+        // ---- 要件14.10: バイト列・ストリームの入力、バイト列の出力 ----
+
+        [Fact]
+        public void バイト列から作りPDFをバイト列で受け取れる()
+        {
+            var content = File.ReadAllBytes(Invoice);
+            using var pdf = new Excel2Pdf(content, FallbackFonts());
+
+            // 作成の後で元の配列を書き換えても影響しない(作成の時点で複製する)。
+            Array.Clear(content, 0, content.Length);
+
+            pdf.SetText("A3", "株式会社テスト製作所 御中");
+            var bytes = pdf.ToPdfBytes();
+
+            Assert.Equal("%PDF", Encoding.ASCII.GetString(bytes, 0, 4));
+            Assert.Null(pdf.XlsxPath);
+            Assert.Equal(string.Empty, pdf.ComputeLayout(checkFit: false).ReportCode);   // 文書名の既定は空文字列(要件12.5)
+        }
+
+        [Fact]
+        public void ストリームから作るとストリームは読み終えるが閉じない()
+        {
+            using var stream = File.OpenRead(Invoice);
+            using var pdf = new Excel2Pdf(stream, "invoice", TestPaths.SampleReportsRoot, FallbackFonts());
+
+            Assert.True(stream.CanRead);
+            Assert.Equal(stream.Length, stream.Position);
+
+            pdf.SetField("CustomerName", "株式会社テスト製作所 御中")
+               .SetField("InvoiceNo", "INV-0001")
+               .SetField("TotalAmount", "¥1,000");
+
+            // 同じ内容から何度でも変換できる。
+            Assert.True(pdf.ToPdfBytes().Length > 0);
+            Assert.True(pdf.ToPdfBytes().Length > 0);
+        }
+
+        [Fact]
+        public void 上限を超える内容のストリームはエラーにする()
+        {
+            using var stream = new MemoryStream(new byte[1001]);
+
+            var ex = Assert.Throws<InvalidExcelFileException>(() => Excel2Pdf.TemplateSource.FromStream(stream, limit: 1000));
+            Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
+        }
+
+        // ---- 要件14.11: シートの指定 ----
+
+        private static readonly string OrderForm =
+            Path.Combine(TestPaths.EdgeCaseSamplesRoot, "edge-order-form", "template.xlsx");
+
+        [Fact]
+        public void 帳票定義なしではシート名を指定してアクティブシート以外を変換できる()
+        {
+            // edge-order-form は「表紙」「注文書」「マスタ(非表示)」の3シートで、アクティブシートは「注文書」。
+            using var active = new Excel2Pdf(OrderForm, FallbackFonts());
+            Assert.Equal("注文書", active.ComputeLayout(checkFit: false).SheetName);
+
+            using var cover = new Excel2Pdf(OrderForm, new Excel2PdfOptions
+            {
+                Fonts = FontResolverOptions.AllowFallback(),
+                SheetName = "表紙",
+            });
+            Assert.Equal("表紙", cover.ComputeLayout(checkFit: false).SheetName);
+            Assert.Contains("この表紙シートは印刷対象ではない", Texts(cover));
+        }
+
+        [Fact]
+        public void 存在しないシート名は保存の時点でブック内のシート名を含むエラーにする()
+        {
+            using var pdf = new Excel2Pdf(OrderForm, new Excel2PdfOptions
+            {
+                Fonts = FontResolverOptions.AllowFallback(),
+                SheetName = "請求書",
+            });
+
+            var ex = Assert.Throws<InvalidExcelFileException>(() => pdf.Save(new MemoryStream()));
+            Assert.Equal(InvalidExcelFileReason.NoWorksheet, ex.Reason);
+            Assert.Contains("注文書", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void 帳票定義ありではシート名を指定できない()
+        {
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(
+                Invoice, "invoice", TestPaths.SampleReportsRoot, new Excel2PdfOptions { SheetName = "請求書" }));
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { SheetName = " " }));
+        }
+
+        // ---- 要件14.12: 設定の消去 ----
+
+        [Fact]
+        public void 設定を消すとテンプレートの値に戻る()
+        {
+            using var pdf = new Excel2Pdf(Invoice, FallbackFonts());
+            pdf.SetText("A3", "一通目の宛先").SetValue("C8", 1000);
+
+            pdf.Clear("A3");
+            var afterOne = Texts(pdf);
+            Assert.DoesNotContain("一通目の宛先", afterOne);
+            Assert.Contains("株式会社サンプル商事 御中", afterOne);   // テンプレートの値
+            Assert.Contains("¥1,000", afterOne);                    // 消していないセルは残る
+
+            pdf.Clear();
+            Assert.DoesNotContain("¥1,000", Texts(pdf));
+
+            pdf.Clear("Z99");   // 設定していないセルは何もしない
+            Assert.Throws<InvalidCellOverrideAddressException>(() => pdf.Clear("1A"));
+        }
+
+        [Fact]
+        public void すべての設定を消すと置換キーの設定も消える()
+        {
+            using var pdf = new Excel2Pdf(Invoice, "invoice", TestPaths.SampleReportsRoot, FallbackFonts());
+            pdf.SetField("CustomerName", "株式会社テスト製作所 御中")
+               .SetField("InvoiceNo", "INV-0001")
+               .SetField("TotalAmount", "¥1,000");
+
+            pdf.Clear();
+
+            Assert.Throws<RequiredSubstitutionValueMissingException>(() => pdf.Save(new MemoryStream()));
+        }
+
         [Fact]
         public void 存在しない入力ファイルは保存の時点でエラーにする()
         {
