@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Utsushi.Core;
 
 namespace Utsushi.Layout.Model
@@ -27,10 +28,13 @@ namespace Utsushi.Layout.Model
     /// <param name="Kind">種類。</param>
     /// <param name="Cell">セル番地(結合セルは範囲の左上)。</param>
     /// <param name="PageNumber">そのセルが最初に現れるページの番号(1始まりの通し番号。ヘッダー/フッターの先頭ページ番号は反映しない)。</param>
-    /// <param name="Text">描画する文字列(折り返し表示では改行を含む元の文字列、それ以外は改行を除いた1行)。</param>
+    /// <param name="Text">
+    /// 描画する文字列(折り返し表示では改行を含む元の文字列、それ以外は改行を除いた1行)。宛名などの個人情報を含みうるため、
+    /// <paramref name="Message"/> には含めていない。ログに残すかどうかは呼び出し元で決める。
+    /// </param>
     /// <param name="IsSubstituted">置換キーまたはセル番地直接指定で値を置き換えたセルかどうか。</param>
     /// <param name="SubstitutionKey">置換キーで置き換えたセルなら、その置換キー。それ以外は null。</param>
-    /// <param name="Message">ログに残すための説明の文。</param>
+    /// <param name="Message">ログに残すための説明の文。セル番地・置換キー・対処を含み、セルの文字列そのものは含まない。</param>
     public sealed record FitIssue(
         FitIssueKind Kind,
         CellAddress Cell,
@@ -43,4 +47,11 @@ namespace Utsushi.Layout.Model
         /// <inheritdoc />
         public override string ToString() => Message;
     }
+
+    /// <summary>文字の収まりの確認(要件13)の結果。</summary>
+    /// <param name="Issues">収まらない箇所(セルが現れる順)。1件も無ければ空。</param>
+    /// <param name="IsTruncated">
+    /// 件数の上限(10,000件)に達し、それ以降の箇所を返していない場合は true。列幅の足りない大きな一覧表などで起きる。
+    /// </param>
+    public sealed record FitCheckResult(IReadOnlyList<FitIssue> Issues, bool IsTruncated);
 }

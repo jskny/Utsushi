@@ -21,10 +21,34 @@ namespace Utsushi.Layout
 
         public IReadOnlyList<FitIssue> Issues => _issues;
 
+        /// <summary>上限に達し、記録しなかった箇所があるかどうか。</summary>
+        public bool IsTruncated { get; private set; }
+
+        /// <summary>
+        /// この(セル, 種類)を記録するかどうか。既に記録済みなら false。上限に達していれば <see cref="IsTruncated"/> を立てて false。
+        /// 記録しないものの説明の文を組み立てずに済むよう、<see cref="Add"/> の前に呼ぶ。
+        /// </summary>
+        public bool Accepts(CellAddress cell, FitIssueKind kind)
+        {
+            if (_seen.Contains((cell, kind)))
+            {
+                return false;
+            }
+
+            if (_issues.Count >= MaxIssues)
+            {
+                IsTruncated = true;
+                return false;
+            }
+
+            return true;
+        }
+
         public void Add(FitIssue issue)
         {
-            if (_issues.Count < MaxIssues && _seen.Add((issue.Cell, issue.Kind)))
+            if (Accepts(issue.Cell, issue.Kind))
             {
+                _seen.Add((issue.Cell, issue.Kind));
                 _issues.Add(issue);
             }
         }

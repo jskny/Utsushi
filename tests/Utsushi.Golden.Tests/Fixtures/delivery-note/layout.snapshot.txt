@@ -1,11 +1,7 @@
 report=delivery-note sheet=納品書 pages=2
 
 ## page 1 paper=A4/Portrait size=595.28x841.89 scale=1 rows=1-53 cols=1-5
-fill   rect=[50.4,149.5 26.25x13.5] color=#FFDCE6F1
-fill   rect=[76.65,149.5 178.5x13.5] color=#FFDCE6F1
-fill   rect=[255.15,149.5 47.25x13.5] color=#FFDCE6F1
-fill   rect=[302.4,149.5 36.75x13.5] color=#FFDCE6F1
-fill   rect=[339.15,149.5 73.5x13.5] color=#FFDCE6F1
+fill   rect=[50.4,149.5 362.25x13.5] color=#FFDCE6F1
 line   from=(50.4,109) to=(302.4,109) color=#FF000000 width=0.75 dash=Solid
 line   from=(50.03,149.5) to=(77.03,149.5) color=#FF000000 width=0.75 dash=Solid
 line   from=(50.03,163) to=(77.03,163) color=#FF000000 width=0.75 dash=Solid
@@ -730,11 +726,7 @@ text   origin=(264.64,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=no
 text   origin=(499.56,817.87) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="サンプル"
 
 ## page 2 paper=A4/Portrait size=595.28x841.89 scale=1 rows=54-90 cols=1-5
-fill   rect=[50.4,149.5 26.25x13.5] color=#FFDCE6F1
-fill   rect=[76.65,149.5 178.5x13.5] color=#FFDCE6F1
-fill   rect=[255.15,149.5 47.25x13.5] color=#FFDCE6F1
-fill   rect=[302.4,149.5 36.75x13.5] color=#FFDCE6F1
-fill   rect=[339.15,149.5 73.5x13.5] color=#FFDCE6F1
+fill   rect=[50.4,149.5 362.25x13.5] color=#FFDCE6F1
 line   from=(50.4,109) to=(302.4,109) color=#FF000000 width=0.75 dash=Solid
 line   from=(50.03,149.5) to=(77.03,149.5) color=#FF000000 width=0.75 dash=Solid
 line   from=(50.03,163) to=(77.03,163) color=#FF000000 width=0.75 dash=Solid

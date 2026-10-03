@@ -145,6 +145,13 @@ namespace Utsushi.Parsing.OpenXml
                 return FormatGeneral(value);
             }
 
+            // 解釈できない書式は General 相当にフォールバックする。
+            return TryFormatSection(value, parsed, section, out var text) ? text : FormatGeneral(value);
+        }
+
+        /// <summary>選んだセクションで書式を適用する。解釈できない書式・書式で表せない値なら false。</summary>
+        private static bool TryFormatSection(double value, ParsedFormat parsed, FormatSection section, out string text)
+        {
             // セクションが複数あり負数セクションが選ばれた場合、値の絶対値に対して書式を適用する
             // (符号はセクション側のリテラル "-" が担うため)。
             // セクションが1つだけの場合は負号付きのまま渡し、NumericSection が出力全体の先頭に負号を付ける。
@@ -152,14 +159,15 @@ namespace Utsushi.Parsing.OpenXml
 
             try
             {
-                return section.Kind == SectionKind.DateTime
+                text = section.Kind == SectionKind.DateTime
                     ? FormatDateTime(target, section.Text)
                     : section.Numeric!.Format(target);
+                return true;
             }
             catch (Exception ex) when (ex is FormatException or ArgumentException or OverflowException)
             {
-                // 解釈できない書式は General 相当にフォールバックする。
-                return FormatGeneral(value);
+                text = string.Empty;
+                return false;
             }
         }
 
@@ -176,8 +184,15 @@ namespace Utsushi.Parsing.OpenXml
                 return null;
             }
 
-            var section = GetParsedFormat(formatCode!).Select(value);
-            return section is null || section.Kind == SectionKind.General ? null : section.Color;
+            var parsed = GetParsedFormat(formatCode!);
+            var section = parsed.Select(value);
+            if (section?.Color is not { } color || section.Kind == SectionKind.General)
+            {
+                return null;
+            }
+
+            // FormatNumber が General の表示に戻す値(負の経過時間・明治より前の和暦など)は、色も付けない。
+            return TryFormatSection(value, parsed, section, out _) ? color : null;
         }
 
         /// <summary>

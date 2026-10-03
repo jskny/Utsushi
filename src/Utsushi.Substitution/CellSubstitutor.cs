@@ -129,9 +129,11 @@ namespace Utsushi.Substitution
             var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
             var overflowByCell = new Dictionary<CellAddress, OverflowBehavior>(report.OverflowByCell);
             var substitutedCells = new HashSet<CellAddress>(report.SubstitutedCells);
+            var overriddenCells = new HashSet<CellAddress>(report.OverriddenCells);
 
             foreach (var (address, replacement) in parsed)
             {
+                overriddenCells.Add(address);
                 var existing = sheet.GetCell(address);
                 cells[address] = existing is null
                     ? new CellModel(replacement, CellValueKind.Text, sheet.GetEffectiveStyle(address), replacement)
@@ -144,7 +146,7 @@ namespace Utsushi.Substitution
             }
 
             var updatedSheet = sheet with { Cells = cells };
-            return report with { Sheet = updatedSheet, OverflowByCell = overflowByCell, SubstitutedCells = substitutedCells };
+            return report with { Sheet = updatedSheet, OverflowByCell = overflowByCell, SubstitutedCells = substitutedCells, OverriddenCells = overriddenCells };
         }
 
         /// <summary>

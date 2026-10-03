@@ -527,12 +527,11 @@ namespace Utsushi.Golden.Tests
         {
             var page = Assert.Single(ComputeLayout(CoverLetter, CoverLetterValues()).Pages);
 
-            // 2行目(表題の下の帯)は A〜H 列の8セルぶん塗りつぶされる。
-            var bandFills = page.Commands.OfType<FillRectCommand>()
-                .GroupBy(f => (Math.Round(f.Rect.Top, 2), Math.Round(f.Rect.Height, 2)))
-                .Where(g => Math.Abs(g.Key.Item2 - 6.0) < 0.01)
-                .ToList();
-            Assert.Equal(8, Assert.Single(bandFills).Count());
+            // 2行目(表題の下の帯)は A〜H 列の全幅が1つの矩形で塗りつぶされる(1行目の表題 A1:H1 と同じ幅)。
+            var band = Assert.Single(page.Commands.OfType<FillRectCommand>(), f => Math.Abs(f.Rect.Height - 6.0) < 0.01);
+            var title = page.Commands.OfType<TextCommand>().Single(t => t.Text == "書類送付のご案内");
+            Assert.True(band.Rect.Left < title.Origin.X && band.Rect.Right > title.Origin.X);
+            Assert.True(band.Rect.Width > 400.0, $"A〜H列の全幅のはず(実際 {band.Rect.Width:0.#}pt)");
         }
 
         [Fact]
@@ -543,7 +542,9 @@ namespace Utsushi.Golden.Tests
             IReadOnlyList<FitIssue> issues;
             using (var input = File.OpenRead(Template(OrderForm)))
             {
-                issues = converter.CheckFit(OrderForm, input, OrderFormValues);
+                var result = converter.CheckFit(OrderForm, input, OrderFormValues);
+                Assert.False(result.IsTruncated);
+                issues = result.Issues;
             }
 
             // 狭い A 列の見出し「支払条件」が、右隣の B5「月末締め…」に重なる(検証レポート5-1)。
@@ -580,7 +581,7 @@ namespace Utsushi.Golden.Tests
 
             using (var input = File.OpenRead(Template(OrderForm)))
             {
-                Assert.Contains(converter.CheckFitWithoutDefinition(input), i => i.Cell == CellAddress.Parse("A5"));
+                Assert.Contains(converter.CheckFitWithoutDefinition(input).Issues, i => i.Cell == CellAddress.Parse("A5"));
             }
 
             using (var input = File.OpenRead(Template(CoverLetter)))

@@ -461,6 +461,10 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   - 文書名(要件12.5)は合成定義の `ReportCode` に入れる。これにより PDF タイトル・`&F`/`&Z`・例外の
     `ReportCode` に既存の経路のまま反映される。
 
+- **使用範囲の外の差し込みセル(要件1.11)**: `ReportModelBuilder.ValidateSubstitutionCells` は、置換キーの対象セルが
+  `SheetModel.GetUsedRange`(値か書式のあるセル・結合範囲の範囲)の外なら `ReportStructureMismatchException` とする。メッセージには
+  対処(そのセル自体に値か書式を設定する。行全体・列全体の書式は使用範囲に含まれない(要件1.10補足))を含める。
+
 ### 3. Substitution レイヤー (`Utsushi.Substitution`)
 
 - **責務**: 置換キーと値の辞書を受け取り、`ReportModel` 上の対象セルの値のみを書き換える。書式(スタイル)には一切触れない。
@@ -559,22 +563,37 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     印刷範囲外と同様にエラーにする。判定の結果はセルの番地・書式・(印刷範囲で共通の)拡大縮小率で決まるため、
     確かめ終えたセルは印刷範囲ごとに記録し、印刷タイトルの行/列として複数ページに繰り返し現れるセルを
     ページごとに検証し直さない。
-  - **文字の収まりの確認(要件13)**: `PageCommandBuilder.EmitText` で、描画と同じ内容矩形・行・フォントを使って
+  - **文字の収まりの確認(要件13)**: `PageCommandBuilder.EmitText` で、描画と同じフォント・配置を使って
     収まらない箇所を `FitIssueCollector` に記録する。描画命令は変えない。判定は次のとおり(幅は `MeasureTextWidth`)。
+    結合範囲は、改ページで一部しか見えないページでも、シート上の本来の大きさ(`SumBounded`)で判定する。見えている部分で判定すると、
+    範囲全体なら収まる文字を誤って報告するため(要件2.14の `EnsureSubstitutedTextFits` と同じ基準。code-reviewer指摘)。
     - 数値セル(`CellValueKind.Number`)で縮小表示でないもの: 1行の幅が内容矩形の幅を超えれば `NumberTooWide`。
-      数値はこの判定だけを行う(Excelは数値を折り返さず、はみ出させもせず `####` にするため)。
+      数値はこの判定だけを行う(Excelは数値を折り返さず、はみ出させもせず `####` にするため)。表示形式が標準(General)の数値は、
+      Excel が桁を減らすか指数で表示するため、説明の文をそれに合わせる(layout-fidelity-reviewer指摘)。
     - はみ出し表示(結合範囲でない): 文字がはみ出す側(左揃え → 右、右揃え → 左、中央揃え → 両側)の、同じ行で
       このページに並ぶ隣の列を、はみ出した幅に届くまで順に見る。値を持つセル(結合範囲ならアンカーの値)に
-      かかれば `OverlapsNeighborValue`。はみ出した先がページの本文の矩形の外に出れば `CutAtPageEdge`。
+      かかれば `OverlapsNeighborValue`。数式のセルは、結果が空文字でも Excel ははみ出しを止めるため、値があるものとして扱う
+      (layout-fidelity-reviewer指摘)。はみ出した先がページの本文の矩形の外に出れば `CutAtPageEdge`。
+      均等割り付け・両端揃え・繰り返しは描画が左揃えのため(上記「未決事項」)、Excel でははみ出さないこれらも描画どおり判定する。
     - 切り取り表示、およびはみ出し表示の結合範囲: 1行の幅が内容矩形の幅を超えれば `Clipped`。
-    - 折り返し表示: 行の数 × 行送りがセル(見えている矩形)の高さを超えれば `ExceedsCellHeight`。差し込みセルは
-      `EnsureSubstitutedTextFits` が先にエラーにするため、テンプレートの文字だけが対象になる。字面の4分の1の許容量は
-      `EnsureSubstitutedTextFits` と同じ考え方で、最後の行の字面の4分の1を超えて外に出る場合とする。
+    - 折り返し表示: 描画と同じ縦位置(`ResolveFirstBaselineY`)に置いた各行の字面が、字面の高さの4分の1を超えてセルの外に出れば
+      `ExceedsCellHeight`(`WrappedLinesFit`。要件2.14の `EnsureSubstitutedTextFits` と共通の判定)。差し込みセルは
+      `EnsureSubstitutedTextFits` が先にエラーにするため、テンプレートの文字だけが対象になる。
     記録は印刷範囲をまたいで1つの `FitIssueCollector` で行い、(セル, 種類) が同じものは最初に現れたページの1件にまとめる。
-    `ReportLayoutEngine.Compute` が `PagedLayout.FitIssues` に入れて返し、ファサードの `CheckFit` /
-    `CheckFitWithoutDefinition` が `ComputeLayout` と同じ経路で計算してこれだけを返す。PDFへの変換(`Convert`)も
-    同じ計算を行うが、結果は使わない(計測は描画で行う計測に1回足す程度で、変換の時間への影響は小さい)。
+    記録しないものの説明の文を組み立てないよう、判定の前に `Accepts` で確かめる。
+    説明の文(`FitIssue.Message`)にはセル番地・置換キー・対処だけを入れ、セルの文字列は入れない(宛名などの個人情報がログへ流れないように。
+    文字列は `FitIssue.Text`。security-reviewer指摘)。置換キーは、置換キーで差し込んだセルにだけ付ける(セル番地直接指定で上書きした
+    セル `ReportModel.OverriddenCells` は除く)。
+    `ReportLayoutEngine.Compute(report, checkFit)` が `PagedLayout.FitIssues` に入れて返す(`Compute(report)` は確認する)。
+    ファサードの `ComputeLayout` と `CheckFit` / `CheckFitWithoutDefinition` は確認し、PDFへの変換(`Convert` 等)は結果を使わないため
+    確認を省く(長い文字列のセルが多いと計測が変換の時間を大きく増やすため。security-reviewer指摘)。`IReportLayoutEngine.Compute(report, checkFit)` は
+    既定の実装を持つ(既存の実装を壊さない)。`CheckFit` はレイアウト計算までを行うため、PDFの描画で初めて分かるエラー(字形の無い文字の
+    `MissingGlyphException` など)は送出しない。
     ゴールデンのスナップショットにも出力し、検出結果の回帰を確かめる。
+    `PagedLayout.FitIssues`・`CellModel.FormatColor`・`SheetModel.RowStyles` 等は `init` プロパティのため record の等値比較に含まれる
+    (リスト・辞書は参照比較)。これらのモデルを等値比較で使う箇所は無い。
+  - **塗りつぶしの統合**: 同じ色の塗りつぶしが同じ行の高さで左右に接していれば1つの矩形にまとめる(`AddFill`)。
+    行全体・列全体の書式(要件1.10)で並ぶ塗りつぶしをセルの数だけの矩形にしない(PDFのサイズと、ビューアで境目に見える細い線を防ぐ)。
   - **ヘッダー/フッターの改行**: 複数行のヘッダー/フッターは未対応のため、改行を取り除いて1行に配置する
     (`HeaderFooterCommandBuilder.ScaleRuns`。以前は改行文字がそのまま描画され豆腐や空白になっていた)。
   - ページヘッダー/フッターの書式コード展開と配置(要件3.7〜3.9, 3.15, 3.16)。
@@ -1340,6 +1359,8 @@ public sealed record GroupCommand(
 | Parsing / `OpenXmlWorkbookReader` | `MaxPageBreaksPerSheet` | 1,026件(行・列それぞれ。Excel自体の上限) | `InvalidExcelFileException(TooLarge)` | 6.8 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxPrintAreasPerSheet` | 1,000個 | `InvalidExcelFileException(TooLarge)` | 6.8 |
 | Layout / `ReportLayoutEngine` | `MaxPrintRangeCells` | 2,000,000(印刷範囲ごとの(行数+タイトル行数)×(列数+タイトル列数)の合計) | `LayoutComputationException`(`SheetGrid`を作る前に判定) | 6.9 |
+| Layout / `StyledBlankPositionCounter` | `MaxStyledBlankPositions` | 200,000か所(文書全体で、ファイルにセルが無い位置を行・列・標準の書式で塗りつぶし・罫線を描いた回数。印刷タイトルの繰り返しも数える) | `LayoutComputationException` | 1.10(セルの描画命令の数は従来 `MaxCellsPerSheet` で抑えられていたが、`col` 要素1つで 16,384 列に効く行・列の書式は、小さなファイルで `MaxPrintRangeCells` に比例する描画命令・PDFサイズを作らせられる。security-reviewer指摘) |
+| Layout / `FitIssueCollector` | `MaxIssues` | 10,000件(文字の収まりの確認の結果) | 打ち切り、`PagedLayout.FitIssuesTruncated`(`FitCheckResult.IsTruncated`)を立てる(例外化なし) | 13.4 |
 | Layout / `ReportLayoutEngine` | `MaxPagesPerDocument` | 5,000ページ | `LayoutComputationException`(ページを組み立てる前に判定) | 6.9 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxSharedStringCount` | 200,000件 | `InvalidExcelFileException(TooLarge)` | 6.6 |
 | Parsing / `OpenXmlWorkbookReader` | `MaxCellsPerSheet` | 500,000(シート内セル数、および行番号の上限を兼ねる) | `InvalidExcelFileException(TooLarge)` | 6.6 |
