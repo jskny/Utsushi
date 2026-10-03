@@ -176,6 +176,16 @@ namespace Utsushi.Parsing.OpenXml
 
                     if (GetSheetPart(workbookPart, sheet, options.ReportCode) is not WorksheetPart worksheetPart)
                     {
+                        // 名前で指定したシートがグラフシートなどワークシートでない場合、「見つからない」とは別の理由として伝える
+                        // (シート名の一覧にはその名前が載るため、「見つかりません」では矛盾したメッセージになる)。
+                        if (options.SheetNameFilter is not null)
+                        {
+                            throw new InvalidExcelFileException(
+                                $"シート '{name}' はワークシートではない(グラフシートなど)ため、変換できません。",
+                                InvalidExcelFileReason.NoWorksheet,
+                                options.ReportCode);
+                        }
+
                         continue;
                     }
 

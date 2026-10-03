@@ -94,6 +94,71 @@ namespace Utsushi.Substitution
         }
 
         /// <inheritdoc />
+        public ReportModel ApplyNumericCellOverrides(ReportModel report, IReadOnlyDictionary<string, double> numericOverrides)
+        {
+            if (report is null)
+            {
+                throw new ArgumentNullException(nameof(report));
+            }
+
+            if (numericOverrides is null)
+            {
+                throw new ArgumentNullException(nameof(numericOverrides));
+            }
+
+            if (numericOverrides.Count == 0)
+            {
+                return report;
+            }
+
+            // 件数の上限(要件2.16)は、文字列の直接指定(ApplyCellOverrides)と合わせて数える。
+            var total = report.OverriddenCells.Count + numericOverrides.Count;
+            if (total > MaxCellOverrideCount)
+            {
+                throw new InvalidSubstitutionValueException(
+                    "cellOverrides",
+                    $"セル番地の直接指定が文字列・数値の合計で {total} 件あり、上限({MaxCellOverrideCount} 件)を超えています。",
+                    report.Definition.ReportCode,
+                    report.Sheet.Name);
+            }
+
+            var asText = new Dictionary<string, string>(numericOverrides.Count, StringComparer.Ordinal);
+            foreach (var (addressText, value) in numericOverrides)
+            {
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                {
+                    throw new InvalidSubstitutionValueException(
+                        addressText ?? string.Empty,
+                        $"セル番地 '{addressText}' に指定した数値 {value.ToString(CultureInfo.InvariantCulture)} はセルに表示できません。",
+                        report.Definition.ReportCode,
+                        report.Sheet.Name,
+                        CellAddress.TryParse(addressText, out var invalidAt) ? invalidAt : null);
+                }
+
+                asText[addressText!] = value.ToString("R", CultureInfo.InvariantCulture);
+            }
+
+            // 番地の検証(A1形式・同じセルの重複・結合範囲の内側)、差し込みセルの記録、overflow 指定の解除は
+            // 文字列の直接指定と同じ(要件14.2)。そのうえで、置き換えたセルを数値のセルにする。
+            var overridden = ApplyCellOverrides(report, asText);
+
+            var sheet = overridden.Sheet;
+            var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
+            foreach (var (addressText, value) in numericOverrides)
+            {
+                var address = CellAddress.Parse(addressText);
+                var cell = cells[address];
+                var format = cell.Style.NumberFormat;
+                cells[address] = cell.WithNumber(
+                    asText[addressText],
+                    Parsing.NumberFormatting.Format(value, format),
+                    Parsing.NumberFormatting.ResolveColor(value, format));
+            }
+
+            return overridden with { Sheet = sheet with { Cells = cells } };
+        }
+
+        /// <inheritdoc />
         public ReportModel ApplyCellOverrides(ReportModel report, IReadOnlyDictionary<string, string> cellOverrides)
         {
             if (report is null)

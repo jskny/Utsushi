@@ -44,6 +44,19 @@ namespace Utsushi.Parsing.Model
         /// 値のみを差し替えた複製を返す(書式は変更しない。要件2.2)。差し込んだ文字列は数値書式で表示しないため、
         /// 数値書式の色(<see cref="FormatColor"/>)は消す(要件4.12)。
         /// </summary>
+        /// <summary>
+        /// 数値に置き換えた複製を返す(書式は変更しない。要件14.3)。表示文字列と色は呼び出し元がセルの数値書式で求めて渡す。
+        /// </summary>
+        public CellModel WithNumber(string rawValue, string formattedValue, ArgbColor? formatColor) =>
+            this with
+            {
+                Value = rawValue,
+                ValueKind = CellValueKind.Number,
+                FormattedValue = formattedValue,
+                HasFormula = false,
+                FormatColor = formatColor,
+            };
+
         public CellModel WithText(string text) =>
             this with
             {

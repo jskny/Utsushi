@@ -45,7 +45,7 @@ Utsushi/
 │   ├── Utsushi.Substitution/       # 指定セルへの文字列置換ロジック
 │   ├── Utsushi.Layout/             # 改ページ・印刷範囲・列幅行高・フォントメトリクスに基づくレイアウト計算
 │   ├── Utsushi.Rendering/          # SkiaSharp を用いたPDF描画。Layoutレイヤーの計算結果のみを入力とする
-│   ├── Utsushi/                    # ファサード(ReportPdfConverter)。呼び出し元プロダクトはここだけを参照する
+│   ├── Utsushi/                    # ファサード(Excel2Pdf・ReportPdfConverter)。呼び出し元プロダクトはここだけを参照する
 │   └── Utsushi.Cli/                # コマンドライン入口。ファサードを呼ぶだけの薄い層
 ├── tests/
 │   ├── Utsushi.TestSupport/        # テストプロジェクト間で共有するヘルパー(製品コードからは参照されない)

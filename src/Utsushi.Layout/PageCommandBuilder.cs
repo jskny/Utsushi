@@ -772,7 +772,7 @@ namespace Utsushi.Layout
             if (!string.IsNullOrEmpty(text) && _report.SubstitutedCells.Contains(address)
                 && _validatedSubstitutedCells?.Contains(address) != true)
             {
-                EnsureSubstitutedTextFits(address, style, text!, rect, mergedRange);
+                EnsureSubstitutedTextFits(address, style, cell!.ValueKind, text!, rect, mergedRange);
                 _validatedSubstitutedCells?.Add(address);
             }
 
@@ -1066,7 +1066,7 @@ namespace Utsushi.Layout
             }
 
             var hAlign = ResolveHorizontalAlignment(style.HAlign, cell.ValueKind);
-            var overflow = ResolveOverflow(address, style);
+            var overflow = ResolveOverflow(address, style, cell.ValueKind);
 
             // 拡大縮小率はフォントサイズにも適用する(座標だけを縮めると文字が収まらなくなるため)。
             // 数値書式の色の指定(要件4.12)があれば、フォントの色の代わりに使う。
@@ -1381,7 +1381,7 @@ namespace Utsushi.Layout
         /// </para>
         /// </remarks>
         private void EnsureSubstitutedTextFits(
-            CellAddress address, CellStyle style, string text, RectPt visibleRect, CellRange? mergedRange)
+            CellAddress address, CellStyle style, CellValueKind kind, string text, RectPt visibleRect, CellRange? mergedRange)
         {
             var (widthPt, heightPt) = mergedRange is { } range
                 ? (SumBounded(range.FirstColumn, range.LastColumn, RawColumnWidthPt) * _scale,
@@ -1402,7 +1402,7 @@ namespace Utsushi.Layout
                     address);
             }
 
-            if (ResolveOverflow(address, style) != OverflowBehavior.Wrap)
+            if (ResolveOverflow(address, style, kind) != OverflowBehavior.Wrap)
             {
                 return;
             }
@@ -1490,19 +1490,21 @@ namespace Utsushi.Layout
         /// <summary>
         /// はみ出し時の挙動を決定する。帳票定義で置換対象に指定された挙動が、セル書式より優先される。
         /// </summary>
-        private OverflowBehavior ResolveOverflow(CellAddress address, CellStyle style)
+        /// <remarks>
+        /// 数値は折り返さない(Excel は「折り返して全体を表示する」のセルでも数値を折り返さず、はみ出させもせず、収まらなければ
+        /// <c>####</c> などにする)。折り返しになる数値のセルは切り取り表示として1行で描き、セルの外へは出さない(要件14.3。
+        /// 呼び出し元が設定した数値を、差し込み値の折り返しの行数の検証(要件2.14)でエラーにしないため。収まらない数値は
+        /// 文字の収まりの確認(要件13)の NumberTooWide で分かる。layout-fidelity-reviewer指摘)。
+        /// </remarks>
+        private OverflowBehavior ResolveOverflow(CellAddress address, CellStyle style, CellValueKind kind)
         {
-            if (_report.GetOverflowBehavior(address) is { } fromDefinition)
-            {
-                return fromDefinition;
-            }
+            var behavior = _report.GetOverflowBehavior(address) is { } fromDefinition
+                ? fromDefinition
+                : style.WrapText
+                    ? OverflowBehavior.Wrap
+                    : style.ShrinkToFit ? OverflowBehavior.Shrink : OverflowBehavior.Overflow;
 
-            if (style.WrapText)
-            {
-                return OverflowBehavior.Wrap;
-            }
-
-            return style.ShrinkToFit ? OverflowBehavior.Shrink : OverflowBehavior.Overflow;
+            return behavior == OverflowBehavior.Wrap && kind == CellValueKind.Number ? OverflowBehavior.Clip : behavior;
         }
 
         /// <summary>

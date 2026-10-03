@@ -16,7 +16,7 @@
 - `.kiro/specs/excel-report-pdf-conversion/` — 中核機能の要件定義書・設計書・実装タスクリスト
 - `docs/テンプレート作成ガイド.md` — Excelでテンプレートを作る担当者向けの注意点(フォント・差し込みセルの設定・再現できる機能/できない機能)
 - `docs/帳票定義スキーマ.md` — `definition.json` のスキーマ
-- `docs/ライブラリの使い方.md` — ファサード `Utsushi`(`ReportPdfConverter`)のAPI・例外の使い方
+- `docs/ライブラリの使い方.md` — ファサード `Utsushi`(簡易API `Excel2Pdf`・`ReportPdfConverter`)のAPI・例外の使い方
 - `docs/開発環境メモ.md` — Claude Code on the web実行環境で裏取りした環境固有の注意点(SDKセットアップ、日本語フォント、`pkill -f`の自己マッチ問題など)
 - `docs/エッジケース検証レポート.md` — エッジケース検証用サンプルによる検証の結果(利用者に影響するExcelとの差異と、呼び出し側への推奨事項)
 - `docs/実装設計失敗事例集.md` — 過去の不具合・設計ミス・検出漏れとその原因・対応・教訓の記録。実装・レビュー着手前に関連する節を確認する

@@ -2,9 +2,19 @@
 
 自社の帳票(Excel)を、レイアウトを崩さずPDF化するための専用変換ライブラリ。
 
-見積書・請求書・納品書など、あらかじめ登録された自社の既知の帳票テンプレートを対象に、特定セルの文字列を動的な値に置換した上でPDF化する。**汎用的なExcel→PDF変換は目指さない**。補助的に、社内で作ったExcelファイルを帳票定義なしでそのままPDF化することもできる(差し込みなし・見た目の一致は保証しないベストエフォート)。詳細な目的・スコープは [`.kiro/steering/product.md`](.kiro/steering/product.md) を参照。
+見積書・請求書・納品書など、あらかじめ登録された自社の既知の帳票テンプレートを対象に、特定セルの文字列を動的な値に置換した上でPDF化する。**汎用的なExcel→PDF変換は目指さない**。補助的に、社内で作ったExcelファイルを帳票定義なしでそのままPDF化することもできる(置換キーは使えずセル番地での書き換えのみ・見た目の一致は保証しないベストエフォート)。詳細な目的・スコープは [`.kiro/steering/product.md`](.kiro/steering/product.md) を参照。
 
 ## 使い方
+
+```csharp
+using var pdf = new Utsushi.Excel2Pdf("input.xlsx");
+pdf.SetText("C2", "Hello World");
+pdf.SetValue("D5", 123.5);   // セルの表示形式(通貨・日付など)で表示される
+pdf.Save("output.pdf");
+```
+
+上の例は帳票定義なしの変換(ベストエフォート。未対応の要素は黙って出力されない)。登録済みの帳票は
+`new Utsushi.Excel2Pdf("template.xlsx", "invoice", "samples/reports")` のように帳票コードと帳票定義のルートを渡して使う。
 
 呼び出し元プロダクトからの利用方法(API・例外の扱い)は [`docs/ライブラリの使い方.md`](docs/ライブラリの使い方.md) を参照。NuGetパッケージとしての配布は行っておらず、ソースツリー内から `src/Utsushi/Utsushi.csproj` への `ProjectReference` を前提とする。
 

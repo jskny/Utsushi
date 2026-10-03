@@ -1032,3 +1032,20 @@
       標準の表示形式の数値の説明を直す。件数の上限で打ち切ったことを `FitCheckResult.IsTruncated` で示す
     - 数値書式の色は、General に戻す値には付けない。使用範囲の外のエラーのメッセージに「そのセル自体に」を加える
     - _Requirements: 1.10, 1.11, 4.12, 6.9, 13.3, 13.4, 13.5_
+
+- [x] 30. セル番地を指定して値を書き換える簡易API(`Excel2Pdf`)
+  - [x] 30.1 requirements.md に要件14を追加し、design.md に設計を書く
+    - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.8, 14.9_
+  - [x] 30.2 Parsing・Substitution: 数値の書式の公開ヘルパー(`NumberFormatting`)と、数値の直接指定(`ICellSubstitutor.ApplyNumericCellOverrides`)
+    - _Requirements: 14.3_
+  - [x] 30.3 ファサード: `Excel2Pdf`(`SetText`/`SetValue`/`SetField`/`Save`/`CheckFit`/`Dispose`)と `Excel2PdfOptions`
+    - _Requirements: 14.1, 14.2, 14.4, 14.5, 14.6, 14.7, 14.8, 14.9_
+  - [x] 30.4 テスト(ユニット・サンプル帳票での変換)
+    - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.8, 14.9_
+  - [x] 30.5 docs(ライブラリの使い方・README)を更新する
+    - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.8, 14.9_
+  - [x] 30.6 レビュー対応: 数値を折り返さない、文字列・数値の直接指定の件数を合わせて数える、`SetValue(TimeSpan)`、空白の帳票コードを拒否する、
+        `CellModel.WithNumber`、ドキュメントの整合
+    - _Requirements: 2.16, 14.2, 14.3, 14.4_
+  - [x] 30.7 バイト列・ストリームの入力と `ToPdfBytes`、帳票定義なしのシートの指定(`Excel2PdfOptions.SheetName`)、設定の消去(`Clear`)
+    - _Requirements: 14.10, 14.11, 14.12_

@@ -1019,6 +1019,56 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
 - 失敗時に不完全なPDFを残さないため、いったんメモリ上に完全なPDFを作ってから出力先へ転送する。
   ファイル出力では同一ディレクトリ上の一時ファイルへ書いてから置換する(要件5.4)。
 
+### 6. 簡易API `Excel2Pdf`(要件14)
+
+```csharp
+using var pdf = new Utsushi.Excel2Pdf("input.xlsx");                       // 帳票定義なし(要件12)
+pdf.SetText("C2", "Hello World");
+pdf.SetValue("D5", 123.5);          // double / decimal / long / DateTime / TimeSpan。セルの表示形式で表示する
+pdf.Save("output.pdf");
+
+using var invoice = new Utsushi.Excel2Pdf("template.xlsx", "invoice", "samples/reports");   // 帳票定義あり
+invoice.SetField("CustomerName", "…");  // 置換キー(帳票定義ありのときだけ)
+invoice.SetValue("F12", 320000);
+invoice.Save("invoice.pdf");
+```
+
+- ファサードの `ReportPdfConverter` を内部で使う薄い入口。設定した値を「正規化したセル番地 → 文字列または数値」の辞書に溜め、
+  `Save`(ファイル・ストリーム)と `CheckFit` のたびに、文字列は `cellOverrides`(要件2.7)、数値は数値の直接指定として変換に渡す。
+  同じセルへの再設定は辞書の上書きで最後の値になる(要件14.6)。セル番地は設定の時点で `CellAddress.TryParse` で検証し、
+  解釈できなければ `InvalidCellOverrideAddressException`(要件14.5)。数値の NaN・無限大、1900年より前の日時、負の時間は
+  `InvalidSubstitutionValueException`(要件14.4)。
+- **数値の直接指定**: `ICellSubstitutor.ApplyNumericCellOverrides`(既定の実装は `NotSupportedException`。既存の実装を壊さない。
+  独自の実装を持つコンバータを `Excel2Pdf` に渡して数値を設定すると `Save` でこの例外になる)。
+  `CellSubstitutor` は、番地の検証・差し込みセルの記録などを文字列の直接指定(`ApplyCellOverrides`)と共通にしたうえで、
+  件数の上限を文字列の直接指定(`ReportModel.OverriddenCells`)と合わせて数え、
+  セルを数値のセル(`CellModel.WithNumber`)に置き換え、セルの書式の数値書式で表示文字列と色を求める
+  (Parsing の公開ヘルパー `NumberFormatting.Format` / `ResolveColor`。`NumberFormatter` と同じ規則)。
+  日時は `DateTime.ToOADate` の値を、Excel の1900年うるう年の扱い(1900年3月1日より前は1日ずれる)に合わせてシリアル値にする。
+  時間(`TimeSpan`)は日数をそのままシリアル値にする。
+- **数値は折り返さない**: Layout の `ResolveOverflow` は、折り返し表示になる数値のセルを切り取り表示として扱う(Excel は数値を
+  折り返さず、はみ出させもしない。はみ出し表示にすると、セル内に収める意図で折り返しを設定したセルの数値が隣のセルに重なるため。
+  layout-fidelity-reviewer指摘)。設定した数値が差し込み値の折り返しの検証(要件2.14)でエラーにならないようにするためでもある。
+- **入力と出力(要件14.10)**: パスの代わりに `byte[]`・`Stream` を受け取るコンストラクタを持つ。内容は作成の時点で `byte[]` に
+  写して保持し(呼び出し元が後で配列を書き換えても影響しないよう複製する。ストリームは読み終えるが閉じない)、保存のたびに
+  読み取り専用の `MemoryStream` から変換する。上限は `MaxTemplateBytes`(100MB)で、超えると `InvalidExcelFileException`
+  (`Reason=TooLarge`)。帳票定義なしの文書名は、指定が無ければ空文字列(要件12.5のストリームの場合と同じ)。
+  `ToPdfBytes()` は `Save(Stream)` で `MemoryStream` に書き出した内容を返す。
+- **シートの指定(要件14.11)**: `Excel2PdfOptions.SheetName` を `ReportPdfConverter` の帳票定義なしの経路
+  (`ComputeLayoutWithoutDefinitionCore` の `sheetName`)へ渡し、`WorkbookReadOptions.SheetNameFilter` で読む
+  (`ActiveSheetOnly` は使わない。非表示のシートも読む)。シートが無ければ Parsing の `InvalidExcelFileException`(`Reason=NoWorksheet`。
+  ブック内のシート名を含む)。名前が一致したシートがワークシートでない(グラフシートなど)場合も `NoWorksheet` だが、
+  「見つからない」ではなくワークシートでない旨のメッセージにする(`OpenXmlWorkbookReader`。帳票定義ありの `sheetName` も同じ)。
+  帳票定義ありでは `ArgumentException`。`ReportPdfConverter` の公開APIからは指定できない(簡易APIだけの設定)。
+- **設定の消去(要件14.12)**: `Clear()` はセル番地と置換キーの設定をすべて、`Clear(cell)` は1セル、`ClearField(key)` は1つの置換キーの設定を消す。
+- 入力の準備(`TemplateSource` の作成。ストリームの読み取りを含む)は、ほかの引数とオプションの検証を終えた後に行う(要件9.14)。
+  ストリームの読み取りの失敗(`IOException`)は `InvalidExcelFileException` に読み替え、読めないストリームは `ArgumentException` とする
+  (パスで渡す場合の `OpenInputFile` とそろえる)。
+- コンストラクタは Excel ファイルを開かない(パス・帳票コードの空白とオプションの組み合わせだけを確かめる。自身でコンバータを作る場合は
+  フォント解決を準備する)。`Save` のたびに入力ファイルを開き直す(要件14.8)。
+  フォント解決(`FontResolver`)は自身が作った `ReportPdfConverter` ごと `Dispose` で解放し、呼び出し元が渡したコンバータは解放しない
+  (要件14.9。大量に発行する場合は1つのコンバータを使い回す)。
+
 ## データモデル(概要)
 
 ```csharp
