@@ -231,6 +231,36 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
+        public void 共有したコンバータで同時に変換しても値が混ざらない()
+        {
+            // ASP.NET Core のように、1つのコンバータを共有し、リクエストごとに Excel2Pdf を作る使い方(docs「複数スレッドからの利用」)。
+            using var converter = ReportPdfConverter.CreateDefault(TestPaths.SampleReportsRoot, FontResolverOptions.AllowFallback());
+            var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
+
+            System.Threading.Tasks.Parallel.For(0, 40, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = 8 }, i =>
+            {
+                var name = $"顧客{i:000} 御中";
+                using var pdf = new Excel2Pdf(Invoice, converter, "invoice");
+                pdf.SetField("CustomerName", name)
+                   .SetField("InvoiceNo", $"INV-{i:000}")
+                   .SetField("TotalAmount", "¥1,000")
+                   .SetValue("F12", i * 1000);
+
+                Assert.True(pdf.ToPdfBytes().Length > 0);
+
+                var texts = Texts(pdf);
+                var expectedAmount = (i * 1000).ToString("\\¥#,##0", System.Globalization.CultureInfo.InvariantCulture);
+                if (!texts.Contains(name) || !texts.Contains($"INV-{i:000}") || !texts.Contains(expectedAmount)
+                    || texts.Any(t => t.StartsWith("顧客", StringComparison.Ordinal) && t != name))
+                {
+                    failures.Add($"{i}: {string.Join(",", texts.Where(t => t.StartsWith("顧客", StringComparison.Ordinal)))}");
+                }
+            });
+
+            Assert.Empty(failures);
+        }
+
+        [Fact]
         public void 破棄した後は使えない()
         {
             var pdf = new Excel2Pdf(Invoice, FallbackFonts());
