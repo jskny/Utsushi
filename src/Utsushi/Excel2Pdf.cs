@@ -28,7 +28,11 @@ namespace Utsushi
     /// </para>
     /// <para>
     /// パスで作った場合、コンストラクタはファイルを開かない。<see cref="Save(string)"/> のたびに入力ファイルを読み直すため、
-    /// 値を変えて何度でも保存できる。複数スレッドから同じインスタンスを同時に使わないこと。
+    /// 値を変えて何度でも保存できる。
+    /// </para>
+    /// <para>
+    /// スレッドセーフではない。設定した値をインスタンスに溜めるため、1つのインスタンスを複数スレッド(ASP.NET Core の複数のリクエストなど)
+    /// から使うと値が混ざる。リクエスト(帳票1件)ごとに作り、スレッドセーフな <see cref="ReportPdfConverter"/> を1つ共有して渡す。
     /// </para>
     /// </remarks>
     public sealed class Excel2Pdf : IDisposable

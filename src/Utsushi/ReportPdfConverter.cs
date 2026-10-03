@@ -26,6 +26,10 @@ namespace Utsushi
     /// 既定の構成は <see cref="CreateDefault"/> で得られる。
     /// このクラスは <see cref="FontResolver"/> を保持するため、使い終わったら <see cref="Dispose"/> すること。
     /// </para>
+    /// <para>
+    /// スレッドセーフであり、1つのインスタンスを複数スレッドから同時に使ってよい(ASP.NET Core ではシングルトンとして共有する)。
+    /// 変換ごとの状態は呼び出しごとに作られ、共有するのはフォント・文字幅・数値書式の解析結果のキャッシュだけである。
+    /// </para>
     /// </remarks>
     public sealed class ReportPdfConverter : IDisposable
     {
