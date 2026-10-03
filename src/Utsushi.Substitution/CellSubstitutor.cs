@@ -94,6 +94,62 @@ namespace Utsushi.Substitution
         }
 
         /// <inheritdoc />
+        public ReportModel ApplyNumericCellOverrides(ReportModel report, IReadOnlyDictionary<string, double> numericOverrides)
+        {
+            if (report is null)
+            {
+                throw new ArgumentNullException(nameof(report));
+            }
+
+            if (numericOverrides is null)
+            {
+                throw new ArgumentNullException(nameof(numericOverrides));
+            }
+
+            if (numericOverrides.Count == 0)
+            {
+                return report;
+            }
+
+            var asText = new Dictionary<string, string>(numericOverrides.Count, StringComparer.Ordinal);
+            foreach (var (addressText, value) in numericOverrides)
+            {
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                {
+                    throw new InvalidSubstitutionValueException(
+                        addressText ?? string.Empty,
+                        $"セル番地 '{addressText}' に指定した数値 {value.ToString(CultureInfo.InvariantCulture)} はセルに表示できません。",
+                        report.Definition.ReportCode,
+                        report.Sheet.Name);
+                }
+
+                asText[addressText!] = value.ToString("R", CultureInfo.InvariantCulture);
+            }
+
+            // 番地の検証(A1形式・同じセルの重複・結合範囲の内側)、差し込みセルの記録、overflow 指定の解除は
+            // 文字列の直接指定と同じ(要件14.2)。そのうえで、置き換えたセルを数値のセルにする。
+            var overridden = ApplyCellOverrides(report, asText);
+
+            var sheet = overridden.Sheet;
+            var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
+            foreach (var (addressText, value) in numericOverrides)
+            {
+                var address = CellAddress.Parse(addressText);
+                var style = cells[address].Style;
+                cells[address] = new CellModel(
+                    asText[addressText],
+                    CellValueKind.Number,
+                    style,
+                    Parsing.NumberFormatting.Format(value, style.NumberFormat))
+                {
+                    FormatColor = Parsing.NumberFormatting.ResolveColor(value, style.NumberFormat),
+                };
+            }
+
+            return overridden with { Sheet = sheet with { Cells = cells } };
+        }
+
+        /// <inheritdoc />
         public ReportModel ApplyCellOverrides(ReportModel report, IReadOnlyDictionary<string, string> cellOverrides)
         {
             if (report is null)

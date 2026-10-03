@@ -148,7 +148,7 @@ namespace Utsushi
                 throw new ArgumentNullException(nameof(output));
             }
 
-            var layout = ComputeLayoutCore(reportCode, xlsxStream, values, cellOverrides, checkFit: false);
+            var layout = ComputeLayoutCore(reportCode, xlsxStream, values, cellOverrides, numericOverrides: null, checkFit: false);
             RenderToStream(layout, output);
         }
 
@@ -186,7 +186,7 @@ namespace Utsushi
             ValidateOutputPath(outputPath);
 
             using var input = OpenInputFile(xlsxPath, reportCode);
-            var layout = ComputeLayoutCore(reportCode, input, values, cellOverrides, checkFit: false);
+            var layout = ComputeLayoutCore(reportCode, input, values, cellOverrides, numericOverrides: null, checkFit: false);
             RenderToFile(layout, outputPath);
         }
 
@@ -228,7 +228,7 @@ namespace Utsushi
 
             ValidateMaxDigitWidth(maxDigitWidthPx);
 
-            var layout = ComputeLayoutWithoutDefinitionCore(xlsxStream, cellOverrides, documentName, maxDigitWidthPx, checkFit: false);
+            var layout = ComputeLayoutWithoutDefinitionCore(xlsxStream, cellOverrides, documentName, maxDigitWidthPx, numericOverrides: null, checkFit: false);
             RenderToStream(layout, output);
         }
 
@@ -262,12 +262,12 @@ namespace Utsushi
             documentName ??= Path.GetFileNameWithoutExtension(xlsxPath);
 
             using var input = OpenInputFile(xlsxPath, documentName);
-            var layout = ComputeLayoutWithoutDefinitionCore(input, cellOverrides, documentName, maxDigitWidthPx, checkFit: false);
+            var layout = ComputeLayoutWithoutDefinitionCore(input, cellOverrides, documentName, maxDigitWidthPx, numericOverrides: null, checkFit: false);
             RenderToFile(layout, outputPath);
         }
 
         /// <summary>出力先パスを検証する(null・空・空白のみを弾く)。</summary>
-        private static void ValidateOutputPath(string outputPath)
+        internal static void ValidateOutputPath(string outputPath)
         {
             if (outputPath is null)
             {
@@ -299,7 +299,7 @@ namespace Utsushi
             }
         }
 
-        private static void ValidateMaxDigitWidth(double? maxDigitWidthPx)
+        internal static void ValidateMaxDigitWidth(double? maxDigitWidthPx)
         {
             if (maxDigitWidthPx is { } mdw && (mdw <= 0 || double.IsNaN(mdw) || double.IsInfinity(mdw)))
             {
@@ -315,7 +315,7 @@ namespace Utsushi
         /// <see cref="IPdfRenderer"/> の実装によらず <see cref="PdfRenderingException"/> に包み、
         /// ファサードの例外を <see cref="UtsushiException"/> 階層にそろえる(要件6.4)。
         /// </remarks>
-        private void RenderToStream(PagedLayout layout, Stream output)
+        internal void RenderToStream(PagedLayout layout, Stream output)
         {
             try
             {
@@ -332,7 +332,7 @@ namespace Utsushi
             }
         }
 
-        private void RenderToFile(PagedLayout layout, string outputPath)
+        internal void RenderToFile(PagedLayout layout, string outputPath)
         {
             try
             {
@@ -383,17 +383,19 @@ namespace Utsushi
             Stream xlsxStream,
             IReadOnlyDictionary<string, string> values,
             IReadOnlyDictionary<string, string>? cellOverrides = null) =>
-            ComputeLayoutCore(reportCode, xlsxStream, values, cellOverrides, checkFit: true);
+            ComputeLayoutCore(reportCode, xlsxStream, values, cellOverrides, numericOverrides: null, checkFit: true);
 
         /// <summary>
         /// <see cref="ComputeLayout"/> の本体。PDFへの変換では文字の収まりの確認の結果を使わないため、
         /// <paramref name="checkFit"/> を false にして文字幅の計測を省く(security-reviewer指摘)。
         /// </summary>
-        private PagedLayout ComputeLayoutCore(
+        /// <param name="numericOverrides">セル番地 → 数値の直接指定(要件14.3。<see cref="Excel2Pdf"/> が使う)。</param>
+        internal PagedLayout ComputeLayoutCore(
             string reportCode,
             Stream xlsxStream,
             IReadOnlyDictionary<string, string> values,
             IReadOnlyDictionary<string, string>? cellOverrides,
+            IReadOnlyDictionary<string, double>? numericOverrides,
             bool checkFit)
         {
             ValidateConvertArguments(reportCode, xlsxStream, values);
@@ -408,7 +410,7 @@ namespace Utsushi
                 definition.SheetName);
 
             var workbook = ReadWorkbook(xlsxStream, readOptions, definition);
-            return BuildLayout(workbook, definition, values, cellOverrides, checkFit);
+            return BuildLayout(workbook, definition, values, cellOverrides, numericOverrides, checkFit);
         }
 
         /// <summary>
@@ -419,13 +421,14 @@ namespace Utsushi
             IReadOnlyDictionary<string, string>? cellOverrides = null,
             string? documentName = null,
             double? maxDigitWidthPx = null) =>
-            ComputeLayoutWithoutDefinitionCore(xlsxStream, cellOverrides, documentName, maxDigitWidthPx, checkFit: true);
+            ComputeLayoutWithoutDefinitionCore(xlsxStream, cellOverrides, documentName, maxDigitWidthPx, numericOverrides: null, checkFit: true);
 
-        private PagedLayout ComputeLayoutWithoutDefinitionCore(
+        internal PagedLayout ComputeLayoutWithoutDefinitionCore(
             Stream xlsxStream,
             IReadOnlyDictionary<string, string>? cellOverrides,
             string? documentName,
             double? maxDigitWidthPx,
+            IReadOnlyDictionary<string, double>? numericOverrides,
             bool checkFit)
         {
             ValidateMaxDigitWidth(maxDigitWidthPx);
@@ -457,7 +460,7 @@ namespace Utsushi
                 workbook.Sheets[0].Name,
                 maxDigitWidthPx ?? ReportDefinition.EstimateMaxDigitWidthPx(workbook.DefaultFont.Name, workbook.DefaultFont.SizePt));
 
-            return BuildLayout(workbook, definition, NoValues, cellOverrides, checkFit);
+            return BuildLayout(workbook, definition, NoValues, cellOverrides, numericOverrides, checkFit);
         }
 
         /// <summary>
@@ -495,7 +498,7 @@ namespace Utsushi
             double? maxDigitWidthPx = null) =>
             ToFitCheckResult(ComputeLayoutWithoutDefinition(xlsxStream, cellOverrides, documentName, maxDigitWidthPx));
 
-        private static FitCheckResult ToFitCheckResult(PagedLayout layout) =>
+        internal static FitCheckResult ToFitCheckResult(PagedLayout layout) =>
             new(layout.FitIssues, layout.FitIssuesTruncated);
 
         private static readonly IReadOnlyDictionary<string, string> NoValues = new Dictionary<string, string>();
@@ -505,6 +508,7 @@ namespace Utsushi
             ReportDefinition definition,
             IReadOnlyDictionary<string, string> values,
             IReadOnlyDictionary<string, string>? cellOverrides,
+            IReadOnlyDictionary<string, double>? numericOverrides,
             bool checkFit)
         {
             var report = _modelBuilder.Build(workbook, definition);
@@ -513,6 +517,11 @@ namespace Utsushi
             if (cellOverrides is { Count: > 0 })
             {
                 substituted = _substitutor.ApplyCellOverrides(substituted, cellOverrides);
+            }
+
+            if (numericOverrides is { Count: > 0 })
+            {
+                substituted = _substitutor.ApplyNumericCellOverrides(substituted, numericOverrides);
             }
 
             try
@@ -552,7 +561,7 @@ namespace Utsushi
         /// 入力Excelファイルを開く。ファイルが無い/開けない場合も、<see cref="Convert"/>(ストリーム版)と
         /// 同様に <see cref="UtsushiException"/> 階層(Stage=Parsing)へ統一する(要件6.4, 6.5)。
         /// </summary>
-        private static FileStream OpenInputFile(string xlsxPath, string? reportCode)
+        internal static FileStream OpenInputFile(string xlsxPath, string? reportCode)
         {
             try
             {

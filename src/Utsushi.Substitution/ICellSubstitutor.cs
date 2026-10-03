@@ -41,5 +41,20 @@ namespace Utsushi.Substitution
         /// 指定すると値がモデルには反映されてもPDFには一切出力されない静かなデータ欠落になる。
         /// </exception>
         ReportModel ApplyCellOverrides(ReportModel report, IReadOnlyDictionary<string, string> cellOverrides);
+
+        /// <summary>
+        /// セル番地(A1形式)を直接指定して、数値で上書きした新しい <see cref="ReportModel"/> を返す(要件14.3)。
+        /// 対象のセルは数値のセルになり、セルの数値書式(要件4.8)と色の指定(要件4.12)で表示される。
+        /// 番地の検証・例外は <see cref="ApplyCellOverrides"/> と同じ。
+        /// </summary>
+        /// <param name="report">上書き前の帳票モデル。</param>
+        /// <param name="numericOverrides">セル番地(A1形式) → 数値。NaN・無限大は不可。</param>
+        /// <exception cref="InvalidSubstitutionValueException">数値が NaN・無限大の場合(要件14.4)。</exception>
+        /// <exception cref="System.NotSupportedException">
+        /// 既定の実装(この機能より前に作られた実装を壊さないため)。<c>CellSubstitutor</c> は対応している。
+        /// </exception>
+        ReportModel ApplyNumericCellOverrides(ReportModel report, IReadOnlyDictionary<string, double> numericOverrides) =>
+            throw new System.NotSupportedException(
+                $"{GetType().Name} は数値の直接指定({nameof(ApplyNumericCellOverrides)})に対応していません。");
     }
 }
