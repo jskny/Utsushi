@@ -169,7 +169,7 @@ namespace Utsushi
         }
 
         /// <param name="createSource">
-        /// 入力を準備する(帳票コード・文書名を受け取る)。ストリームを読み始める前に引数を検証し終えるよう(要件9.14)、
+        /// 入力を準備する(帳票コード・文書名を受け取る)。ストリームを読み始める前に引数を検証し終えるよう(要件6.14)、
         /// ほかの引数の検証の後で呼ぶ。
         /// </param>
         private Excel2Pdf(
@@ -207,19 +207,19 @@ namespace Utsushi
                 throw new ArgumentException("帳票コードが空です。帳票定義なしで変換する場合は null を渡してください。", nameof(reportCode));
             }
 
+            if (converter is not null && (_options.Fonts is not null || _options.Render is not null))
+            {
+                throw new ArgumentException(
+                    $"コンバータを渡す場合、フォント・PDF出力の設定はコンバータのものを使います。"
+                        + $"{nameof(Excel2PdfOptions.Fonts)}・{nameof(Excel2PdfOptions.Render)} は指定できません。",
+                    nameof(options));
+            }
+
             ReportCode = reportCode;
             _source = createSource(reportCode ?? _options.DocumentName);
 
             if (converter is not null)
             {
-                if (_options.Fonts is not null || _options.Render is not null)
-                {
-                    throw new ArgumentException(
-                        $"コンバータを渡す場合、フォント・PDF出力の設定はコンバータのものを使います。"
-                            + $"{nameof(Excel2PdfOptions.Fonts)}・{nameof(Excel2PdfOptions.Render)} は指定できません。",
-                        nameof(options));
-                }
-
                 _converter = converter;
                 _ownsConverter = false;
             }
@@ -679,7 +679,7 @@ namespace Utsushi
 
         /// <summary>
         /// 帳票定義なしの変換で、PDFのタイトル・ヘッダー/フッターのファイル名・エラー情報に使う名前(要件12.5)。
-        /// null の場合は入力ファイル名から拡張子を除いたもの。
+        /// null の場合は入力ファイル名から拡張子を除いたもの(バイト列・ストリームから作った場合は空文字列)。
         /// </summary>
         public string? DocumentName { get; init; }
 
