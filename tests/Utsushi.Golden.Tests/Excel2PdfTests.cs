@@ -415,6 +415,12 @@ namespace Utsushi.Golden.Tests
                 stream, "invoice", TestPaths.SampleReportsRoot, new Excel2PdfOptions { SheetName = "請求書" }));
             Assert.Throws<ArgumentNullException>(() => new Excel2Pdf(stream, "invoice", null!));
 
+            // コンバータを渡したうえでフォント・PDF出力の設定を指定する誤りも、読み始める前に検出する。
+            using var converter = ReportPdfConverter.CreateDefault(FontResolverOptions.AllowFallback());
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(stream, converter, options: FallbackFonts()));
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(
+                stream, converter, options: new Excel2PdfOptions { Render = PdfRenderOptions.Default }));
+
             Assert.Equal(0, stream.Position);
         }
 

@@ -1061,7 +1061,7 @@ invoice.Save("invoice.pdf");
   「見つからない」ではなくワークシートでない旨のメッセージにする(`OpenXmlWorkbookReader`。帳票定義ありの `sheetName` も同じ)。
   帳票定義ありでは `ArgumentException`。`ReportPdfConverter` の公開APIからは指定できない(簡易APIだけの設定)。
 - **設定の消去(要件14.12)**: `Clear()` はセル番地と置換キーの設定をすべて、`Clear(cell)` は1セル、`ClearField(key)` は1つの置換キーの設定を消す。
-- 入力の準備(`TemplateSource` の作成。ストリームの読み取りを含む)は、ほかの引数とオプションの検証を終えた後に行う(要件9.14)。
+- 入力の準備(`TemplateSource` の作成。ストリームの読み取りを含む)は、ほかの引数とオプションの検証を終えた後に行う(要件6.14)。
   ストリームの読み取りの失敗(`IOException`)は `InvalidExcelFileException` に読み替え、読めないストリームは `ArgumentException` とする
   (パスで渡す場合の `OpenInputFile` とそろえる)。
 - コンストラクタは Excel ファイルを開かない(パス・帳票コードの空白とオプションの組み合わせだけを確かめる。自身でコンバータを作る場合は
