@@ -106,7 +106,7 @@
   - _Requirements: 7.2, 7.3_
 - [x] 5.11 画像: 反転(`flipH`・`flipV`)を `ImageModel`・`GroupChildImage` に読み、`ImageFlip`・`ImageRotation` を記録する(反転したグループの中の画像を含む)
   - _Requirements: 7.2, 7.3_
-- [ ] 5.12 ヘッダー/フッター: `HeaderFooterCommandBuilder.ScaleRuns` で改行を取り除くときに `MultiLineHeaderFooter` を記録する
+- [x] 5.12 ヘッダー/フッター: `HeaderFooterCommandBuilder.ScaleRuns` で改行を取り除くときに `MultiLineHeaderFooter` を記録する
   - _Requirements: 7.2_
 - [ ] 5.13 ページの分割: `MergedCellAcrossPageBreak`・`DrawingAcrossPageBreak`・`MergedCellHiddenEdge` を記録する
   - _Requirements: 7.2, 7.3, 7.4_

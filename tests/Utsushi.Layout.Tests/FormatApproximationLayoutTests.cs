@@ -165,6 +165,24 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
+        public void 複数行のヘッダーとフッターを位置ごとに1件だけ記録する()
+        {
+            var headerFooter = new HeaderFooterModel(
+                OddHeader: "&L1行目\n2行目&R右", OddFooter: "&Cページ\n&P",
+                EvenHeader: null, EvenFooter: null,
+                FirstHeader: null, FirstFooter: null,
+                DifferentOddEven: false, DifferentFirst: false, ScaleWithDocument: true);
+            var sheet = UniformSheet(rows: 120, columns: 3, pageSetup: NoMarginA4() with { HeaderFooter = headerFooter });
+
+            var layout = Compute(sheet);
+
+            Assert.True(layout.Pages.Count > 1);
+            var items = layout.FormatApproximations.Where(a => a.Kind == FormatApproximationKind.MultiLineHeaderFooter).ToList();
+            Assert.Equal(new[] { "footer/center", "header/left" }, items.Select(i => i.Detail).OrderBy(d => d).ToArray());
+            Assert.All(items, i => Assert.Null(i.Location));
+        }
+
+        [Fact]
         public void 印刷範囲の外のセルは記録しない()
         {
             var layout = Compute(Sheet(("E1", Text("範囲外", CellStyle.Default with { HAlign = HorizontalAlignment.Distributed }))));

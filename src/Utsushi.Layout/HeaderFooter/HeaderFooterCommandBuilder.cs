@@ -88,7 +88,20 @@ namespace Utsushi.Layout.HeaderFooter
 
         private void AppendPart(List<DrawCommand> commands, HeaderFooterPart part, double fontScale, bool isHeader)
         {
-            var scaledRuns = ScaleRuns(part.Runs, fontScale);
+            var scaledRuns = ScaleRuns(part.Runs, fontScale, out var removedLineBreak);
+            if (removedLineBreak && _approximations is not null)
+            {
+                // 複数行のヘッダー/フッター(excel2pdf-consolidation 要件7.2(i))。ヘッダー/フッターと左・中央・右の別を要素の識別にする。
+                var position = (isHeader ? "header/" : "footer/") + part.Section.ToString().ToLowerInvariant();
+                _approximations.Add(
+                    FormatApproximationKind.MultiLineHeaderFooter,
+                    _sheetName,
+                    null,
+                    position,
+                    position,
+                    "複数行のヘッダー/フッターは、改行を取り除いて1行で描きます。");
+            }
+
             if (scaledRuns.Count == 0)
             {
                 return;
@@ -131,8 +144,9 @@ namespace Utsushi.Layout.HeaderFooter
             _ => _margins.LeftPt,
         };
 
-        private static List<HeaderFooterRun> ScaleRuns(IReadOnlyList<HeaderFooterRun> runs, double fontScale)
+        private static List<HeaderFooterRun> ScaleRuns(IReadOnlyList<HeaderFooterRun> runs, double fontScale, out bool removedLineBreak)
         {
+            removedLineBreak = false;
             var scaled = new List<HeaderFooterRun>(runs.Count);
             foreach (var original in runs)
             {
@@ -141,6 +155,7 @@ namespace Utsushi.Layout.HeaderFooter
                 var run = original.Text.IndexOf('\n') < 0 && original.Text.IndexOf('\r') < 0
                     ? original
                     : original with { Text = original.Text.Replace("\r", string.Empty).Replace("\n", string.Empty) };
+                removedLineBreak |= !ReferenceEquals(run, original);
 
                 if (run.Text.Length == 0)
                 {
