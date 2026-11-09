@@ -90,7 +90,7 @@
   - _Requirements: 7.4, 7.5_
 - [x] 5.3 ファサード: `Excel2PdfDiagnostics` に `FormatApproximations`・`FormatApproximationsTruncated`・`HasFormatApproximations` を加える。ゴールデンのスナップショットに近似の行を出す(この時点では差分なし)
   - _Requirements: 4.1, 4.3, 7.1_
-- [ ] 5.4 セルの配置: `Horizontal/VerticalAlignment`(読み済み)と `Indent`(読み済み)を記録する
+- [x] 5.4 セルの配置: `Horizontal/VerticalAlignment`(読み済み)と `Indent`(読み済み)を記録する
   - _Requirements: 7.2, 7.3_
 - [ ] 5.5 文字の回転: セルの `textRotation`・図形の文字の向き(`bodyPr/@vert`・`@rot`)を読み、`TextRotation` を記録する
   - _Requirements: 7.2, 7.3_

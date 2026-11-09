@@ -1072,6 +1072,7 @@ namespace Utsushi.Layout
 
             var hAlign = ResolveHorizontalAlignment(style.HAlign, cell.ValueKind);
             var overflow = ResolveOverflow(address, style, cell.ValueKind);
+            RecordTextApproximations(address, cell, style, hAlign, mergedRange);
 
             // 拡大縮小率はフォントサイズにも適用する(座標だけを縮めると文字が収まらなくなるため)。
             // 数値書式の色の指定(要件4.12)があれば、フォントの色の代わりに使う。
@@ -1450,6 +1451,59 @@ namespace Utsushi.Layout
             text.IndexOf('\n') < 0 && text.IndexOf('\r') < 0
                 ? text
                 : text.Replace("\r", string.Empty).Replace("\n", string.Empty);
+
+        /// <summary>
+        /// 文字を描くセルの書式の近似を記録する(excel2pdf-consolidation 要件7.2(a)(b)(d)(e))。診断のときだけ。
+        /// 位置は結合セルなら結合範囲、それ以外はそのセル。
+        /// </summary>
+        private void RecordTextApproximations(
+            CellAddress address, CellModel cell, CellStyle style, HorizontalAlignment resolvedHAlign, CellRange? mergedRange)
+        {
+            if (_approximations is null)
+            {
+                return;
+            }
+
+            var location = mergedRange ?? new CellRange(address.Row, address.Column, address.Row, address.Column);
+            var sheet = _sheet.Name;
+
+            var hMessage = style.HAlign switch
+            {
+                HorizontalAlignment.Justify or HorizontalAlignment.Distributed =>
+                    "横位置の両端揃え・均等割り付けは左揃えで描き、折り返しません(Excelは折り返します)。",
+                HorizontalAlignment.Fill => "横位置の繰り返しは、繰り返さずに左揃えで描きます。",
+                HorizontalAlignment.CenterContinuous => "横位置の選択範囲内で中央は、そのセルの中だけで中央揃えにします。",
+                _ => null,
+            };
+            if (hMessage is not null)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.HorizontalAlignment, sheet, location, null, "horizontal=" + style.HAlign, hMessage);
+            }
+
+            if (style.VAlign is VerticalAlignment.Justify or VerticalAlignment.Distributed)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.VerticalAlignment,
+                    sheet,
+                    location,
+                    null,
+                    "vertical=" + style.VAlign,
+                    "縦位置の両端揃え・均等割り付けは中央揃えで描き、折り返しません(Excelは折り返します)。");
+            }
+
+            if (style.Indent > 0
+                && resolvedHAlign is HorizontalAlignment.Right or HorizontalAlignment.Center or HorizontalAlignment.CenterContinuous)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.Indent,
+                    sheet,
+                    location,
+                    null,
+                    "indent=" + style.Indent.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    "右揃え・中央揃えのセルのインデントは、左側に足して描きます(Excelは右揃えでは右側に足します)。");
+            }
+        }
 
         /// <summary>
         /// 水平配置を決定する。<see cref="HorizontalAlignment.General"/> は値の型で既定が変わる。
