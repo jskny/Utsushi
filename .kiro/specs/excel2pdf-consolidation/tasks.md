@@ -131,11 +131,11 @@
 
 ## 7. CLI の作り直し(帳票定義の削除より前。`Excel2Pdf` だけで作れる)
 
-- [ ] 7.1 `tests/Utsushi.Cli.Tests` に `Utsushi.TestSupport` への参照を加える。`CommandLineOptions.Parse` を `check`・`convert` のコマンドと新しいオプションに作り直し、帳票定義のオプションを削除する。引数の解釈のテストを含む
+- [x] 7.1 `tests/Utsushi.Cli.Tests` に `Utsushi.TestSupport` への参照を加える。`CommandLineOptions.Parse` を `check`・`convert` のコマンドと新しいオプションに作り直し、帳票定義のオプションを削除する。引数の解釈のテストを含む
   - _Requirements: 5.4, 5.5, 5.6, 5.8_
-- [ ] 7.2 `Program.Run` と `convert` を実装する(`Main` は `Run` を呼ぶだけにする。終了コード0/2/3)。テストを含む
+- [x] 7.2 `Program.Run` と `convert` を実装する(`Main` は `Run` を呼ぶだけにする。終了コード0/2/3)。テストを含む
   - _Requirements: 5.3, 5.6, 5.7_
-- [ ] 7.3 `check` の出力(未対応要素・文字の収まらない箇所・フォントの代替・書式の近似(参考))と終了コード0/1を実装する。テストを含む
+- [x] 7.3 `check` の出力(未対応要素・文字の収まらない箇所・フォントの代替・書式の近似(参考))と終了コード0/1を実装する。テストを含む
   - _Requirements: 5.1, 5.2_
 
 ## 8. 帳票定義の仕組みの削除
