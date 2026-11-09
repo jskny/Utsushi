@@ -146,7 +146,7 @@
   - _Requirements: 1.3, 4.5_
 - [x] 8.2 `ReportPdfConverter` を internal の `ConversionPipeline` にし、帳票定義ありの経路と公開の変換メソッドを削除する。公開コンストラクタを使っていたテストを、エンジンの internal のコンストラクタに移す
   - _Requirements: 1.4_
-- [ ] 8.3 Substitution: 置換キー(`ICellSubstitutor.Apply`)・必須キー・未知のキーの検証と、そのテストを削除する
+- [x] 8.3 Substitution: 置換キー(`ICellSubstitutor.Apply`)・必須キー・未知のキーの検証と、そのテストを削除する
   - _Requirements: 1.3_
 - [ ] 8.4 Layout: `ValidateRequiredFieldsAreInPrintRanges`・`FindSubstitutionKey`・`OverflowByCell`・`PrintAreaOverride`・`FitIssue.SubstitutionKey`・`FitCheckResult` を削除する
       (`OverflowBehavior` は Layout の internal の列挙に移す。ゴールデンの `key=` の列が無くなる)。定義の `overflow` で確かめていた Layout のテストを、セルの書式に書き換えるか削除する

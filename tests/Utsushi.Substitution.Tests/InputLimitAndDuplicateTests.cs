@@ -17,10 +17,10 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 上限ちょうどの長さの差し込み値は受け付ける()
         {
-            var report = Report(Definition(Field("Name", "A1")), Sheet(("A1", "x", null)));
+            var report = Report(Definition(), Sheet(("A1", "x", null)));
             var value = new string('あ', CellSubstitutor.MaxValueLength);
 
-            var result = _substitutor.Apply(report, new Dictionary<string, string> { ["Name"] = value });
+            var result = _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = value });
 
             Assert.Equal(value, result.Sheet.GetCell(CellAddress.Parse("A1"))!.DisplayValue);
         }
@@ -28,13 +28,13 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 上限を超える長さの差し込み値はエラーになる()
         {
-            var report = Report(Definition(Field("Name", "A1")), Sheet(("A1", "x", null)));
+            var report = Report(Definition(), Sheet(("A1", "x", null)));
             var value = new string('あ', CellSubstitutor.MaxValueLength + 1);
 
             var ex = Assert.Throws<InvalidSubstitutionValueException>(
-                () => _substitutor.Apply(report, new Dictionary<string, string> { ["Name"] = value }));
+                () => _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = value }));
 
-            Assert.Equal("Name", ex.Target);
+            Assert.Equal("A1", ex.Target);
             Assert.Equal(CellAddress.Parse("A1"), ex.CellAddress);
             Assert.Equal(ProcessingStage.Substitution, ex.Stage);
             Assert.Contains(CellSubstitutor.MaxValueLength.ToString(System.Globalization.CultureInfo.InvariantCulture), ex.Message);
