@@ -117,7 +117,7 @@
 
 ## 6. ゴールデンテストの移行(帳票定義の削除より前)
 
-- [ ] 6.1 `tools/Utsushi.SampleGenerator` で、サンプル帳票の書き込むセルに `shrinkToFit`・`wrapText` を付けてテンプレートを再生成し、同じテンプレートを使う既存のテストが緑であることを確かめる
+- [x] 6.1 `tools/Utsushi.SampleGenerator` で、サンプル帳票の書き込むセルに `shrinkToFit`・`wrapText` を付けてテンプレートを再生成し、同じテンプレートを使う既存のテストが緑であることを確かめる
   - _Requirements: 6.2_
 - [ ] 6.2 `tools/edge-case-samples/generate.py` で、エッジケースのサンプルの書き込むセルに `shrinkToFit` を付けて再生成し、既存のテストが緑であることを確かめる
   - _Requirements: 6.2_

@@ -203,7 +203,7 @@ internal static class Program
         builder.SetNumber(5, 6, ToSerial(new DateTime(2026, 4, 30)), Style.DateValue);
 
         builder.Merge("A5:C5");
-        builder.SetText(5, 1, "件名: サンプル案件", Style.SectionLabel);
+        builder.SetText(5, 1, "件名: サンプル案件", Style.ShrinkSectionLabel);
 
         // 合計金額の強調表示
         builder.Merge("A8:B8");

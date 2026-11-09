@@ -28,6 +28,12 @@ internal static class SampleStyles
         public const uint CustomerName = 11;
         public const uint SectionLabel = 12;
         public const uint TableTextCentered = 13;
+
+        /// <summary>
+        /// 縮小して全体を表示する見出し(請求書の件名)。帳票定義の <c>overflow: "shrink"</c> の代わりに、テンプレートのセルの書式で
+        /// 縮小表示にする(excel2pdf-consolidation 要件6.2)。<see cref="SectionLabel"/> は「ご請求金額」などと共有しているため別に設ける。
+        /// </summary>
+        public const uint ShrinkSectionLabel = 14;
     }
 
     /// <summary>数値書式ID(組み込みと衝突しない164以降を使う)。</summary>
@@ -102,11 +108,12 @@ internal static class SampleStyles
             Xf(0, 0, 0, (int)JapaneseDateFormatId, HorizontalAlignmentValues.Left, VerticalAlignmentValues.Center), // 8
             Xf(4, 0, 3, (int)CurrencyFormatId, HorizontalAlignmentValues.Right, VerticalAlignmentValues.Center),    // 9
             Xf(3, 0, 0, 0, HorizontalAlignmentValues.Left, VerticalAlignmentValues.Top, wrap: true),  // 10: Note
-            Xf(2, 0, 2, 0, HorizontalAlignmentValues.Left, VerticalAlignmentValues.Bottom),           // 11: CustomerName
+            Xf(2, 0, 2, 0, HorizontalAlignmentValues.Left, VerticalAlignmentValues.Bottom, shrink: true), // 11: CustomerName(差し込む宛名。縮小して全体を表示する)
             Xf(2, 0, 0, 0, HorizontalAlignmentValues.Left, VerticalAlignmentValues.Center),           // 12: SectionLabel
-            Xf(0, 0, 1, 0, HorizontalAlignmentValues.Center, VerticalAlignmentValues.Center))         // 13: TableTextCentered
+            Xf(0, 0, 1, 0, HorizontalAlignmentValues.Center, VerticalAlignmentValues.Center),         // 13: TableTextCentered
+            Xf(2, 0, 0, 0, HorizontalAlignmentValues.Left, VerticalAlignmentValues.Center, shrink: true)) // 14: ShrinkSectionLabel
         {
-            Count = 14U,
+            Count = 15U,
         };
 
         return new Stylesheet(numberingFormats, fonts, fills, borders, cellStyleFormats, cellFormats);
@@ -146,7 +153,8 @@ internal static class SampleStyles
         int numberFormatId,
         HorizontalAlignmentValues? horizontal = null,
         VerticalAlignmentValues? vertical = null,
-        bool wrap = false)
+        bool wrap = false,
+        bool shrink = false)
     {
         var format = new CellFormat
         {
@@ -160,7 +168,7 @@ internal static class SampleStyles
             ApplyNumberFormat = numberFormatId != 0,
         };
 
-        if (horizontal is null && vertical is null && !wrap)
+        if (horizontal is null && vertical is null && !wrap && !shrink)
         {
             return format;
         }
@@ -179,6 +187,11 @@ internal static class SampleStyles
         if (wrap)
         {
             alignment.WrapText = true;
+        }
+
+        if (shrink)
+        {
+            alignment.ShrinkToFit = true;
         }
 
         format.Alignment = alignment;
