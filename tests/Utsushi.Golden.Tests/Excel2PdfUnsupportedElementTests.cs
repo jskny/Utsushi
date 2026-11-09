@@ -71,15 +71,6 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
-        public void 収まりの確認も保存と同じく未対応要素をエラーにする()
-        {
-            // CheckFit は移行期間だけの公開APIで、保存と同じエラーを返す(中核仕様の要件13.5)。診断の Check() だけが例外にしない。
-            using var pdf = new Excel2Pdf(OrderForm, new Excel2PdfOptions { Fonts = FontResolverOptions.AllowFallback() });
-
-            Assert.Throws<UnsupportedWorkbookElementException>(() => pdf.CheckFit());
-        }
-
-        [Fact]
         public void 既定値はエラーである()
         {
             Assert.Equal(UnsupportedElementPolicy.Error, new Excel2PdfOptions().UnsupportedElements);

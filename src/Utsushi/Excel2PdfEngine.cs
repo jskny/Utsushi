@@ -41,9 +41,8 @@ namespace Utsushi
             bool ownsResources = true)
         {
             FontResolver = fontResolver ?? throw new ArgumentNullException(nameof(fontResolver));
-            Converter = new ReportPdfConverter(
+            Pipeline = new ConversionPipeline(
                 workbookReader,
-                new ReportPdfConverter.NoReportDefinitionRepository(),
                 modelBuilder,
                 substitutor,
                 layoutEngine,
@@ -52,8 +51,8 @@ namespace Utsushi
             _ownsResources = ownsResources;
         }
 
-        /// <summary>変換のパイプライン(帳票定義なしの経路だけを使う)。</summary>
-        internal ReportPdfConverter Converter { get; }
+        /// <summary>変換の手順。</summary>
+        internal ConversionPipeline Pipeline { get; }
 
         /// <summary>フォントの解決(フォントの代替の問い合わせに使う)。</summary>
         internal FontResolver FontResolver { get; }
@@ -104,7 +103,7 @@ namespace Utsushi
             _disposed = true;
             if (_ownsResources)
             {
-                Converter.Dispose();
+                Pipeline.Dispose();
             }
         }
     }

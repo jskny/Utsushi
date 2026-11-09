@@ -10,7 +10,7 @@ namespace Utsushi.Rendering
     /// <remarks>
     /// 書き込み途中で異常終了しても、出力先には旧ファイル(または何も)が残る(要件5.4)。
     /// <see cref="IPdfRenderer"/> の実装によらず同じ保証を提供するため、<see cref="SkiaPdfRenderer"/>
-    /// とファサード(<c>Utsushi.ReportPdfConverter</c>)の両方から使う共通処理として切り出している。
+    /// と変換の手順(<c>Utsushi.ConversionPipeline</c>)の両方から使う共通処理として切り出している。
     /// </remarks>
     public static class AtomicFileWriter
     {

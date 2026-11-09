@@ -142,9 +142,9 @@
 
 外側(公開API)から内側(モデル)へ、置換キーの定義を参照しているもの(Substitution・Layout)を先に外す。
 
-- [ ] 8.1 `Excel2Pdf` の帳票コード付きのコンストラクタ・コンバータを受け取るコンストラクタ・`SetField`・`ClearField`・`ReportCode`・`CheckFit` を削除し、関係するテストを削除・書き換える
+- [x] 8.1 `Excel2Pdf` の帳票コード付きのコンストラクタ・コンバータを受け取るコンストラクタ・`SetField`・`ClearField`・`ReportCode`・`CheckFit` を削除し、関係するテストを削除・書き換える
   - _Requirements: 1.3, 4.5_
-- [ ] 8.2 `ReportPdfConverter` を internal の `ConversionPipeline` にし、帳票定義ありの経路と公開の変換メソッドを削除する。公開コンストラクタを使っていたテストを、エンジンの internal のコンストラクタに移す
+- [x] 8.2 `ReportPdfConverter` を internal の `ConversionPipeline` にし、帳票定義ありの経路と公開の変換メソッドを削除する。公開コンストラクタを使っていたテストを、エンジンの internal のコンストラクタに移す
   - _Requirements: 1.4_
 - [ ] 8.3 Substitution: 置換キー(`ICellSubstitutor.Apply`)・必須キー・未知のキーの検証と、そのテストを削除する
   - _Requirements: 1.3_
