@@ -5,20 +5,20 @@ using Utsushi.Parsing.Model;
 namespace Utsushi.ReportDefinitions.Model
 {
     /// <summary>
-    /// 帳票定義と結び付いた1帳票分の内部モデル。置換後もこの型のまま(値のみ更新)受け渡される。
+    /// 変換の設定と対象シートを組にした1文書分の内部モデル。値の書き込み後もこの型のまま(値のみ更新)受け渡される。
     /// </summary>
-    /// <param name="Definition">帳票定義。</param>
+    /// <param name="Settings">変換の設定。</param>
     /// <param name="Sheet">対象シート。</param>
     /// <param name="DefaultFont">
     /// ブックの標準フォント。セル書式を持たない描画(ヘッダー/フッター)の既定として使う。
     /// </param>
     public sealed record ReportModel(
-        ReportDefinition Definition,
+        ConversionSettings Settings,
         SheetModel Sheet,
         FontStyle DefaultFont)
     {
-        /// <summary>置換をまだ適用していない初期状態のモデルを作る。</summary>
-        public static ReportModel Create(ReportDefinition definition, SheetModel sheet, FontStyle? defaultFont = null) =>
+        /// <summary>値をまだ書き込んでいない初期状態のモデルを作る。</summary>
+        public static ReportModel Create(ConversionSettings definition, SheetModel sheet, FontStyle? defaultFont = null) =>
             new(definition, sheet, defaultFont ?? FontStyle.Default);
 
         /// <summary>

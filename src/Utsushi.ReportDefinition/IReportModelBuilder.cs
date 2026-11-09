@@ -14,14 +14,14 @@ namespace Utsushi.ReportDefinitions
         /// <exception cref="InvalidOperationException">
         /// 設定のシートがブックに無い場合(読み込みは対象のシートだけを返すため、通常は起きない)。
         /// </exception>
-        ReportModel Build(WorkbookModel workbook, ReportDefinition definition);
+        ReportModel Build(WorkbookModel workbook, ConversionSettings definition);
     }
 
     /// <inheritdoc />
     public sealed class ReportModelBuilder : IReportModelBuilder
     {
         /// <inheritdoc />
-        public ReportModel Build(WorkbookModel workbook, ReportDefinition definition)
+        public ReportModel Build(WorkbookModel workbook, ConversionSettings definition)
         {
             if (workbook is null)
             {

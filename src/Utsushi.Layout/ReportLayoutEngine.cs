@@ -63,7 +63,7 @@ namespace Utsushi.Layout
                 throw new ArgumentNullException(nameof(report));
             }
 
-            var definition = report.Definition;
+            var definition = report.Settings;
             var sheet = report.Sheet;
             var pageSetup = sheet.PageSetup;
 
@@ -206,7 +206,7 @@ namespace Utsushi.Layout
             double printableWidthPt,
             double printableHeightPt)
         {
-            var definition = report.Definition;
+            var definition = report.Settings;
             var sheet = report.Sheet;
             var pageSetup = sheet.PageSetup;
             var printTitles = pageSetup.PrintTitles;
@@ -424,7 +424,7 @@ namespace Utsushi.Layout
                     firstNumber + page.PageNumber - 1,
                     firstNumber + pages.Count - 1,
                     report.Sheet.Name,
-                    report.Definition.DocumentName,
+                    report.Settings.DocumentName,
                     timestamp,
                     report.DefaultFont,
                     IsFirstPage: page.PageNumber == 1);
@@ -454,7 +454,7 @@ namespace Utsushi.Layout
         /// 範囲を包含する1つの矩形として扱うと、範囲の間にある不要なセルまで出力されてしまうため、
         /// ここでは範囲を定義順のまま返す。
         /// </remarks>
-        private static IReadOnlyList<CellRange> ResolvePrintRanges(SheetModel sheet, ReportDefinition definition)
+        private static IReadOnlyList<CellRange> ResolvePrintRanges(SheetModel sheet, ConversionSettings definition)
         {
             var printAreas = sheet.PageSetup.PrintAreas;
             if (printAreas.Count > 0)
@@ -483,12 +483,12 @@ namespace Utsushi.Layout
             var titles = report.Sheet.PageSetup.PrintTitles;
             foreach (var cell in report.SubstitutedCells.OrderBy(c => c.Row).ThenBy(c => c.Column))
             {
-                if (IsHidden(report.Sheet, cell, report.Definition.MaxDigitWidthPx))
+                if (IsHidden(report.Sheet, cell, report.Settings.MaxDigitWidthPx))
                 {
                     throw new LayoutComputationException(
                         $"値を差し込んだセル {cell} が非表示の行または列(高さ・幅が0の行・列を含む)にあるため、"
                         + "PDFに出力されません。テンプレートの非表示設定・行の高さ・列幅またはセル番地を見直してください。",
-                        report.Definition.DocumentName,
+                        report.Settings.DocumentName,
                         report.Sheet.Name,
                         cell);
                 }
@@ -501,7 +501,7 @@ namespace Utsushi.Layout
                 throw new LayoutComputationException(
                     $"値を差し込んだセル {cell} が印刷範囲の外にあるため、PDFに出力されません。"
                     + "テンプレートの印刷範囲またはセル番地を見直してください。",
-                    report.Definition.DocumentName,
+                    report.Settings.DocumentName,
                     report.Sheet.Name,
                     cell);
             }

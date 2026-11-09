@@ -40,7 +40,7 @@ namespace Utsushi.Layout.Tests
         private static CellModel Number(string formatted, CellStyle? style = null) =>
             new("0", CellValueKind.Number, style ?? CellStyle.Default, formatted);
 
-        private PagedLayout Compute(SheetModel sheet, ReportDefinition? definition = null, params CellAddress[] substituted) =>
+        private PagedLayout Compute(SheetModel sheet, ConversionSettings? definition = null, params CellAddress[] substituted) =>
             _engine.Compute(ReportModel.Create(definition ?? Definition(), sheet) with
             {
                 SubstitutedCells = new HashSet<CellAddress>(substituted),

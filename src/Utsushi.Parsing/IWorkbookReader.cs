@@ -18,13 +18,13 @@ namespace Utsushi.Parsing
     }
 
     /// <summary>
-    /// ワークブック読み取りのオプション。帳票定義由来の設定を Parsing レイヤーへ渡すために使う。
+    /// ワークブック読み取りのオプション。変換の設定を Parsing レイヤーへ渡すために使う。
     /// </summary>
     /// <param name="DocumentName">エラーに含める文書名(判明している場合)。要件6.4。</param>
     /// <param name="SheetNameFilter">読み取るシートを限定する場合のシート名。null ならすべてのシートを読む。</param>
     /// <param name="ActiveSheetOnly">
     /// true の場合、ブックのアクティブシート(<c>workbookView/@activeTab</c>。非表示なら表示されている最初のシート)
-    /// 1枚だけを読む(帳票定義なしモード、要件12.2)。<see cref="SheetNameFilter"/> を指定した場合はそちらを優先する。
+    /// 1枚だけを読む(要件12.2)。<see cref="SheetNameFilter"/> を指定した場合はそちらを優先する。
     /// 実装は、true のとき返す <see cref="WorkbookModel.Sheets"/> を1枚だけにしなければならない。
     /// </param>
     /// <remarks>

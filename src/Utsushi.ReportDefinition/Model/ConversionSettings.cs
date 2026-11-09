@@ -12,7 +12,7 @@ namespace Utsushi.ReportDefinitions.Model
     /// 列幅(文字数単位)→ピクセル換算に用いる標準フォントの最大数字幅(96dpiのピクセル)。
     /// Excel の換算式が標準フォント依存であるため、呼び出し元が指定できるようにしている。
     /// </param>
-    public sealed record ReportDefinition(
+    public sealed record ConversionSettings(
         string DocumentName,
         string SheetName,
         double MaxDigitWidthPx)
@@ -26,7 +26,7 @@ namespace Utsushi.ReportDefinitions.Model
         /// <param name="maxDigitWidthPx">
         /// 列幅の換算に使う最大数字幅(ピクセル)。通常は <see cref="EstimateMaxDigitWidthPx"/> でブックの標準フォントから求める。
         /// </param>
-        public static ReportDefinition CreateWithoutDefinition(
+        public static ConversionSettings Create(
             string documentName, string sheetName, double maxDigitWidthPx = DefaultMaxDigitWidthPx) =>
             new(
                 documentName ?? throw new ArgumentNullException(nameof(documentName)),

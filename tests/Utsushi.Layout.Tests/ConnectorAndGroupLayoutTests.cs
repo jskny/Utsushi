@@ -23,7 +23,7 @@ namespace Utsushi.Layout.Tests
     {
         private readonly ReportLayoutEngine _engine = new(new ApproximateFontMetricsProvider());
 
-        private PagedLayout Compute(SheetModel sheet, ReportDefinition? definition = null) =>
+        private PagedLayout Compute(SheetModel sheet, ConversionSettings? definition = null) =>
             _engine.Compute(ReportModel.Create(definition ?? Definition(), sheet));
 
         // -- 要件10.9: 接続線 -------------------------------------------------
@@ -33,7 +33,7 @@ namespace Utsushi.Layout.Tests
         {
             const double columnWidthChars = 10.0;
             const double rowHeightPt = 20.0;
-            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ConversionSettings.DefaultMaxDigitWidthPx);
 
             var sheet = UniformSheet(
                 rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
@@ -93,7 +93,7 @@ namespace Utsushi.Layout.Tests
             // ChildOffset=(0,0)、ChildExtent=グループ自身の表示サイズ(=倍率1)のケース。
             const double columnWidthChars = 10.0;
             const double rowHeightPt = 20.0;
-            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ConversionSettings.DefaultMaxDigitWidthPx);
 
             var sheet = UniformSheet(
                 rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
@@ -399,7 +399,7 @@ namespace Utsushi.Layout.Tests
         {
             const double columnWidthChars = 10.0;
             const double rowHeightPt = 20.0;
-            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ConversionSettings.DefaultMaxDigitWidthPx);
 
             var sheet = UniformSheet(
                 rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
@@ -462,7 +462,7 @@ namespace Utsushi.Layout.Tests
         {
             const double columnWidthChars = 10.0;
             const double rowHeightPt = 20.0;
-            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ConversionSettings.DefaultMaxDigitWidthPx);
 
             var sheet = UniformSheet(
                 rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());

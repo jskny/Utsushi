@@ -158,7 +158,7 @@
   - _Requirements: 1.3_
 - [x] 8.7 `ReportCode` を `DocumentName` に改める(`UtsushiException`・`PagedLayout`・`WorkbookReadOptions`。ゴールデンの1行目が `document=` になる)
   - _Requirements: 1.6_
-- [ ] 8.8 `ReportDefinition` を `ConversionSettings` に縮めて名前を変える
+- [x] 8.8 `ReportDefinition` を `ConversionSettings` に縮めて名前を変える
   - _Requirements: 1.5_
 - [ ] 8.9 code-reviewer・layout-fidelity-reviewer・security-reviewer。`dotnet build --no-incremental -p:UtsushiVs2019Compiler=true` でも確かめる
   - _Requirements: 1.1_

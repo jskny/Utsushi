@@ -62,7 +62,7 @@ namespace Utsushi.Substitution
                 throw new InvalidSubstitutionValueException(
                     "cellOverrides",
                     $"セル番地の直接指定が文字列・数値の合計で {total} 件あり、上限({MaxCellOverrideCount} 件)を超えています。",
-                    report.Definition.DocumentName,
+                    report.Settings.DocumentName,
                     report.Sheet.Name);
             }
 
@@ -74,7 +74,7 @@ namespace Utsushi.Substitution
                     throw new InvalidSubstitutionValueException(
                         addressText ?? string.Empty,
                         $"セル番地 '{addressText}' に指定した数値 {value.ToString(CultureInfo.InvariantCulture)} はセルに表示できません。",
-                        report.Definition.DocumentName,
+                        report.Settings.DocumentName,
                         report.Sheet.Name,
                         CellAddress.TryParse(addressText, out var invalidAt) ? invalidAt : null);
                 }
@@ -118,7 +118,7 @@ namespace Utsushi.Substitution
                 return report;
             }
 
-            var definition = report.Definition;
+            var definition = report.Settings;
             var sheet = report.Sheet;
 
             if (cellOverrides.Count > MaxCellOverrideCount)
@@ -178,7 +178,7 @@ namespace Utsushi.Substitution
             string? value,
             string description,
             string target,
-            ReportDefinition definition,
+            ConversionSettings definition,
             string sheetName,
             CellAddress? cell)
         {
@@ -254,7 +254,7 @@ namespace Utsushi.Substitution
         /// セル番地文字列をパースし、結合セル範囲内の非アンカー位置を指定していないかを検証する(要件2.8, 2.9)。
         /// </summary>
         private static List<(CellAddress Address, string Replacement)> ParseAndValidateAddresses(
-            ReportDefinition definition, SheetModel sheet, IReadOnlyDictionary<string, string> cellOverrides)
+            ConversionSettings definition, SheetModel sheet, IReadOnlyDictionary<string, string> cellOverrides)
         {
             var parsed = new List<(CellAddress, string)>(cellOverrides.Count);
             var addressTextByCell = new Dictionary<CellAddress, string>(cellOverrides.Count);

@@ -314,7 +314,7 @@ namespace Utsushi.Layout.Tests
 
         // --- ヘルパー ----------------------------------------------------------------
 
-        private PagedLayout Compute(SheetModel sheet, ReportDefinition? definition = null) =>
+        private PagedLayout Compute(SheetModel sheet, ConversionSettings? definition = null) =>
             _engine.Compute(ReportModel.Create(definition ?? Definition(), sheet));
 
         /// <summary>指定したセルだけを持ち、行高・列幅はすべて既定値のシート(大規模な範囲を少ないメモリで表す)。</summary>

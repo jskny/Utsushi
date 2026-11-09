@@ -176,10 +176,10 @@ namespace Utsushi
                     + $")ではなく {workbook.Sheets.Count} 枚のシートを返しました。");
             }
 
-            var definition = ReportDefinition.CreateWithoutDefinition(
+            var definition = ConversionSettings.Create(
                 name,
                 workbook.Sheets[0].Name,
-                maxDigitWidthPx ?? ReportDefinition.EstimateMaxDigitWidthPx(workbook.DefaultFont.Name, workbook.DefaultFont.SizePt));
+                maxDigitWidthPx ?? ConversionSettings.EstimateMaxDigitWidthPx(workbook.DefaultFont.Name, workbook.DefaultFont.SizePt));
 
             onWorkbookRead?.Invoke(workbook);
             return BuildLayout(workbook, definition, cellOverrides, numericOverrides, checkFit);
@@ -187,7 +187,7 @@ namespace Utsushi
 
         private PagedLayout BuildLayout(
             WorkbookModel workbook,
-            ReportDefinition definition,
+            ConversionSettings definition,
             IReadOnlyDictionary<string, string>? cellOverrides,
             IReadOnlyDictionary<string, double>? numericOverrides,
             bool checkFit)

@@ -249,7 +249,7 @@ namespace Utsushi.Layout.Tests
         private static PageCommandBuilder Builder(ReportModel report, ISet<CellAddress> validated) =>
             new(
                 report,
-                SheetGrid.Create(report.Sheet, CellRange.Parse("A1:A1"), report.Definition.MaxDigitWidthPx),
+                SheetGrid.Create(report.Sheet, CellRange.Parse("A1:A1"), report.Settings.MaxDigitWidthPx),
                 new ApproximateFontMetricsProvider(),
                 1.0,
                 report.Sheet.PageSetup.Margins,

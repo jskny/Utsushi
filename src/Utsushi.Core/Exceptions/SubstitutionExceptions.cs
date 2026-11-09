@@ -20,7 +20,7 @@ namespace Utsushi.Core.Exceptions
             Target = target;
         }
 
-        /// <summary>不正な値が渡された置換キー、またはセル番地直接指定のセル番地の文字列。</summary>
+        /// <summary>不正な値を書き込んだセル番地の文字列(数の上限を超えた場合は引数の名前)。</summary>
         public string Target { get; }
     }
 

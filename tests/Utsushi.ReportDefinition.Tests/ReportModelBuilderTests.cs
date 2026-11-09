@@ -15,8 +15,8 @@ namespace Utsushi.ReportDefinition.Tests
     {
         private readonly ReportModelBuilder _builder = new();
 
-        private static ReportDefinitions.Model.ReportDefinition Definition(string sheetName) =>
-            new("test", sheetName, ReportDefinitions.Model.ReportDefinition.DefaultMaxDigitWidthPx);
+        private static ReportDefinitions.Model.ConversionSettings Definition(string sheetName) =>
+            new("test", sheetName, ReportDefinitions.Model.ConversionSettings.DefaultMaxDigitWidthPx);
 
         private static WorkbookModel Workbook(
             string sheetName, IEnumerable<string> cellAddresses, params CellRange[] mergedRanges)
@@ -52,7 +52,7 @@ namespace Utsushi.ReportDefinition.Tests
 
             var report = _builder.Build(workbook, definition);
 
-            Assert.Same(definition, report.Definition);
+            Assert.Same(definition, report.Settings);
             Assert.Equal("請求書", report.Sheet.Name);
         }
 

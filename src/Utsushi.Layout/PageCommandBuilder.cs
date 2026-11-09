@@ -470,7 +470,7 @@ namespace Utsushi.Layout
             var lastRowHidden = range.LastRow > range.FirstRow && SheetGrid.IsRowNotPrinted(_sheet, range.LastRow)
                 && ResolveRowEdge(range.LastRow, range.FirstColumn, range.LastColumn, b => b.Bottom).IsVisible;
             var lastColumnHidden = range.LastColumn > range.FirstColumn
-                && SheetGrid.IsColumnNotPrinted(_sheet, range.LastColumn, _report.Definition.MaxDigitWidthPx)
+                && SheetGrid.IsColumnNotPrinted(_sheet, range.LastColumn, _report.Settings.MaxDigitWidthPx)
                 && ResolveColumnEdge(range.LastColumn, range.FirstRow, range.LastRow, b => b.Right).IsVisible;
             if (lastRowHidden || lastColumnHidden)
             {
@@ -1056,7 +1056,7 @@ namespace Utsushi.Layout
 
         /// <summary>印刷範囲によらない、シート上の実際の列幅(pt)。非表示列は0。</summary>
         private double RawColumnWidthPt(int column) =>
-            SheetGrid.PrintedColumnWidthPt(_sheet, column, _report.Definition.MaxDigitWidthPx);
+            SheetGrid.PrintedColumnWidthPt(_sheet, column, _report.Settings.MaxDigitWidthPx);
 
         /// <summary>印刷範囲によらない、シート上の実際の行高(pt)。非表示行は0。</summary>
         private double RawRowHeightPt(int row) => SheetGrid.PrintedRowHeightPt(_sheet, row);
@@ -1364,7 +1364,7 @@ namespace Utsushi.Layout
         private void EmitText(
             CellAddress address, CellModel cell, CellStyle style, RectPt rect, string text, CellRange? mergedRange)
         {
-            var maxDigitWidthPx = _report.Definition.MaxDigitWidthPx;
+            var maxDigitWidthPx = _report.Settings.MaxDigitWidthPx;
             var paddingPt = ExcelUnitConverter.CellPaddingPoints * _scale;
             var indentPt = ExcelUnitConverter.IndentWidthToPoints(style.Indent, maxDigitWidthPx) * _scale;
 
@@ -1687,7 +1687,7 @@ namespace Utsushi.Layout
                 : (visibleRect.Width, visibleRect.Height);
 
             var paddingPt = ExcelUnitConverter.CellPaddingPoints * _scale;
-            var indentPt = ExcelUnitConverter.IndentWidthToPoints(style.Indent, _report.Definition.MaxDigitWidthPx) * _scale;
+            var indentPt = ExcelUnitConverter.IndentWidthToPoints(style.Indent, _report.Settings.MaxDigitWidthPx) * _scale;
             var contentWidthPt = widthPt - (paddingPt * 2) - indentPt;
 
             if (contentWidthPt <= 0 || heightPt <= 0)
@@ -1695,7 +1695,7 @@ namespace Utsushi.Layout
                 throw new LayoutComputationException(
                     $"セル {address} に値を差し込みましたが、セルの幅または高さが無いため、PDFに出力されません。"
                     + "テンプレートの列幅・行の高さを見直してください。",
-                    _report.Definition.DocumentName,
+                    _report.Settings.DocumentName,
                     _sheet.Name,
                     address);
             }
@@ -1719,7 +1719,7 @@ namespace Utsushi.Layout
                         address,
                         lineCount,
                         heightPt / _scale),
-                    _report.Definition.DocumentName,
+                    _report.Settings.DocumentName,
                     _sheet.Name,
                     address);
             }
@@ -1874,7 +1874,7 @@ namespace Utsushi.Layout
         }
 
         /// <summary>
-        /// はみ出し時の挙動を決定する。帳票定義で置換対象に指定された挙動が、セル書式より優先される。
+        /// はみ出し時の挙動を、セルの書式(折り返し・縮小)と値の種類から決定する。
         /// </summary>
         /// <remarks>
         /// 数値は折り返さない(Excel は「折り返して全体を表示する」のセルでも数値を折り返さず、はみ出させもせず、収まらなければ

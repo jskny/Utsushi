@@ -207,10 +207,8 @@ namespace Utsushi.Parsing.OpenXml
                 {
                     if (options.SheetNameFilter is { } filter)
                     {
-                        // フィルタで指定したシート名が一致しない場合。ファイル自体が壊れているのではなく
-                        // 帳票定義が期待するシート構成と実際のブックが一致しないだけのため、原因を
-                        // 特定できるよう実在するシート名を含める(呼び出し元がReportDefinition段階の
-                        // エラーへ読み替える際に利用する)。
+                        // 指定したシート名(Excel2PdfOptions.SheetName)がブックに無い場合。原因を特定できるよう、
+                        // 実在するシート名を含める。
                         var available = string.Join(", ", allSheetNames.Select(n => "'" + n + "'"));
                         throw new InvalidExcelFileException(
                             $"シート '{filter}' が見つかりません。"
@@ -482,7 +480,7 @@ namespace Utsushi.Parsing.OpenXml
             }
 
             // defaultColWidth が無い場合、Excel の既定列幅は baseColWidth と標準フォントの最大数字幅から決まる
-            // (例: Calibri 11 で 64px、ＭＳ Ｐゴシック 11 で 72px)。最大数字幅は帳票定義側の値のため、ここでは
+            // (例: Calibri 11 で 64px、ＭＳ Ｐゴシック 11 で 72px)。最大数字幅は変換の設定の値のため、ここでは
             // 「暗黙の既定幅」を NaN で表し、Layout レイヤーが求める(ExcelUnitConverter.DefaultColumnWidthToPixels)。
             return double.NaN;
         }
@@ -725,7 +723,7 @@ namespace Utsushi.Parsing.OpenXml
         };
 
         /// <summary>
-        /// 1シートに含める画像アンカーの数の上限。信頼できない入力(帳票定義への登録前の
+        /// 1シートに含める画像アンカーの数の上限。信頼できない入力(利用者が作った
         /// Excelファイル)による計算量の増大を防ぐための安全弁であり、自社ロゴ用途で
         /// この上限に達することは想定していない(security-reviewer指摘)。
         /// </summary>
