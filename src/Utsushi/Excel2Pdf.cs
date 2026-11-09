@@ -536,6 +536,92 @@ namespace Utsushi
             return ReportPdfConverter.ToFitCheckResult(ComputeLayout(checkFit: true));
         }
 
+        /// <summary>
+        /// PDF を出力せずに、表示が崩れる原因を一覧で返す(excel2pdf-consolidation 要件4)。設定した値で確かめる。
+        /// 文字がセルに収まらない箇所・PDFに出力されない要素(未対応要素)・フォントの代替を返す。
+        /// </summary>
+        /// <remarks>
+        /// 未対応要素の扱いがエラーでも、未対応要素を理由に例外にせず一覧で返す(要件4.2)。それ以外のエラーは、未対応要素の扱いを
+        /// 無視にした場合の <see cref="Save(string)"/> と同じ(要件4.4。PDFの描画の段階で初めて分かるエラーは返さない)。
+        /// 移行期間中、帳票定義ありで作った場合は帳票定義の <c>unsupportedElements</c> に従い、<c>"error"</c> なら例外になる(design.md 9)。
+        /// 文字の幅とフォントの代替は描画と同じフォントの構成で求めるため、PDFを作るサーバーと同じ環境で呼ぶこと。
+        /// </remarks>
+        /// <exception cref="UtsushiException">入力ファイル・設定した値・レイアウトの段階で失敗した場合。</exception>
+        public Excel2PdfDiagnostics Check()
+        {
+            ThrowIfDisposed();
+            Parsing.Model.WorkbookModel? workbook = null;
+            var layout = ComputeLayout(checkFit: true, read => workbook = read);
+            return new Excel2PdfDiagnostics(
+                layout.FitIssues,
+                layout.FitIssuesTruncated,
+                workbook?.UnsupportedElements ?? Array.Empty<UnsupportedElement>(),
+                workbook?.UnsupportedElementsTruncated ?? false,
+                CollectFontSubstitutions(layout));
+        }
+
+        /// <summary>
+        /// レイアウトの結果に現れたフォント(セル・ヘッダー/フッターの文字、図形の文字。グループは再帰的にたどる)について、
+        /// フォントの代替を問い合わせる(要件3.2。キャッシュ済みのフォントも、この変換で使っていれば必ず問い合わせる)。
+        /// 利用者が <see cref="ReportPdfConverter"/> を渡した場合はフォント解決を取り出せないため、空を返す(移行期間だけ。design.md 9)。
+        /// </summary>
+        private IReadOnlyList<FontSubstitution> CollectFontSubstitutions(PagedLayout layout)
+        {
+            if (_engine is null)
+            {
+                return Array.Empty<FontSubstitution>();
+            }
+
+            var fonts = new HashSet<(string Name, bool Bold, bool Italic)>();
+            var ordered = new List<Parsing.Model.FontStyle>();
+            void Add(Parsing.Model.FontStyle font)
+            {
+                if (fonts.Add((font.Name, font.Bold, font.Italic)))
+                {
+                    ordered.Add(font);
+                }
+            }
+
+            void Walk(IEnumerable<DrawCommand> commands)
+            {
+                foreach (var command in commands)
+                {
+                    switch (command)
+                    {
+                        case TextCommand text:
+                            Add(text.Font);
+                            break;
+                        case ShapeCommand shape:
+                            foreach (var line in shape.TextLines)
+                            {
+                                Add(line.Font);
+                            }
+
+                            break;
+                        case GroupCommand group:
+                            Walk(group.Children);
+                            break;
+                    }
+                }
+            }
+
+            foreach (var page in layout.Pages)
+            {
+                Walk(page.Commands);
+            }
+
+            var result = new List<FontSubstitution>();
+            foreach (var font in ordered)
+            {
+                if (_engine.FontResolver.GetSubstitution(font) is { } actual)
+                {
+                    result.Add(new FontSubstitution(font.Name, font.Bold, font.Italic, actual));
+                }
+            }
+
+            return result;
+        }
+
         /// <summary>自身が作ったコンバータ(フォント解決のリソース)を解放する。渡されたコンバータは解放しない。</summary>
         public void Dispose()
         {

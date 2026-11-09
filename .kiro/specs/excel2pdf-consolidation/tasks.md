@@ -74,9 +74,9 @@
   - _Requirements: 2.2, 2.3_
 - [x] 4.5 既定を `Error` に変える。既存の `Excel2PdfTests` のうち未対応要素を含むサンプルを既定の設定で開くテストに `Ignore` を明示する。`edge-order-form` で既定のエラーを確かめる
   - _Requirements: 2.1, 6.3_
-- [ ] 4.6 `Excel2Pdf.Check()` と `Excel2PdfDiagnostics` を追加する(文字の収まらない箇所・未対応要素。未対応要素では例外にしない)。テスト(要件4.2〜4.4)を含む
+- [x] 4.6 `Excel2Pdf.Check()` と `Excel2PdfDiagnostics` を追加する(文字の収まらない箇所・未対応要素。未対応要素では例外にしない)。テスト(要件4.2〜4.4)を含む
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
-- [ ] 4.7 `FontSubstitution` を追加し、`Check()` でレイアウトの結果のフォントを集めて問い合わせる。テスト(2回目の変換でも返る・使わないフォントは返らない)を含む
+- [x] 4.7 `FontSubstitution` を追加し、`Check()` でレイアウトの結果のフォントを集めて問い合わせる。テスト(2回目の変換でも返る・使わないフォントは返らない)を含む
   - _Requirements: 3.1, 3.2, 4.1_
 - [ ] 4.8 code-reviewer
 
