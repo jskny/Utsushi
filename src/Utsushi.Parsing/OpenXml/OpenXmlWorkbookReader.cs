@@ -1043,6 +1043,51 @@ namespace Utsushi.Parsing.OpenXml
         /// </summary>
         private const int MaxGradientStopsPerFill = 64;
 
+        private static readonly DrawingRejection TooManyShapesRejection = DrawingRejection.CountLimit(
+            "TooManyShapes", MaxShapesPerSheet, "シートの図形・接続線・グループの数が上限を超えたため、超えた分は出力されません。");
+
+        private static readonly DrawingRejection ShapeTextTooLongRejection = DrawingRejection.ElementLimit(
+            "ShapeTextTooLong", MaxShapeTextLength, "図形の文字数が上限を超えているため、出力されません。");
+
+        private static readonly DrawingRejection GroupNestingTooDeepRejection = DrawingRejection.ElementLimit(
+            "GroupNestingTooDeep", MaxShapeNestingDepth, "グループの入れ子の段数が上限を超えているため、出力されません。");
+
+        private static DrawingRejection UnsupportedPresetRejection(Dr.ShapeTypeValues? preset) =>
+            new(UnsupportedElementKind.UnsupportedShapePreset,
+                preset is null ? "custGeom" : preset.Value.ToString(),
+                "図形・接続線の形(プリセット)に対応していないため、出力されません。");
+
+        private static DrawingRejection UnsupportedPresetRejection(Dr.ShapeTypeValues preset) =>
+            UnsupportedPresetRejection((Dr.ShapeTypeValues?)preset);
+
+        /// <summary>
+        /// グループの子要素を読めず、グループ全体を出力しない理由(design.md 9)。
+        /// 子要素の原因が枚数・個数の上限ならそのまま(シートと上限の種類ごとに1件)、入れ子のグループの理由ならそのまま、
+        /// それ以外はグループのアンカーの <see cref="UnsupportedElementKind.UnsupportedGroupChild"/> として、原因を補足の情報に入れる。
+        /// </summary>
+        private static DrawingRejection GroupRejection(DrawingRejection? childRejection, OpenXmlElement child)
+        {
+            if (childRejection is { IsCountLimit: true } || childRejection?.Kind == UnsupportedElementKind.UnsupportedGroupChild)
+            {
+                return childRejection;
+            }
+
+            var cause = childRejection switch
+            {
+                null when child is Xdr.Shape or Xdr.Picture or Xdr.ConnectionShape or Xdr.GroupShape =>
+                    nameof(UnsupportedElementKind.MalformedDrawingObject),
+                null => child.LocalName,
+                { LimitName: { } limitName } => limitName,
+                { Detail: { } detail } => childRejection.Kind + ": " + detail,
+                _ => childRejection.Kind.ToString(),
+            };
+
+            return new DrawingRejection(
+                UnsupportedElementKind.UnsupportedGroupChild,
+                cause,
+                "グループの中に出力できない要素があるため、グループ全体が出力されません。");
+        }
+
         private static readonly DrawingRejection TooManyImagesRejection = DrawingRejection.CountLimit(
             "TooManyImages", MaxImagesPerSheet, "シートの画像の数が上限を超えたため、超えた分の画像は出力されません。");
 
@@ -1124,7 +1169,12 @@ namespace Utsushi.Parsing.OpenXml
 
                 if (shape is not null)
                 {
-                    var shapeModel = ReadShape(sheetName, anchor, shape, anchorCell, anchorOffset, colors, options, ref shapeCount);
+                    var shapeModel = ReadShape(sheetName, anchor, shape, anchorCell, anchorOffset, colors, options, ref shapeCount, out var shapeRejection);
+                    if (shapeRejection is not null)
+                    {
+                        unsupported.Add(shapeRejection, sheetName, anchorCell);
+                    }
+
                     if (shapeModel is not null)
                     {
                         result.Add(shapeModel);
@@ -1142,7 +1192,12 @@ namespace Utsushi.Parsing.OpenXml
 
                 if (connector is not null)
                 {
-                    var connectorModel = ReadConnector(sheetName, anchor, connector, anchorCell, anchorOffset, colors, options, ref shapeCount);
+                    var connectorModel = ReadConnector(sheetName, anchor, connector, anchorCell, anchorOffset, colors, options, ref shapeCount, out var connectorRejection);
+                    if (connectorRejection is not null)
+                    {
+                        unsupported.Add(connectorRejection, sheetName, anchorCell);
+                    }
+
                     if (connectorModel is not null)
                     {
                         result.Add(connectorModel);
@@ -1161,7 +1216,12 @@ namespace Utsushi.Parsing.OpenXml
                 if (group is not null)
                 {
                     var groupModel = ReadGroupShape(
-                        sheetName, drawingsPart, anchor, group, anchorCell, anchorOffset, colors, options, ref shapeCount, ref imageCount);
+                        sheetName, drawingsPart, anchor, group, anchorCell, anchorOffset, colors, options, ref shapeCount, ref imageCount, out var groupRejection);
+                    if (groupRejection is not null)
+                    {
+                        unsupported.Add(groupRejection, sheetName, anchorCell);
+                    }
+
                     if (groupModel is not null)
                     {
                         result.Add(groupModel);
@@ -1391,8 +1451,10 @@ namespace Utsushi.Parsing.OpenXml
             PointPt anchorOffset,
             DrawingColorResolver colors,
             WorkbookReadOptions options,
-            ref int shapeCount)
+            ref int shapeCount,
+            out DrawingRejection? rejection)
         {
+            rejection = null;
             if (shapeCount >= MaxShapesPerSheet)
             {
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
@@ -1406,6 +1468,7 @@ namespace Utsushi.Parsing.OpenXml
                 }
 
                 // ignore時はこのアンカーだけを無視し、以降のアンカーの走査は続ける。
+                rejection = TooManyShapesRejection;
                 return null;
             }
 
@@ -1426,6 +1489,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = UnsupportedPresetRejection(presetValue);
                 return null;
             }
 
@@ -1453,6 +1517,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = ShapeTextTooLongRejection;
                 return null;
             }
 
@@ -1474,8 +1539,10 @@ namespace Utsushi.Parsing.OpenXml
             PointPt anchorOffset,
             DrawingColorResolver colors,
             WorkbookReadOptions options,
-            ref int shapeCount)
+            ref int shapeCount,
+            out DrawingRejection? rejection)
         {
+            rejection = null;
             if (shapeCount >= MaxShapesPerSheet)
             {
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
@@ -1488,6 +1555,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = TooManyShapesRejection;
                 return null;
             }
 
@@ -1508,6 +1576,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = UnsupportedPresetRejection(presetValue);
                 return null;
             }
 
@@ -1545,8 +1614,10 @@ namespace Utsushi.Parsing.OpenXml
             DrawingColorResolver colors,
             WorkbookReadOptions options,
             ref int shapeCount,
-            ref int imageCount)
+            ref int imageCount,
+            out DrawingRejection? rejection)
         {
+            rejection = null;
             if (shapeCount >= MaxShapesPerSheet)
             {
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
@@ -1559,6 +1630,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = TooManyShapesRejection;
                 return null;
             }
 
@@ -1578,7 +1650,8 @@ namespace Utsushi.Parsing.OpenXml
 
             var rotationDegrees = (transformGroup?.Rotation?.Value ?? 0) / 60000.0;
 
-            var children = ReadGroupChildren(sheetName, drawingsPart, group, colors, options, ref shapeCount, ref imageCount, currentGroupDepth: 1);
+            var children = ReadGroupChildren(
+                sheetName, drawingsPart, group, colors, options, ref shapeCount, ref imageCount, currentGroupDepth: 1, out rejection);
             if (children is null)
             {
                 // Ignoreモードで内部に非対応要素があった場合。グループの一部だけを描画すると
@@ -1601,6 +1674,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = TooManyShapesRejection;
                 return null;
             }
 
@@ -1628,8 +1702,10 @@ namespace Utsushi.Parsing.OpenXml
             WorkbookReadOptions options,
             ref int shapeCount,
             ref int imageCount,
-            int currentGroupDepth)
+            int currentGroupDepth,
+            out DrawingRejection? rejection)
         {
+            rejection = null;
             var children = new List<GroupChildModel>();
 
             foreach (var element in group.ChildElements)
@@ -1642,13 +1718,14 @@ namespace Utsushi.Parsing.OpenXml
                 }
 
                 var isSupportedChildType = element is Xdr.Shape or Xdr.Picture or Xdr.ConnectionShape or Xdr.GroupShape;
+                DrawingRejection? childRejection = null;
                 GroupChildModel? child = element switch
                 {
-                    Xdr.Shape shape => ReadGroupChildShape(sheetName, shape, colors, options, ref shapeCount),
-                    Xdr.Picture picture => ReadGroupChildImage(sheetName, drawingsPart, picture, options, ref imageCount),
-                    Xdr.ConnectionShape connector => ReadGroupChildConnector(sheetName, connector, colors, options, ref shapeCount),
+                    Xdr.Shape shape => ReadGroupChildShape(sheetName, shape, colors, options, ref shapeCount, out childRejection),
+                    Xdr.Picture picture => ReadGroupChildImage(sheetName, drawingsPart, picture, options, ref imageCount, out childRejection),
+                    Xdr.ConnectionShape connector => ReadGroupChildConnector(sheetName, connector, colors, options, ref shapeCount, out childRejection),
                     Xdr.GroupShape nestedGroup => ReadGroupChildGroup(
-                        sheetName, drawingsPart, nestedGroup, colors, options, ref shapeCount, ref imageCount, currentGroupDepth + 1),
+                        sheetName, drawingsPart, nestedGroup, colors, options, ref shapeCount, ref imageCount, currentGroupDepth + 1, out childRejection),
                     _ => null,
                 };
 
@@ -1666,6 +1743,7 @@ namespace Utsushi.Parsing.OpenXml
 
                     // 個別の子要素側でErrorモードならすでに例外を送出済み。ここに到達するのは
                     // Ignoreモードでの非対応(非対応の型/プリセット/上限超過等)であり、グループ全体を破棄する。
+                    rejection = GroupRejection(isSupportedChildType ? childRejection : null, element);
                     return null;
                 }
 
@@ -1677,8 +1755,9 @@ namespace Utsushi.Parsing.OpenXml
 
         /// <summary>グループ内の<c>xdr:sp</c>子要素を<see cref="GroupChildShape"/>として読み取る(要件10.10)。</summary>
         private static GroupChildShape? ReadGroupChildShape(
-            string sheetName, Xdr.Shape shape, DrawingColorResolver colors, WorkbookReadOptions options, ref int shapeCount)
+            string sheetName, Xdr.Shape shape, DrawingColorResolver colors, WorkbookReadOptions options, ref int shapeCount, out DrawingRejection? rejection)
         {
+            rejection = null;
             if (shapeCount >= MaxShapesPerSheet)
             {
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
@@ -1691,6 +1770,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = TooManyShapesRejection;
                 return null;
             }
 
@@ -1711,6 +1791,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = UnsupportedPresetRejection(presetValue);
                 return null;
             }
 
@@ -1738,6 +1819,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = ShapeTextTooLongRejection;
                 return null;
             }
 
@@ -1752,8 +1834,9 @@ namespace Utsushi.Parsing.OpenXml
 
         /// <summary>グループ内の<c>xdr:pic</c>子要素を<see cref="GroupChildImage"/>として読み取る(要件10.10)。</summary>
         private static GroupChildImage? ReadGroupChildImage(
-            string sheetName, DrawingsPart drawingsPart, Xdr.Picture picture, WorkbookReadOptions options, ref int imageCount)
+            string sheetName, DrawingsPart drawingsPart, Xdr.Picture picture, WorkbookReadOptions options, ref int imageCount, out DrawingRejection? rejection)
         {
+            rejection = null;
             if (imageCount >= MaxImagesPerSheet)
             {
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
@@ -1766,13 +1849,14 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = TooManyImagesRejection;
                 return null;
             }
 
             // トップレベルの画像と同じく、読み取りを試みた時点で数える。
             imageCount++;
 
-            if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType, out _))
+            if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType, out rejection))
             {
                 return null;
             }
@@ -1791,8 +1875,9 @@ namespace Utsushi.Parsing.OpenXml
 
         /// <summary>グループ内の<c>xdr:cxnSp</c>子要素を<see cref="GroupChildConnector"/>として読み取る(要件10.10)。</summary>
         private static GroupChildConnector? ReadGroupChildConnector(
-            string sheetName, Xdr.ConnectionShape connector, DrawingColorResolver colors, WorkbookReadOptions options, ref int shapeCount)
+            string sheetName, Xdr.ConnectionShape connector, DrawingColorResolver colors, WorkbookReadOptions options, ref int shapeCount, out DrawingRejection? rejection)
         {
+            rejection = null;
             if (shapeCount >= MaxShapesPerSheet)
             {
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
@@ -1805,6 +1890,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = TooManyShapesRejection;
                 return null;
             }
 
@@ -1825,6 +1911,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = UnsupportedPresetRejection(presetValue);
                 return null;
             }
 
@@ -1864,8 +1951,10 @@ namespace Utsushi.Parsing.OpenXml
             WorkbookReadOptions options,
             ref int shapeCount,
             ref int imageCount,
-            int depth)
+            int depth,
+            out DrawingRejection? rejection)
         {
+            rejection = null;
             if (depth > MaxShapeNestingDepth)
             {
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
@@ -1878,6 +1967,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = GroupNestingTooDeepRejection;
                 return null;
             }
 
@@ -1893,6 +1983,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = TooManyShapesRejection;
                 return null;
             }
 
@@ -1907,7 +1998,7 @@ namespace Utsushi.Parsing.OpenXml
 
             var rotationDegrees = (transformGroup?.Rotation?.Value ?? 0) / 60000.0;
 
-            var children = ReadGroupChildren(sheetName, drawingsPart, group, colors, options, ref shapeCount, ref imageCount, depth);
+            var children = ReadGroupChildren(sheetName, drawingsPart, group, colors, options, ref shapeCount, ref imageCount, depth, out rejection);
             if (children is null)
             {
                 return null;
@@ -1927,6 +2018,7 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = TooManyShapesRejection;
                 return null;
             }
 
