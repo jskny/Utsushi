@@ -307,7 +307,7 @@ public sealed record FormatApproximation(
     FormatApproximationKind Kind,
     string SheetName,
     CellRange? Location,       // セル(1×1の範囲)・セル範囲・要素のアンカー。ヘッダー/フッターは null
-    string? Detail,            // 書式の値(例: "textRotation=255"、"horizontal=distributed"、表示形式のコード、"header/left")
+    string? Detail,            // 書式の値。ファイルの値の表記で返す(例: "textRotation=255"、"horizontal=distributed"、"vert=eaVert"、表示形式のコード、"header/left"、"firstHeader/left")
     string Message);
 ```
 
@@ -325,7 +325,7 @@ public sealed record FormatApproximation(
 | Indent | `CellStyle` のインデント(読み済み) | 右揃え・中央揃えのセルでインデントが0でないとき(Utsushi は常に左に足す) |
 | ConditionalFormatting | `conditionalFormatting/@sqref` と、Excel 2010 以降の拡張(`extLst` の `x14:conditionalFormatting` の `xm:sqref`)の範囲を `SheetModel.ConditionalFormattingRanges` に読む(現在は読んでいない)。ブロックの数と、1つの `sqref` の範囲の数に上限を設ける | 印刷範囲と重なる範囲を、重なる部分の範囲で記録する |
 | RichText | 共有文字列・インライン文字列で、`rPr` を持つランの書式がセルの書式と異なるかを `CellModel` の印に読む(現在はランを連結するだけ。2802行・371行) | セルの文字を組み立てるとき |
-| NumberFormat | 表示文字列を作るときに、(1)表示形式を解釈できず標準にした、(2)表示形式で表せない値(負の経過時間・明治より前の和暦)のため標準にした、のいずれかの印を `CellModel` に載せる(`NumberFormatter`)。`@` だけの書式で標準にするのはExcelと同じ表示のため印を付けない。`SetValue` の書き込みでは、公開の `NumberFormatting.Format` は変えず、印も返す internal のオーバーロードを使う | セルの文字を組み立てるとき |
+| NumberFormat | 表示文字列を作るときに、(1)表示形式を解釈できず標準にした、(2)表示形式で表せない値(負の経過時間・明治より前の和暦)のため標準にした、のいずれかの印を `CellModel` に載せる(`NumberFormatter`)。`@` だけの書式で標準にするのはExcelと同じ表示のため印を付けない。`SetValue` の書き込みでは、公開の `NumberFormatting.Format` は変えず、表示文字列・色と印(理由)を返す public の `NumberFormatting.FormatWithFallback` を使う(9章。Substitution のアセンブリから使うため public) | セルの文字を組み立てるとき |
 | CellFillPattern・CellFillGradient | `StyleTable.ReadFills` で、単色以外の網かけ・グラデーションの塗りつぶしを `CellStyle` の印に読む(現在は背景色・塗りつぶしなしに置き換えるだけ) | 印の付いた書式を持つ、印刷されるセル位置を組み立てるとき(`PageCommandBuilder.EmitCell`。塗りつぶしを描かない場合も含む。セルが無い位置を行・列の書式で描く場合も含む) |
 | ShapeFill | 図形の塗りつぶし(`ReadShapeFill`)で、次の場合の印を `ShapeModel` に載せる。(1)スタイル(`fillRef`)が指すテーマの `fillStyleLst` の項目が単色でない(テーマの `fillStyleLst` を新たに読む。現在は `fillRef` の idx が0より大きければ単色にしている。既定のテーマの idx=1 は単色なので印を付けない)、(2)直接指定の模様・画像・グループの塗りつぶし(`pattFill`・`blipFill`・`grpFill`。現在は塗りつぶしなし)、(3)`a:path` が rect・shape のグラデーション(放射状で近似)、(4)読めないグラデーションのストップ・解決できない色の指定(塗りつぶしなし) | 図形を組み立てるとき |
 | ShapeFont | 図形の文字のフォントが `fontRef`・テーマの書体を指すか、日本語の文字に `a:ea` の書体が無い(またはテーマを指す)かを読む(現在は使っていない) | 図形の文字を組み立てるとき |
@@ -568,7 +568,7 @@ utsushi --help
   `fillRef` の idx が1001以上(背景の塗りつぶしのスタイル `bgFillStyleLst`)も同じく判定する。
   図形の塗りつぶし・`fontRef` の印は、グループ内の図形にも付ける。
 - 要素の識別に使う描画オブジェクトのID(`cNvPr/@id`)が無い要素(接続線など、またはIDが0)は、描画パートの中の順番を識別に使う。
-- グループ内の画像の回転は、グループの回転を足した実効の角度で判定し、位置にはトップレベルのグループのアンカーを使う。
+- グループ内の画像の回転は記録しない(子の `a:xfrm` の位置・大きさは回転前の矩形で、その中心で回して描くため。要件7.2(h))。反転は、外側のグループの反転を含めて記録し、位置にはトップレベルのグループのアンカーを使う。
 - ゴールデンは、近似の行が変わるサブタスクごとに更新する(5.14 は最後の確認だけにする)。サンプル帳票の図形の一部(`fontRef` を持つ楕円など)で `ShapeFont` の行が増える見込みである。
 
 ### タスク6〜8

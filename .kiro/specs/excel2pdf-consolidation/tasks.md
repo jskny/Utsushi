@@ -98,7 +98,7 @@
   - _Requirements: 7.2, 7.3_
 - [x] 5.7 リッチテキスト: ランの書式がセルの書式と異なる印を読み、記録する。`SetText`・`SetValue` で上書きしたセルの印を消す
   - _Requirements: 7.2, 7.3_
-- [x] 5.8 表示形式: 解釈できない書式・表せない値の印を `NumberFormatter` で載せ、記録する。`SetValue` 用に `NumberFormatting` の internal のオーバーロードを加え、上書きしたセルは書き込んだ値で求め直す
+- [x] 5.8 表示形式: 解釈できない書式・表せない値の印を `NumberFormatter` で載せ、記録する。`SetValue` 用に `NumberFormatting.FormatWithFallback`(public。Substitution から使うため)を加え、上書きしたセルは書き込んだ値で求め直す
   - _Requirements: 7.2, 7.3_
 - [x] 5.9 セルの塗りつぶし: 網かけ・グラデーションの印を `StyleTable` で読み、`EmitCell` で記録する(セルが無い位置を行・列の書式で描く場合を含む)
   - _Requirements: 7.2, 7.3, 7.4_
@@ -112,7 +112,7 @@
   - _Requirements: 7.2, 7.3, 7.4_
 - [x] 5.14 タスク5の開始前と比べて、ゴールデンの描画命令の行が変わっていないことを確かめる。保存(`checkFit` なし)では集めないことを確かめる
   - _Requirements: 7.5_
-- [ ] 5.15 layout-fidelity-reviewer・security-reviewer(新しい読み取りの上限)・code-reviewer
+- [x] 5.15 layout-fidelity-reviewer・security-reviewer(新しい読み取りの上限)・code-reviewer
   - _Requirements: 7.2, 7.3_
 
 ## 6. ゴールデンテストの移行(帳票定義の削除より前)

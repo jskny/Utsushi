@@ -250,7 +250,7 @@ namespace Utsushi.Parsing.OpenXml
                 result.Add(new FillInfo(
                     colors.Resolve(pattern.BackgroundColor, ArgbColor.Transparent),
                     FormatApproximationKind.CellFillPattern,
-                    "patternType=" + pattern.PatternType.Value));
+                    "patternType=" + pattern.PatternType.InnerText));
             }
 
             return result;

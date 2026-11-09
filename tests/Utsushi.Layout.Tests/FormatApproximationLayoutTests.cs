@@ -45,9 +45,9 @@ namespace Utsushi.Layout.Tests
 
             var horizontal = layout.FormatApproximations.Where(a => a.Kind == FormatApproximationKind.HorizontalAlignment).ToList();
             Assert.Equal(2, horizontal.Count);
-            Assert.Contains(horizontal, a => a.Location == CellRange.Parse("A1:A1") && a.Detail == "horizontal=Distributed");
-            Assert.Contains(horizontal, a => a.Location == CellRange.Parse("B1:B1") && a.Detail == "horizontal=CenterContinuous");
-            Assert.Equal("vertical=Justify", Single(layout, FormatApproximationKind.VerticalAlignment).Detail);
+            Assert.Contains(horizontal, a => a.Location == CellRange.Parse("A1:A1") && a.Detail == "horizontal=distributed");
+            Assert.Contains(horizontal, a => a.Location == CellRange.Parse("B1:B1") && a.Detail == "horizontal=centerContinuous");
+            Assert.Equal("vertical=justify", Single(layout, FormatApproximationKind.VerticalAlignment).Detail);
             Assert.All(layout.FormatApproximations, a => Assert.Equal("テストシート", a.SheetName));
         }
 
@@ -83,7 +83,7 @@ namespace Utsushi.Layout.Tests
                 new[] { new ShapeTextParagraph(new[] { new ShapeTextRun("縦", FontStyle.Default) }, HorizontalAlignment.Left) },
                 VerticalAlignment.Top)
             {
-                Vertical = "EastAsianVertical",
+                Vertical = "eaVert",
             };
             var shape = new ShapeModel(
                 7u, ShapePresetType.Rect, System.Array.Empty<double>(), 0, null, null, text,
@@ -93,7 +93,7 @@ namespace Utsushi.Layout.Tests
             var rotation = Single(Compute(sheet), FormatApproximationKind.TextRotation);
 
             Assert.Equal(CellRange.Parse("B2:B2"), rotation.Location);
-            Assert.Equal("vert=EastAsianVertical", rotation.Detail);
+            Assert.Equal("vert=eaVert", rotation.Detail);
         }
 
         [Fact]
@@ -103,7 +103,7 @@ namespace Utsushi.Layout.Tests
             {
                 BackgroundColor = new ArgbColor(0xFF, 0xEE, 0xEE, 0xEE),
                 FillApproximation = FormatApproximationKind.CellFillPattern,
-                FillApproximationDetail = "patternType=DarkTrellis",
+                FillApproximationDetail = "patternType=darkTrellis",
             };
             var sheet = Sheet() with { RowStyles = new Dictionary<int, CellStyle> { [1] = patterned } };
 
@@ -111,7 +111,7 @@ namespace Utsushi.Layout.Tests
 
             // 印刷範囲 A1:C3 の1行目だけ(D1・E1 は印刷範囲の外)。
             Assert.Equal(new[] { "A1:A1", "B1:B1", "C1:C1" }, fills.Select(f => f.Location!.Value.ToString()).OrderBy(x => x).ToArray());
-            Assert.All(fills, f => Assert.Equal("patternType=DarkTrellis", f.Detail));
+            Assert.All(fills, f => Assert.Equal("patternType=darkTrellis", f.Detail));
         }
 
         private static ImageModel Image(uint id, double rotation, bool flip = false) =>
@@ -250,6 +250,56 @@ namespace Utsushi.Layout.Tests
 
             Assert.Equal(CellRange.Parse("A2:B3"), item.Location);
             Assert.Equal("lastRowHidden", item.Detail);
+        }
+
+        [Fact]
+        public void 最後の列が非表示で右端に罫線のある結合セルを記録する()
+        {
+            var thin = new BorderEdge(BorderLineStyle.Thin, ArgbColor.Black);
+            var rightBorder = CellStyle.Default with
+            {
+                Borders = new BorderSet(BorderEdge.None, thin, BorderEdge.None, BorderEdge.None, BorderEdge.None, BorderEdge.None),
+            };
+            var sheet = Sheet(("B2", Text(string.Empty, rightBorder))) with
+            {
+                HiddenColumns = new HashSet<int> { 2 },
+                MergedRanges = new[] { new MergedRange(CellRange.Parse("A2:B2")) },
+            };
+
+            Assert.Equal("lastColumnHidden", Single(Compute(sheet), FormatApproximationKind.MergedCellHiddenEdge).Detail);
+        }
+
+        [Fact]
+        public void 最後の行と列が両方非表示の結合セルは両方を補足の情報に含める()
+        {
+            var thin = new BorderEdge(BorderLineStyle.Thin, ArgbColor.Black);
+            var borders = CellStyle.Default with
+            {
+                Borders = new BorderSet(BorderEdge.None, thin, BorderEdge.None, thin, BorderEdge.None, BorderEdge.None),
+            };
+            var sheet = Sheet(("B3", Text(string.Empty, borders))) with
+            {
+                HiddenRows = new HashSet<int> { 3 },
+                HiddenColumns = new HashSet<int> { 2 },
+                MergedRanges = new[] { new MergedRange(CellRange.Parse("A2:B3")) },
+            };
+
+            Assert.Equal(
+                "lastRowHidden,lastColumnHidden", Single(Compute(sheet), FormatApproximationKind.MergedCellHiddenEdge).Detail);
+        }
+
+        [Fact]
+        public void 右の続きのページへはみ出す図形を記録する()
+        {
+            // 20列は A4 縦の1ページの幅に収まらず、右に続きのページがある。
+            var sheet = UniformSheet(rows: 3, columns: 20, pageSetup: NoMarginA4()) with
+            {
+                DrawingObjects = new DrawingObjectModel[] { WideShape("C2", 1000.0) },
+            };
+
+            var item = Single(Compute(sheet), FormatApproximationKind.DrawingAcrossPageBreak);
+
+            Assert.Equal(CellRange.Parse("C2:C2"), item.Location);
         }
 
         [Fact]

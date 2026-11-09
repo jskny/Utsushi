@@ -239,7 +239,7 @@ namespace Utsushi.Parsing.Tests
         [Theory]
         [InlineData("<a:pattFill prst=\"pct5\"><a:fgClr><a:srgbClr val=\"000000\"/></a:fgClr><a:bgClr><a:srgbClr val=\"FFFFFF\"/></a:bgClr></a:pattFill>", "pattFill")]
         [InlineData("<a:grpFill/>", "grpFill")]
-        [InlineData("<a:gradFill><a:gsLst><a:gs pos=\"0\"><a:srgbClr val=\"FFFFFF\"/></a:gs><a:gs pos=\"100000\"><a:srgbClr val=\"000000\"/></a:gs></a:gsLst><a:path path=\"rect\"/></a:gradFill>", "path=")]
+        [InlineData("<a:gradFill><a:gsLst><a:gs pos=\"0\"><a:srgbClr val=\"FFFFFF\"/></a:gs><a:gs pos=\"100000\"><a:srgbClr val=\"000000\"/></a:gs></a:gsLst><a:path path=\"rect\"/></a:gradFill>", "path=rect")]
         public void 直接指定の塗りつぶしを近似または省略した理由を読む(string fill, string expectedPrefix)
         {
             var shape = ReadSingleShape(DrawingStyleWorkbookFixtures.ShapeAnchor(spPrExtra: fill));
@@ -248,7 +248,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Theory]
-        [InlineData(null, "fontRef=Minor", "文字")]
+        [InlineData(null, "fontRef=minor", "文字")]
         [InlineData("<a:latin typeface=\"+mn-lt\"/>", "+mn-lt", "文字")]
         [InlineData("<a:latin typeface=\"Arial\"/>", "ea=-", "文字")]
         [InlineData("<a:latin typeface=\"Arial\"/><a:ea typeface=\"+mn-ea\"/>", "ea=+mn-ea", "文字")]
@@ -261,6 +261,18 @@ namespace Utsushi.Parsing.Tests
                 textBody: DrawingStyleWorkbookFixtures.TextBody(text, runFont)));
 
             Assert.Equal(expected, shape.Text!.StyleFont);
+        }
+
+        [Fact]
+        public void 図形の文字のfontRefの不正な値はファイルの破損として扱わずそのまま返す()
+        {
+            // 診断にしか使わない値のため、型付きの値として読まない(code-reviewer指摘)。
+            var shape = ReadSingleShape(DrawingStyleWorkbookFixtures.ShapeAnchor(
+                style: DrawingStyleWorkbookFixtures.ExcelDefaultShapeStyle.Replace(
+                    "idx=\"minor\"", "idx=\"bogus\"", System.StringComparison.Ordinal),
+                textBody: DrawingStyleWorkbookFixtures.TextBody("文字")));
+
+            Assert.Equal("fontRef=bogus", shape.Text!.StyleFont);
         }
 
         [Fact]

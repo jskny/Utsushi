@@ -256,6 +256,13 @@ namespace Utsushi.Layout
         {
             var connectionTargets = BuildConnectionTargetTable(rowIndex, columnIndex, rowOffsets, columnOffsets);
 
+            // 改ページをまたぐ画像・図形の判定に使う、はみ出す向きに続きのページがあるかどうか(このページの先に印刷される行・列があるか)。
+            // 印刷範囲の末尾の非表示の行・列は印刷されないため、比べる相手は印刷される最後の行・列にする。
+            var continuesRight = columnIndex.Count > 0 && _grid.Columns.Count > 0
+                && columnIndex.Keys.Max() < _grid.Columns[_grid.Columns.Count - 1];
+            var continuesDown = rowIndex.Count > 0 && _grid.Rows.Count > 0
+                && rowIndex.Keys.Max() < _grid.Rows[_grid.Rows.Count - 1];
+
             var ordinal = 0;
             foreach (var drawingObject in _sheet.DrawingObjects)
             {
@@ -265,7 +272,7 @@ namespace Utsushi.Layout
                     continue;
                 }
 
-                RecordDrawingApproximations(drawingObject, ordinal, rect, rowIndex, columnIndex);
+                RecordDrawingApproximations(drawingObject, ordinal, rect, continuesRight, continuesDown);
 
                 switch (drawingObject)
                 {
@@ -300,8 +307,8 @@ namespace Utsushi.Layout
             DrawingObjectModel drawingObject,
             int ordinal,
             RectPt rect,
-            IReadOnlyDictionary<int, int> rowIndex,
-            IReadOnlyDictionary<int, int> columnIndex)
+            bool continuesRight,
+            bool continuesDown)
         {
             if (_approximations is null)
             {
@@ -310,15 +317,17 @@ namespace Utsushi.Layout
 
             var anchor = drawingObject.AnchorCell;
             var location = new CellRange(anchor.Row, anchor.Column, anchor.Row, anchor.Column);
+            var ordinalText = ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var id = drawingObject switch
+            {
+                ImageModel image => image.Id,
+                ShapeModel shape => shape.Id,
+                GroupShapeModel group => group.Id,
+                _ => 0u,
+            };
 
             // 左上が属するページにだけ描くため、ページの本文の外へはみ出す部分は次のページに描かれない(要件7.2(j))。
-            // はみ出す向きに続きのページがある(このページの先に印刷される行・列がある)場合だけを数える。印刷範囲の端の外への
-            // はみ出しは改ページをまたぐものではないため、ここでは数えない。印刷範囲の末尾の非表示の行・列は印刷されないため、
-            // 比べる相手は印刷される最後の行・列にする。
-            var continuesRight = columnIndex.Count > 0 && _grid.Columns.Count > 0
-                && columnIndex.Keys.Max() < _grid.Columns[_grid.Columns.Count - 1];
-            var continuesDown = rowIndex.Count > 0 && _grid.Rows.Count > 0
-                && rowIndex.Keys.Max() < _grid.Rows[_grid.Rows.Count - 1];
+            // はみ出す向きに続きのページがある場合だけを数える。印刷範囲の端の外へのはみ出しは改ページをまたぐものではない。
             if ((continuesRight && rect.Right > _pageBodyRect.Right + FitTolerancePt)
                 || (continuesDown && rect.Bottom > _pageBodyRect.Bottom + FitTolerancePt))
             {
@@ -326,7 +335,7 @@ namespace Utsushi.Layout
                     FormatApproximationKind.DrawingAcrossPageBreak,
                     _sheet.Name,
                     location,
-                    "#" + ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    DrawingIdentity(id, ordinalText),
                     null,
                     "改ページをまたぐ画像・図形は、左上が属するページにだけ描きます(次のページにかかる部分は描きません)。");
             }
@@ -339,17 +348,17 @@ namespace Utsushi.Layout
                         image.RotationDegrees,
                         checkRotation: true,
                         location,
-                        DrawingIdentity(image.Id, ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                        DrawingIdentity(image.Id, ordinalText));
                     break;
                 case ShapeModel shape:
                     RecordShapeApproximations(
-                        shape.Text, shape.FillApproximation, location, DrawingIdentity(shape.Id, ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                        shape.Text, shape.FillApproximation, location, DrawingIdentity(shape.Id, ordinalText));
                     break;
                 case GroupShapeModel group:
                     RecordGroupChildApproximations(
                         group.Children,
                         location,
-                        ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        ordinalText,
                         group.FlipHorizontal || group.FlipVertical);
                     break;
             }
@@ -440,19 +449,11 @@ namespace Utsushi.Layout
                 return;
             }
 
-            var printRange = _grid.PrintRange;
-            var spans = false;
-            for (var row = Math.Max(range.FirstRow, printRange.FirstRow); !spans && row <= Math.Min(range.LastRow, printRange.LastRow); row++)
-            {
-                spans = !rowIndex.ContainsKey(row) && _grid.GetRowHeightPt(row) > 0;
-            }
-
-            for (var column = Math.Max(range.FirstColumn, printRange.FirstColumn);
-                 !spans && column <= Math.Min(range.LastColumn, printRange.LastColumn);
-                 column++)
-            {
-                spans = !columnIndex.ContainsKey(column) && _grid.GetColumnWidthPt(column) > 0;
-            }
+            // 印刷される行・列(昇順)のうち結合範囲にあるものの数と、このページにあるものの数が違えば、改ページをまたぐ。
+            // 範囲の行・列を1つずつ見ず、二分探索で数える(大きな結合範囲でもページごとの走査を抑える)。
+            var spans = CountWithin(_grid.Rows, range.FirstRow, range.LastRow) != CountKeysWithin(rowIndex, range.FirstRow, range.LastRow)
+                || CountWithin(_grid.Columns, range.FirstColumn, range.LastColumn)
+                    != CountKeysWithin(columnIndex, range.FirstColumn, range.LastColumn);
 
             if (spans)
             {
@@ -469,7 +470,7 @@ namespace Utsushi.Layout
             var lastRowHidden = range.LastRow > range.FirstRow && SheetGrid.IsRowNotPrinted(_sheet, range.LastRow)
                 && ResolveRowEdge(range.LastRow, range.FirstColumn, range.LastColumn, b => b.Bottom).IsVisible;
             var lastColumnHidden = range.LastColumn > range.FirstColumn
-                && SheetGrid.PrintedColumnWidthPt(_sheet, range.LastColumn, _report.Definition.MaxDigitWidthPx) <= 0
+                && SheetGrid.IsColumnNotPrinted(_sheet, range.LastColumn, _report.Definition.MaxDigitWidthPx)
                 && ResolveColumnEdge(range.LastColumn, range.FirstRow, range.LastRow, b => b.Right).IsVisible;
             if (lastRowHidden || lastColumnHidden)
             {
@@ -478,9 +479,64 @@ namespace Utsushi.Layout
                     _sheet.Name,
                     range,
                     null,
-                    lastRowHidden ? "lastRowHidden" : "lastColumnHidden",
+                    (lastRowHidden, lastColumnHidden) switch
+                    {
+                        (true, true) => "lastRowHidden,lastColumnHidden",
+                        (true, false) => "lastRowHidden",
+                        _ => "lastColumnHidden",
+                    },
                     "最後の行・列が非表示の結合セルは、外周の罫線の一部(下端・右端)を描きません。");
             }
+        }
+
+        /// <summary>昇順の番号の並びのうち、<paramref name="low"/>〜<paramref name="high"/> にあるものの数(二分探索)。</summary>
+        private static int CountWithin(IReadOnlyList<int> sorted, int low, int high) =>
+            low > high ? 0 : LowerBound(sorted, high + 1) - LowerBound(sorted, low);
+
+        private static int LowerBound(IReadOnlyList<int> sorted, int value)
+        {
+            int low = 0, high = sorted.Count;
+            while (low < high)
+            {
+                var middle = low + ((high - low) / 2);
+                if (sorted[middle] < value)
+                {
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle;
+                }
+            }
+
+            return low;
+        }
+
+        /// <summary>このページの行・列の索引のうち、<paramref name="low"/>〜<paramref name="high"/> にあるものの数。</summary>
+        private static int CountKeysWithin(IReadOnlyDictionary<int, int> index, int low, int high)
+        {
+            // ページの行・列の数は限られるため、索引を走査する(範囲の大きさによらない)。
+            var count = 0;
+            foreach (var key in index.Keys)
+            {
+                if (key >= low && key <= high)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>
+        /// 配置の列挙をファイルの値の表記(<c>distributed</c>・<c>centerContinuous</c> など)にする(design.md 3.5。補足の情報は
+        /// テンプレートの担当者が Excel・XML の設定と照合するための値)。
+        /// </summary>
+        private static string XmlName<T>(T value)
+            where T : struct, Enum
+        {
+            var name = value.ToString();
+            return name.Length == 0 ? name : char.ToLowerInvariant(name[0]) + name.Substring(1);
         }
 
         /// <summary>要素の識別。IDがあればID、無ければ(0なら)描画パートの中の順番(design.md 9)。</summary>
@@ -508,7 +564,9 @@ namespace Utsushi.Layout
                     location,
                     identity,
                     styleFont,
-                    "図形の文字のスタイル・テーマが指す書体は使わず、既定の書体で描きます。");
+                    styleFont.StartsWith("ea=", StringComparison.Ordinal)
+                        ? "図形の日本語の文字は、東アジアの書体(a:ea)ではなく、英数字の書体(a:latin)で描きます。"
+                        : "図形の文字のスタイル・テーマが指す書体は使わず、既定の書体で描きます。");
             }
 
             if (text is null || (text.Vertical is null && text.RotationDegrees == 0))
@@ -1764,7 +1822,7 @@ namespace Utsushi.Layout
             if (hMessage is not null)
             {
                 _approximations.Add(
-                    FormatApproximationKind.HorizontalAlignment, sheet, location, null, "horizontal=" + style.HAlign, hMessage);
+                    FormatApproximationKind.HorizontalAlignment, sheet, location, null, "horizontal=" + XmlName(style.HAlign), hMessage);
             }
 
             if (style.VAlign is VerticalAlignment.Justify or VerticalAlignment.Distributed)
@@ -1774,7 +1832,7 @@ namespace Utsushi.Layout
                     sheet,
                     location,
                     null,
-                    "vertical=" + style.VAlign,
+                    "vertical=" + XmlName(style.VAlign),
                     "縦位置の両端揃え・均等割り付けは中央揃えで描きます(Excelと配置・折り返しが異なることがあります)。");
             }
 

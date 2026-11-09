@@ -2092,9 +2092,10 @@ namespace Utsushi.Parsing.OpenXml
 
                 if (gradientFill.GetFirstChild<Dr.PathGradientFill>() is { } pathFill)
                 {
-                    if (LenientValue.Read(() => pathFill.Path?.Value, null) is { } pathKind && pathKind != Dr.PathShadeValues.Circle)
+                    // 補足の情報はファイルの値(circle/rect/shape)のまま返す(design.md 3.5)。
+                    if (pathFill.Path?.InnerText is { Length: > 0 } pathKind && pathKind != "circle")
                     {
-                        approximation = "path=" + pathKind;
+                        approximation = "path=" + DiagnosticText.Normalize(pathKind);
                     }
 
                     // a:path[@path='circle'/'rect'/'shape']のいずれも放射状として近似する
@@ -2400,7 +2401,8 @@ namespace Utsushi.Parsing.OpenXml
                         }
                         else if (latin is null && style?.FontReference is { } reference)
                         {
-                            styleFont = "fontRef=" + (reference.Index?.Value.ToString() ?? "-");
+                            // 診断にしか使わないため、型付きの値として読まない(不正な値でファイル全体を破損としない)。
+                            styleFont = "fontRef=" + (DiagnosticText.Normalize(reference.Index?.InnerText) is { Length: > 0 } index ? index : "-");
                         }
                         else if (latin is not null && HasNonAsciiLetter(text!))
                         {
@@ -2437,11 +2439,14 @@ namespace Utsushi.Parsing.OpenXml
 
             var bodyProperties = textBody.BodyProperties;
             var vAlign = MapVerticalAlignment(bodyProperties?.Anchor?.Value);
-            var vertical = LenientValue.Read(() => bodyProperties?.Vertical?.Value, null);
+            // 文字の向きは診断にしか使わないため、ファイルの値(eaVert・vert270 など)のまま読む(design.md 3.5)。
+            var vertical = bodyProperties?.Vertical?.InnerText is { Length: > 0 } vert && vert != "horz"
+                ? DiagnosticText.Normalize(vert)
+                : null;
             var rotation = LenientValue.Read(() => bodyProperties?.Rotation?.Value ?? 0, 0) / 60000.0;
             return new ShapeTextBody(paragraphs, vAlign, ReadShapeTextInsets(bodyProperties))
             {
-                Vertical = vertical is null || vertical.Value == Dr.TextVerticalValues.Horizontal ? null : vertical.Value.ToString(),
+                Vertical = vertical,
                 RotationDegrees = double.IsFinite(rotation) ? rotation : 0,
                 StyleFont = styleFont,
             };

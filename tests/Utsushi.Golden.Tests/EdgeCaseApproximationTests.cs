@@ -26,9 +26,9 @@ namespace Utsushi.Golden.Tests
             var result = Check("edge-order-form");
 
             Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.HorizontalAlignment
-                && a.Location == CellRange.Parse("B24:B24") && a.Detail == "horizontal=Distributed");
+                && a.Location == CellRange.Parse("B24:B24") && a.Detail == "horizontal=distributed");
             Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.HorizontalAlignment
-                && a.Location == CellRange.Parse("B25:B25") && a.Detail == "horizontal=CenterContinuous");
+                && a.Location == CellRange.Parse("B25:B25") && a.Detail == "horizontal=centerContinuous");
             Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.TextRotation
                 && a.Location == CellRange.Parse("A24:A28") && a.Detail == "textRotation=255");
             Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.ConditionalFormatting
@@ -74,7 +74,7 @@ namespace Utsushi.Golden.Tests
             var result = Check("edge-order-form");
 
             Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.CellFillPattern
-                && a.Location == CellRange.Parse("B26:B26") && a.Detail == "patternType=DarkTrellis");
+                && a.Location == CellRange.Parse("B26:B26") && a.Detail == "patternType=darkTrellis");
             Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.CellFillGradient
                 && a.Location == CellRange.Parse("B27:B27"));
         }
