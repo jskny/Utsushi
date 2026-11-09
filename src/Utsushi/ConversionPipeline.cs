@@ -83,12 +83,12 @@ namespace Utsushi
             }
             catch (FontNotAvailableException ex) when (LacksContext(ex))
             {
-                throw WithContext(ex, ProcessingStage.Rendering, layout.ReportCode, layout.SheetName);
+                throw WithContext(ex, ProcessingStage.Rendering, layout.DocumentName, layout.SheetName);
             }
             catch (IOException ex)
             {
                 throw new PdfRenderingException(
-                    $"PDFを出力先へ書き込めませんでした: {ex.Message}", layout.ReportCode, layout.SheetName, ex);
+                    $"PDFを出力先へ書き込めませんでした: {ex.Message}", layout.DocumentName, layout.SheetName, ex);
             }
         }
 
@@ -107,11 +107,11 @@ namespace Utsushi
                 _renderer.Render(layout, buffer);
 
                 buffer.Position = 0;
-                AtomicFileWriter.Write(outputPath, buffer, layout.ReportCode, layout.SheetName);
+                AtomicFileWriter.Write(outputPath, buffer, layout.DocumentName, layout.SheetName);
             }
             catch (FontNotAvailableException ex) when (LacksContext(ex))
             {
-                throw WithContext(ex, ProcessingStage.Rendering, layout.ReportCode, layout.SheetName);
+                throw WithContext(ex, ProcessingStage.Rendering, layout.DocumentName, layout.SheetName);
             }
         }
 
@@ -119,15 +119,15 @@ namespace Utsushi
         /// フォントの解決(<see cref="FontResolver"/>)は文書を知らないため、文書名・シート名を持たない
         /// <see cref="FontNotAvailableException"/> を投げる。ファサードで補う必要があるかどうか。
         /// </summary>
-        private static bool LacksContext(FontNotAvailableException ex) => ex.ReportCode is null || ex.SheetName is null;
+        private static bool LacksContext(FontNotAvailableException ex) => ex.DocumentName is null || ex.SheetName is null;
 
         /// <summary>
         /// 文書名・シート名・処理段階を補った <see cref="FontNotAvailableException"/> で包み直す。
         /// 例外の型は変えず、元の例外は <see cref="Exception.InnerException"/> に入れる。
         /// </summary>
         private static FontNotAvailableException WithContext(
-            FontNotAvailableException ex, ProcessingStage stage, string reportCode, string sheetName) =>
-            new(ex.FontName, ex.Message, stage, ex.ReportCode ?? reportCode, ex.SheetName ?? sheetName, ex);
+            FontNotAvailableException ex, ProcessingStage stage, string documentName, string sheetName) =>
+            new(ex.FontName, ex.Message, stage, ex.DocumentName ?? documentName, ex.SheetName ?? sheetName, ex);
 
         /// <summary>
         /// PDF描画の手前まで(Parsing → 変換設定 → Substitution → Layout)を実行する(要件12)。
@@ -211,7 +211,7 @@ namespace Utsushi
             catch (FontNotAvailableException ex) when (LacksContext(ex))
             {
                 // レイアウト計算中の文字幅の計測(SkiaFontMetricsProvider)で起きた場合は、Stage=Layout として伝える。
-                throw WithContext(ex, ProcessingStage.Layout, definition.ReportCode, definition.SheetName);
+                throw WithContext(ex, ProcessingStage.Layout, definition.DocumentName, definition.SheetName);
             }
         }
 

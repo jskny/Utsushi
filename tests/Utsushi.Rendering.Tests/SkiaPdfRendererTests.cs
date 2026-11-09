@@ -281,7 +281,7 @@ namespace Utsushi.Rendering.Tests
         }
 
         [Fact]
-        public void デコードできない画像は帳票コードとシート名を含む例外になる()
+        public void デコードできない画像は文書名とシート名を含む例外になる()
         {
             var renderer = new SkiaPdfRenderer(_metrics);
             using var output = new MemoryStream();
@@ -294,7 +294,7 @@ namespace Utsushi.Rendering.Tests
             var ex = Assert.Throws<PdfRenderingException>(() => renderer.Render(layout, output));
 
             Assert.Equal(ProcessingStage.Rendering, ex.Stage);
-            Assert.Equal("test-report", ex.ReportCode);
+            Assert.Equal("test-report", ex.DocumentName);
             Assert.Equal("テストシート", ex.SheetName);
             Assert.Equal(0, output.Length);
         }

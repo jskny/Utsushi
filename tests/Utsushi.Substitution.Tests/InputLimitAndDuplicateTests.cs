@@ -74,7 +74,7 @@ namespace Utsushi.Substitution.Tests
                 () => _substitutor.ApplyCellOverrides(report, overrides));
 
             Assert.Equal(ProcessingStage.Substitution, ex.Stage);
-            Assert.Equal("test-report", ex.ReportCode);
+            Assert.Equal("test-report", ex.DocumentName);
         }
 
         [Theory]

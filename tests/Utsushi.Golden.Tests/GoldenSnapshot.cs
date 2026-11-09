@@ -34,7 +34,7 @@ namespace Utsushi.Golden.Tests
         public static string Create(PagedLayout layout)
         {
             var sb = new StringBuilder();
-            sb.Append("report=").Append(layout.ReportCode)
+            sb.Append("document=").Append(layout.DocumentName)
               .Append(" sheet=").Append(layout.SheetName)
               .Append(" pages=").Append(layout.PageCount)
               .AppendLine();

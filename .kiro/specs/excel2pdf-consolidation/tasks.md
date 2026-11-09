@@ -156,7 +156,7 @@
   - _Requirements: 1.5_
 - [x] 8.6 Core: 帳票定義・置換キーの例外と `ProcessingStage.ReportDefinition` を削除する(`ReportModelBuilder` のシートの不在は `InvalidOperationException` にする)
   - _Requirements: 1.3_
-- [ ] 8.7 `ReportCode` を `DocumentName` に改める(`UtsushiException`・`PagedLayout`・`WorkbookReadOptions`。ゴールデンの1行目が `document=` になる)
+- [x] 8.7 `ReportCode` を `DocumentName` に改める(`UtsushiException`・`PagedLayout`・`WorkbookReadOptions`。ゴールデンの1行目が `document=` になる)
   - _Requirements: 1.6_
 - [ ] 8.8 `ReportDefinition` を `ConversionSettings` に縮めて名前を変える
   - _Requirements: 1.5_

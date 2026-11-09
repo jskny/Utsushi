@@ -76,7 +76,7 @@ namespace Utsushi.Rendering
             if (layout.Pages.Count == 0)
             {
                 throw new PdfRenderingException(
-                    "出力するページがありません。", layout.ReportCode, layout.SheetName);
+                    "出力するページがありません。", layout.DocumentName, layout.SheetName);
             }
 
             using var buffer = new MemoryStream();
@@ -91,7 +91,7 @@ namespace Utsushi.Rendering
             catch (Exception ex)
             {
                 throw new PdfRenderingException(
-                    $"PDFの生成に失敗しました: {ex.Message}", layout.ReportCode, layout.SheetName, ex);
+                    $"PDFの生成に失敗しました: {ex.Message}", layout.DocumentName, layout.SheetName, ex);
             }
 
             // ここまで来た時点で完全なPDFがバッファ上にある。要件5.4 のため、この時点で初めて出力先へ書く。
@@ -114,7 +114,7 @@ namespace Utsushi.Rendering
             Render(layout, buffer);
 
             buffer.Position = 0;
-            AtomicFileWriter.Write(path, buffer, layout.ReportCode, layout.SheetName);
+            AtomicFileWriter.Write(path, buffer, layout.DocumentName, layout.SheetName);
         }
 
         private void RenderToStream(PagedLayout layout, Stream target)
@@ -129,7 +129,7 @@ namespace Utsushi.Rendering
             {
                 Creator = _options.Creator,
                 Producer = _options.Producer,
-                Title = _options.Title ?? layout.ReportCode,
+                Title = _options.Title ?? layout.DocumentName,
                 // フォントは埋め込み(サブセット化)する。PDF/A ではなく汎用のPDF 1.4 相当を出力する。
                 RasterDpi = _options.RasterDpi,
                 EncodingQuality = _options.EncodingQuality,
@@ -137,7 +137,7 @@ namespace Utsushi.Rendering
 
             using var document = SKDocument.CreatePdf(skStream, metadata)
                 ?? throw new PdfRenderingException(
-                    "PDFドキュメントを生成できませんでした。", layout.ReportCode, layout.SheetName);
+                    "PDFドキュメントを生成できませんでした。", layout.DocumentName, layout.SheetName);
 
             foreach (var page in layout.Pages)
             {
@@ -204,7 +204,7 @@ namespace Utsushi.Rendering
 
                 default:
                     throw new PdfRenderingException(
-                        $"未知の描画命令です: {command.GetType().Name}", context.ReportCode, context.SheetName);
+                        $"未知の描画命令です: {command.GetType().Name}", context.DocumentName, context.SheetName);
             }
         }
 
@@ -268,7 +268,7 @@ namespace Utsushi.Rendering
             if (bounds.IsEmpty)
             {
                 throw new PdfRenderingException(
-                    $"画像(ContentType: {contentType})をデコードできませんでした。", context.ReportCode, context.SheetName);
+                    $"画像(ContentType: {contentType})をデコードできませんでした。", context.DocumentName, context.SheetName);
             }
 
             if (bounds.Width > MaxDecodedImageDimensionPx || bounds.Height > MaxDecodedImageDimensionPx)
@@ -276,20 +276,20 @@ namespace Utsushi.Rendering
                 throw new PdfRenderingException(
                     $"画像(ContentType: {contentType})の寸法({bounds.Width}x{bounds.Height}px)が"
                     + $"上限({MaxDecodedImageDimensionPx}px)を超えています。",
-                    context.ReportCode, context.SheetName);
+                    context.DocumentName, context.SheetName);
             }
 
             using var bitmap = SKBitmap.Decode(data);
             if (bitmap is null)
             {
                 throw new PdfRenderingException(
-                    $"画像(ContentType: {contentType})をデコードできませんでした。", context.ReportCode, context.SheetName);
+                    $"画像(ContentType: {contentType})をデコードできませんでした。", context.DocumentName, context.SheetName);
             }
 
             // SKImage へはピクセルを複製して変換するため、デコードしたビットマップはここで解放してよい。
             return SKImage.FromBitmap(bitmap)
                 ?? throw new PdfRenderingException(
-                    $"画像(ContentType: {contentType})をデコードできませんでした。", context.ReportCode, context.SheetName);
+                    $"画像(ContentType: {contentType})をデコードできませんでした。", context.DocumentName, context.SheetName);
         }
 
         /// <summary>図形を描画する(要件10)。他のセル内容より最前面に描画される。</summary>
@@ -666,7 +666,7 @@ namespace Utsushi.Rendering
 
         /// <summary>字形が見つからなかったことを表す例外を作る(要件5.5)。</summary>
         internal static MissingGlyphException CreateMissingGlyphException(
-            ShapedText shaped, string text, string reportCode, string sheetName)
+            ShapedText shaped, string text, string documentName, string sheetName)
         {
             var missing = shaped.Missing!;
             var fontName = shaped.Primary.Typeface.FamilyName ?? string.Empty;
@@ -680,7 +680,7 @@ namespace Utsushi.Rendering
                 $"{character}の字形が、フォント '{fontName}' にも外字用の代替フォントにもありません"
                     + $"(描画しようとした文字列の先頭: \"{Excerpt(text)}\")。そのまま出力すると豆腐(□)や別の字形になるため中止しました。"
                     + "字形を持つフォント(IPAmj明朝など)を外字用の代替フォントに加えるか、別の文字に置き換えてください。",
-                reportCode,
+                documentName,
                 sheetName);
         }
 
@@ -857,7 +857,7 @@ namespace Utsushi.Rendering
     }
 
     /// <summary>PDF出力のオプション。</summary>
-    /// <param name="Title">PDFのタイトル。null の場合は帳票コードを使う。</param>
+    /// <param name="Title">PDFのタイトル。null の場合は文書名を使う。</param>
     /// <param name="Creator">作成アプリケーション名。</param>
     /// <param name="Producer">生成ライブラリ名。</param>
     /// <param name="RasterDpi">ラスタ化が必要な要素の解像度。</param>

@@ -214,10 +214,10 @@ namespace Utsushi.Parsing.Tests
             var ex = Assert.Throws<InvalidExcelFileException>(
                 () => _reader.ReadFile(
                     TestPaths.SampleTemplate("invoice"),
-                    new WorkbookReadOptions(SheetNameFilter: "存在しないシート", ReportCode: "invoice")));
+                    new WorkbookReadOptions(SheetNameFilter: "存在しないシート", DocumentName: "invoice")));
 
             Assert.Equal(InvalidExcelFileReason.NoWorksheet, ex.Reason);
-            Assert.Equal("invoice", ex.ReportCode);
+            Assert.Equal("invoice", ex.DocumentName);
         }
 
         [Fact]

@@ -170,9 +170,9 @@ namespace Utsushi.Layout.Model
 
     /// <summary>ページ分割・座標計算済みのレイアウト結果。</summary>
     /// <param name="Pages">印刷順に並んだページ。</param>
-    /// <param name="ReportCode">帳票コード(診断用)。</param>
+    /// <param name="DocumentName">文書名(診断用)。</param>
     /// <param name="SheetName">シート名(診断用)。</param>
-    public sealed record PagedLayout(IReadOnlyList<PageLayout> Pages, string ReportCode, string SheetName)
+    public sealed record PagedLayout(IReadOnlyList<PageLayout> Pages, string DocumentName, string SheetName)
     {
         public int PageCount => Pages.Count;
 

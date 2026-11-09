@@ -6,14 +6,14 @@ namespace Utsushi.ReportDefinitions.Model
     /// 1回の変換の設定(文書名・シート名・最大数字幅)。帳票ごとの差異はテンプレート(Excelの書式・印刷設定)と
     /// 呼び出し元が書き込む値で表し、共通レイヤーのコードに帳票固有の分岐を持ち込まない(excel2pdf-consolidation 要件1.5)。
     /// </summary>
-    /// <param name="ReportCode">文書名。PDFのタイトル・ヘッダー/フッターの <c>&amp;F</c>・エラー情報に使う(要件12.5)。</param>
+    /// <param name="DocumentName">文書名。PDFのタイトル・ヘッダー/フッターの <c>&amp;F</c>・エラー情報に使う(要件12.5)。</param>
     /// <param name="SheetName">変換するシートの名前。</param>
     /// <param name="MaxDigitWidthPx">
     /// 列幅(文字数単位)→ピクセル換算に用いる標準フォントの最大数字幅(96dpiのピクセル)。
     /// Excel の換算式が標準フォント依存であるため、呼び出し元が指定できるようにしている。
     /// </param>
     public sealed record ReportDefinition(
-        string ReportCode,
+        string DocumentName,
         string SheetName,
         double MaxDigitWidthPx)
     {

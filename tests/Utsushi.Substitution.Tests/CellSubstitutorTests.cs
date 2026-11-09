@@ -157,7 +157,7 @@ namespace Utsushi.Substitution.Tests
                     report, new Dictionary<string, string> { ["not-a-cell"] = "v" }));
 
             Assert.Equal("not-a-cell", ex.Address);
-            Assert.Equal("test-report", ex.ReportCode);
+            Assert.Equal("test-report", ex.DocumentName);
             Assert.Equal(ProcessingStage.Substitution, ex.Stage);
         }
 
@@ -193,7 +193,7 @@ namespace Utsushi.Substitution.Tests
 
             Assert.Equal(CellAddress.Parse("D5"), ex.CellAddress);
             Assert.Equal(CellAddress.Parse("B5"), ex.AnchorAddress);
-            Assert.Equal("test-report", ex.ReportCode);
+            Assert.Equal("test-report", ex.DocumentName);
         }
     }
 }

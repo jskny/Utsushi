@@ -22,7 +22,7 @@ namespace Utsushi.Parsing.Tests
             if (workbook.UnsupportedElements.Count > 0)
             {
                 throw new UnsupportedWorkbookElementException(
-                    workbook.UnsupportedElements, workbook.UnsupportedElementsTruncated, options.ReportCode);
+                    workbook.UnsupportedElements, workbook.UnsupportedElementsTruncated, options.DocumentName);
             }
 
             return workbook;

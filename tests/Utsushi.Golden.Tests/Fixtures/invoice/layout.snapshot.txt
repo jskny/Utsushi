@@ -1,4 +1,4 @@
-report=invoice sheet=請求書 pages=1
+document=invoice sheet=請求書 pages=1
 
 ## page 1 paper=A4/Portrait size=595.28x841.89 scale=1 rows=1-34 cols=1-6
 fill   rect=[50.4,231 378x13.5] color=#FFDCE6F1

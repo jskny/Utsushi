@@ -12,10 +12,10 @@ namespace Utsushi.Core.Exceptions
         public InvalidSubstitutionValueException(
             string target,
             string message,
-            string? reportCode = null,
+            string? documentName = null,
             string? sheetName = null,
             CellAddress? cellAddress = null)
-            : base(message, ProcessingStage.Substitution, reportCode, sheetName, cellAddress)
+            : base(message, ProcessingStage.Substitution, documentName, sheetName, cellAddress)
         {
             Target = target;
         }
@@ -33,9 +33,9 @@ namespace Utsushi.Core.Exceptions
         public InvalidCellOverrideAddressException(
             string address,
             string message,
-            string? reportCode = null,
+            string? documentName = null,
             string? sheetName = null)
-            : base(message, ProcessingStage.Substitution, reportCode, sheetName)
+            : base(message, ProcessingStage.Substitution, documentName, sheetName)
         {
             Address = address;
         }
@@ -58,9 +58,9 @@ namespace Utsushi.Core.Exceptions
             CellAddress address,
             CellAddress anchorAddress,
             string message,
-            string? reportCode = null,
+            string? documentName = null,
             string? sheetName = null)
-            : base(message, ProcessingStage.Substitution, reportCode, sheetName, address)
+            : base(message, ProcessingStage.Substitution, documentName, sheetName, address)
         {
             AnchorAddress = anchorAddress;
         }

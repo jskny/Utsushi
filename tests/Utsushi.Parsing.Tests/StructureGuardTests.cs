@@ -52,7 +52,7 @@ namespace Utsushi.Parsing.Tests
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
             Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Contains("/xl/test.xml", ex.Message, StringComparison.Ordinal);
         }
 
@@ -108,7 +108,7 @@ namespace Utsushi.Parsing.Tests
                     xml, maxDepth: 10, maxBytes: bytes.Length - 1, "/xl/test.xml", "report"));
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
         }
 
         // --- 要件6.7: 壊れたXML・DTD(ヘルパー) ----------------------------------------
@@ -162,9 +162,9 @@ namespace Utsushi.Parsing.Tests
 
                 using var stream = File.OpenRead(path);
                 var errorEx = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.ReadStrict(stream, new WorkbookReadOptions(ReportCode: "report")));
+                    () => _reader.ReadStrict(stream, new WorkbookReadOptions(DocumentName: "report")));
                 Assert.Equal(InvalidExcelFileReason.TooLarge, errorEx.Reason);
-                Assert.Equal("report", errorEx.ReportCode);
+                Assert.Equal("report", errorEx.DocumentName);
             }
             finally
             {
@@ -282,7 +282,7 @@ namespace Utsushi.Parsing.Tests
                 () => OpenXmlWorkbookReader.EnsureColumnExpansionsWithinLimit(expansions: 6, maxExpansions: 5, "シート1", "report"));
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Contains("シート1", ex.Message, StringComparison.Ordinal);
         }
 
@@ -451,9 +451,9 @@ namespace Utsushi.Parsing.Tests
             {
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(ReportCode: "report")));
+                    () => _reader.Read(stream, new WorkbookReadOptions(DocumentName: "report")));
                 Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
-                Assert.Equal("report", ex.ReportCode);
+                Assert.Equal("report", ex.DocumentName);
             }
             finally
             {
@@ -516,9 +516,9 @@ namespace Utsushi.Parsing.Tests
             {
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(ReportCode: "report")));
+                    () => _reader.Read(stream, new WorkbookReadOptions(DocumentName: "report")));
                 Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
-                Assert.Equal("report", ex.ReportCode);
+                Assert.Equal("report", ex.DocumentName);
             }
             finally
             {
@@ -536,7 +536,7 @@ namespace Utsushi.Parsing.Tests
             {
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<UnsupportedWorkbookElementException>(
-                    () => _reader.ReadStrict(stream, new WorkbookReadOptions(ReportCode: "report")));
+                    () => _reader.ReadStrict(stream, new WorkbookReadOptions(DocumentName: "report")));
 
                 var element = StrictReading.AssertContains(ex, UnsupportedElementKind.MissingImagePart);
                 Assert.Equal("テストシート", element.SheetName);

@@ -20,7 +20,7 @@ namespace Utsushi.Parsing
     /// <summary>
     /// ワークブック読み取りのオプション。帳票定義由来の設定を Parsing レイヤーへ渡すために使う。
     /// </summary>
-    /// <param name="ReportCode">エラーに含める帳票コード(判明している場合)。要件6.4。</param>
+    /// <param name="DocumentName">エラーに含める文書名(判明している場合)。要件6.4。</param>
     /// <param name="SheetNameFilter">読み取るシートを限定する場合のシート名。null ならすべてのシートを読む。</param>
     /// <param name="ActiveSheetOnly">
     /// true の場合、ブックのアクティブシート(<c>workbookView/@activeTab</c>。非表示なら表示されている最初のシート)
@@ -32,7 +32,7 @@ namespace Utsushi.Parsing
     /// <see cref="WorkbookModel.UnsupportedElements"/> に記録する。エラーにするかどうかは呼び出し元(ファサード)が決める。
     /// </remarks>
     public sealed record WorkbookReadOptions(
-        string? ReportCode = null,
+        string? DocumentName = null,
         string? SheetNameFilter = null,
         bool ActiveSheetOnly = false)
     {

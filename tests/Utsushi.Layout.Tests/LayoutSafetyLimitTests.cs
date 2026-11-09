@@ -58,7 +58,7 @@ namespace Utsushi.Layout.Tests
                     ranges.Select(CellRange.Parse).ToList(), maxCells, "report", "シート1"));
 
             Assert.Equal(ProcessingStage.Layout, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Equal("シート1", ex.SheetName);
         }
 
@@ -123,7 +123,7 @@ namespace Utsushi.Layout.Tests
                     new PrintTitles(firstRow, lastRow, firstColumn, lastColumn)));
 
             Assert.Equal(ProcessingStage.Layout, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Equal("シート1", ex.SheetName);
         }
 
@@ -163,7 +163,7 @@ namespace Utsushi.Layout.Tests
                 () => ReportLayoutEngine.EnsurePageCountWithinLimit(pageCount, maxPages, "report", "シート1"));
 
             Assert.Equal(ProcessingStage.Layout, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Equal("シート1", ex.SheetName);
         }
 
@@ -180,7 +180,7 @@ namespace Utsushi.Layout.Tests
 
             var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet));
 
-            Assert.Equal("test-report", ex.ReportCode);
+            Assert.Equal("test-report", ex.DocumentName);
             Assert.Equal("テストシート", ex.SheetName);
             Assert.Contains("印刷範囲", ex.Message, StringComparison.Ordinal);
         }
@@ -227,7 +227,7 @@ namespace Utsushi.Layout.Tests
 
             var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet));
 
-            Assert.Equal("test-report", ex.ReportCode);
+            Assert.Equal("test-report", ex.DocumentName);
             Assert.Equal("テストシート", ex.SheetName);
             Assert.Contains("印刷範囲", ex.Message, StringComparison.Ordinal);
         }

@@ -268,7 +268,7 @@ namespace Utsushi.Golden.Tests
 
             Assert.Equal("%PDF", Encoding.ASCII.GetString(bytes, 0, 4));
             Assert.Null(pdf.XlsxPath);
-            Assert.Equal(string.Empty, pdf.ComputeLayout(checkFit: false).ReportCode);   // 文書名の既定は空文字列(要件12.5)
+            Assert.Equal(string.Empty, pdf.ComputeLayout(checkFit: false).DocumentName);   // 文書名の既定は空文字列(要件12.5)
         }
 
         [Fact]
@@ -294,7 +294,7 @@ namespace Utsushi.Golden.Tests
 
             var ex = Assert.Throws<InvalidExcelFileException>(() => Excel2Pdf.TemplateSource.FromStream(stream, "invoice", limit: 1000));
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
-            Assert.Equal("invoice", ex.ReportCode);
+            Assert.Equal("invoice", ex.DocumentName);
 
             // シークできるストリームは、読み始める前に残りの長さで拒否する。
             Assert.Equal(0, stream.Position);

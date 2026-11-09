@@ -53,7 +53,7 @@ namespace Utsushi.Parsing.Tests
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
             Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Contains("/xl/test.xml", ex.Message, StringComparison.Ordinal);
             Assert.Contains("要素の数", ex.Message, StringComparison.Ordinal);
         }
@@ -118,10 +118,10 @@ namespace Utsushi.Parsing.Tests
 
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(ReportCode: "report")));
+                    () => _reader.Read(stream, new WorkbookReadOptions(DocumentName: "report")));
 
                 Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
-                Assert.Equal("report", ex.ReportCode);
+                Assert.Equal("report", ex.DocumentName);
                 Assert.Contains("要素の数", ex.Message, StringComparison.Ordinal);
                 Assert.Contains(entry, ex.Message, StringComparison.Ordinal);
             }
@@ -184,7 +184,7 @@ namespace Utsushi.Parsing.Tests
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
             Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Contains("xl/_rels/test.xml.rels", ex.Message, StringComparison.Ordinal);
         }
 
@@ -213,10 +213,10 @@ namespace Utsushi.Parsing.Tests
 
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(ReportCode: "report")));
+                    () => _reader.Read(stream, new WorkbookReadOptions(DocumentName: "report")));
 
                 Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
-                Assert.Equal("report", ex.ReportCode);
+                Assert.Equal("report", ex.DocumentName);
                 Assert.Contains(WorkbookRelsEntry, ex.Message, StringComparison.Ordinal);
                 Assert.Null(ex.InnerException); // Open の失敗の読み替えではなく、事前検査で落ちている。
             }
@@ -305,11 +305,11 @@ namespace Utsushi.Parsing.Tests
 
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(ReportCode: "report")));
+                    () => _reader.Read(stream, new WorkbookReadOptions(DocumentName: "report")));
 
                 Assert.Equal(InvalidExcelFileReason.Corrupted, ex.Reason);
                 Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-                Assert.Equal("report", ex.ReportCode);
+                Assert.Equal("report", ex.DocumentName);
                 Assert.Contains(entry, ex.Message, StringComparison.Ordinal);
                 Assert.True(
                     ex.InnerException is InvalidDataException or IOException,

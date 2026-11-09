@@ -55,7 +55,7 @@ namespace Utsushi.Golden.Tests
 
             var layout = converter.ComputeLayout(input, documentName: "請求書_2026年4月");
 
-            Assert.Equal("請求書_2026年4月", layout.ReportCode);
+            Assert.Equal("請求書_2026年4月", layout.DocumentName);
             Assert.Equal("請求書", layout.SheetName);
             Assert.Equal(1, layout.PageCount);
 
@@ -73,7 +73,7 @@ namespace Utsushi.Golden.Tests
 
             var layout = converter.ComputeLayout(input);
 
-            Assert.Equal(string.Empty, layout.ReportCode);
+            Assert.Equal(string.Empty, layout.DocumentName);
             Assert.Equal("請求書", layout.SheetName);
         }
 
@@ -107,7 +107,7 @@ namespace Utsushi.Golden.Tests
                 new Dictionary<string, string> { ["B5"] = "見えなくなる値" },
                 "doc"));
 
-            Assert.Equal("doc", ex.ReportCode);
+            Assert.Equal("doc", ex.DocumentName);
         }
 
         [Fact]
@@ -154,7 +154,7 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
-        public void ストリームへの保存は描画に渡すレイアウトの帳票コードが文書名になる()
+        public void ストリームへの保存は描画に渡すレイアウトに文書名を入れる()
         {
             var renderer = new CapturingPdfRenderer();
             using var converter = CreateConverter(renderer);
@@ -163,7 +163,7 @@ namespace Utsushi.Golden.Tests
 
             converter.Convert(input, output, documentName: "文書A");
 
-            Assert.Equal("文書A", renderer.Captured!.ReportCode);
+            Assert.Equal("文書A", renderer.Captured!.DocumentName);
             Assert.Equal(CapturingPdfRenderer.Content, Encoding.UTF8.GetString(output.ToArray()));
         }
 
@@ -183,7 +183,7 @@ namespace Utsushi.Golden.Tests
                 converter.ConvertFile(
                     inputPath, outputPath, new Dictionary<string, string> { ["A5"] = "件名: ファイル版" });
 
-                Assert.Equal("請求書_2026年4月", renderer.Captured!.ReportCode);
+                Assert.Equal("請求書_2026年4月", renderer.Captured!.DocumentName);
                 Assert.Equal("請求書", renderer.Captured.SheetName);
                 Assert.Contains("件名: ファイル版", Texts(renderer.Captured));
                 Assert.Equal(CapturingPdfRenderer.Content, File.ReadAllText(outputPath));
@@ -230,7 +230,7 @@ namespace Utsushi.Golden.Tests
                     () => converter.ConvertFile(missingPath, outputPath));
 
                 Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-                Assert.Equal("存在しない帳票", ex.ReportCode);
+                Assert.Equal("存在しない帳票", ex.DocumentName);
                 Assert.False(File.Exists(outputPath));
             }
             finally

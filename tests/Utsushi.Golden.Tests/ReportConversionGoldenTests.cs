@@ -209,7 +209,7 @@ namespace Utsushi.Golden.Tests
 
             Assert.Equal(CellAddress.Parse("B3"), ex.CellAddress);
             Assert.Equal(CellAddress.Parse("A3"), ex.AnchorAddress);
-            Assert.Equal("invoice", ex.ReportCode);
+            Assert.Equal("invoice", ex.DocumentName);
         }
 
         [Fact]
@@ -221,7 +221,7 @@ namespace Utsushi.Golden.Tests
             var ex = Assert.Throws<InvalidCellOverrideAddressException>(() => pdf.SetText("not-a-cell", "x"));
 
             Assert.Equal("not-a-cell", ex.Address);
-            Assert.Equal("invoice", ex.ReportCode);
+            Assert.Equal("invoice", ex.DocumentName);
         }
 
         [Fact]
@@ -315,7 +315,7 @@ namespace Utsushi.Golden.Tests
             var ex = Assert.Throws<InvalidSubstitutionValueException>(() => ComputeLayout("invoice", values));
 
             Assert.Equal(ProcessingStage.Substitution, ex.Stage);
-            Assert.Equal("invoice", ex.ReportCode);
+            Assert.Equal("invoice", ex.DocumentName);
             Assert.Equal(CellAddress.Parse("F3"), ex.CellAddress);
         }
 

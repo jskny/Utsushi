@@ -26,7 +26,7 @@ namespace Utsushi.Golden.Tests
             Assert.Contains(ex.Elements, e => e.Kind == UnsupportedElementKind.Chart && e.SheetName == "注文書" && e.Anchor is not null);
             Assert.Contains(ex.Elements, e => e.Kind == UnsupportedElementKind.LegacyDrawing);
             Assert.False(ex.IsTruncated);
-            Assert.Equal("template", ex.ReportCode);
+            Assert.Equal("template", ex.DocumentName);
             Assert.Equal("注文書", ex.SheetName);
             Assert.Equal(ProcessingStage.Parsing, ex.Stage);
             Assert.Contains("Ignore", ex.Message);

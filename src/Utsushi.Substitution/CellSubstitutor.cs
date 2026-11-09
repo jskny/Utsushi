@@ -62,7 +62,7 @@ namespace Utsushi.Substitution
                 throw new InvalidSubstitutionValueException(
                     "cellOverrides",
                     $"セル番地の直接指定が文字列・数値の合計で {total} 件あり、上限({MaxCellOverrideCount} 件)を超えています。",
-                    report.Definition.ReportCode,
+                    report.Definition.DocumentName,
                     report.Sheet.Name);
             }
 
@@ -74,7 +74,7 @@ namespace Utsushi.Substitution
                     throw new InvalidSubstitutionValueException(
                         addressText ?? string.Empty,
                         $"セル番地 '{addressText}' に指定した数値 {value.ToString(CultureInfo.InvariantCulture)} はセルに表示できません。",
-                        report.Definition.ReportCode,
+                        report.Definition.DocumentName,
                         report.Sheet.Name,
                         CellAddress.TryParse(addressText, out var invalidAt) ? invalidAt : null);
                 }
@@ -126,7 +126,7 @@ namespace Utsushi.Substitution
                 throw new InvalidSubstitutionValueException(
                     "cellOverrides",
                     $"セル番地の直接指定が {cellOverrides.Count} 件あり、上限({MaxCellOverrideCount} 件)を超えています。",
-                    definition.ReportCode,
+                    definition.DocumentName,
                     sheet.Name);
             }
 
@@ -187,7 +187,7 @@ namespace Utsushi.Substitution
                 throw new InvalidSubstitutionValueException(
                     target,
                     $"{description} の値が null です。空欄にする場合は空文字を渡してください。",
-                    definition.ReportCode,
+                    definition.DocumentName,
                     sheetName,
                     cell);
             }
@@ -197,7 +197,7 @@ namespace Utsushi.Substitution
                 throw new InvalidSubstitutionValueException(
                     target,
                     $"{description} の値が {value.Length} 文字あり、上限({MaxValueLength} 文字。Excelのセルに入れられる文字数)を超えています。",
-                    definition.ReportCode,
+                    definition.DocumentName,
                     sheetName,
                     cell);
             }
@@ -238,7 +238,7 @@ namespace Utsushi.Substitution
                         target,
                         $"{description} の値の {i + 1} 文字目に{problem}が含まれています。"
                             + "PDFに文字として描画できないため、呼び出し元で除去または置き換えてください。",
-                        definition.ReportCode,
+                        definition.DocumentName,
                         sheetName,
                         cell);
                 }
@@ -266,7 +266,7 @@ namespace Utsushi.Substitution
                     throw new InvalidCellOverrideAddressException(
                         addressText,
                         $"セル番地 '{addressText}' はA1形式として解釈できません。",
-                        definition.ReportCode,
+                        definition.DocumentName,
                         sheet.Name);
                 }
 
@@ -278,7 +278,7 @@ namespace Utsushi.Substitution
                         addressText,
                         $"セル番地 '{addressText}' と '{otherText}' が同じセル {address} を指しています。"
                             + "1つのセルへの直接指定は1つにしてください。",
-                        definition.ReportCode,
+                        definition.DocumentName,
                         sheet.Name);
                 }
 
@@ -291,7 +291,7 @@ namespace Utsushi.Substitution
                         merged!.Anchor,
                         $"セル '{address}' は結合セル範囲の先頭(アンカー: '{merged.Anchor}')ではないため、"
                             + "直接指定して上書きすることはできません。アンカーのセル番地を指定してください。",
-                        definition.ReportCode,
+                        definition.DocumentName,
                         sheet.Name);
                 }
 

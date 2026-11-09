@@ -1695,7 +1695,7 @@ namespace Utsushi.Layout
                 throw new LayoutComputationException(
                     $"セル {address} に値を差し込みましたが、セルの幅または高さが無いため、PDFに出力されません。"
                     + "テンプレートの列幅・行の高さを見直してください。",
-                    _report.Definition.ReportCode,
+                    _report.Definition.DocumentName,
                     _sheet.Name,
                     address);
             }
@@ -1719,7 +1719,7 @@ namespace Utsushi.Layout
                         address,
                         lineCount,
                         heightPt / _scale),
-                    _report.Definition.ReportCode,
+                    _report.Definition.DocumentName,
                     _sheet.Name,
                     address);
             }

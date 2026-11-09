@@ -24,9 +24,9 @@ namespace Utsushi.Layout
         private readonly int _limit;
         private int _count;
 
-        public StyledBlankPositionCounter(string reportCode, string sheetName, int limit = MaxStyledBlankPositions)
+        public StyledBlankPositionCounter(string documentName, string sheetName, int limit = MaxStyledBlankPositions)
         {
-            _reportCode = reportCode;
+            _reportCode = documentName;
             _sheetName = sheetName;
             _limit = limit;
         }

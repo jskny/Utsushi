@@ -59,7 +59,7 @@ namespace Utsushi.Rendering.Tests
             Assert.Equal(0x0378, ex.CodePoint);
             Assert.Equal("ABC" + UnassignedCharacter, ex.Text);
             Assert.False(string.IsNullOrEmpty(ex.FontName));
-            Assert.Equal("test-report", ex.ReportCode);
+            Assert.Equal("test-report", ex.DocumentName);
             Assert.Equal("テストシート", ex.SheetName);
             Assert.Equal(ProcessingStage.Rendering, ex.Stage);
             Assert.Contains("U+0378", ex.Message);
@@ -86,7 +86,7 @@ namespace Utsushi.Rendering.Tests
 
             var ex = Assert.Throws<MissingGlyphException>(() => renderer.Render(Layout(shape), output));
 
-            Assert.Equal("test-report", ex.ReportCode);
+            Assert.Equal("test-report", ex.DocumentName);
         }
 
         [Fact]

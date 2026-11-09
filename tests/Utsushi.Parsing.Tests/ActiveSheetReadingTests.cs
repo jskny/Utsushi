@@ -207,11 +207,11 @@ namespace Utsushi.Parsing.Tests
                 using var stream = File.OpenRead(path);
 
                 var ex = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(ReportCode: "文書", ActiveSheetOnly: true)));
+                    () => _reader.Read(stream, new WorkbookReadOptions(DocumentName: "文書", ActiveSheetOnly: true)));
 
                 Assert.Equal(InvalidExcelFileReason.NoWorksheet, ex.Reason);
                 Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-                Assert.Equal("文書", ex.ReportCode);
+                Assert.Equal("文書", ex.DocumentName);
             }
             finally
             {

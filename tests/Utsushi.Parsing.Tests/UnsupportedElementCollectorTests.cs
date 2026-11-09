@@ -142,7 +142,7 @@ namespace Utsushi.Parsing.Tests
                 .Select(i => new UnsupportedElement(UnsupportedElementKind.Chart, "S", new CellAddress(i, 1), null, "グラフ" + i))
                 .ToList();
 
-            var ex = new UnsupportedWorkbookElementException(elements, isTruncated: false, reportCode: "doc");
+            var ex = new UnsupportedWorkbookElementException(elements, isTruncated: false, documentName: "doc");
 
             Assert.StartsWith("未対応の要素が 25 件あるため中止します", ex.Message);
             Assert.Contains("A20: グラフ20", ex.Message);

@@ -15,9 +15,9 @@ namespace Utsushi.Core.Exceptions
         public InvalidExcelFileException(
             string message,
             InvalidExcelFileReason reason,
-            string? reportCode = null,
+            string? documentName = null,
             Exception? innerException = null)
-            : base(message, ProcessingStage.Parsing, reportCode, innerException: innerException)
+            : base(message, ProcessingStage.Parsing, documentName, innerException: innerException)
         {
             Reason = reason;
         }
@@ -65,9 +65,9 @@ namespace Utsushi.Core.Exceptions
         public UnsupportedWorkbookElementException(
             IReadOnlyList<UnsupportedElement> elements,
             bool isTruncated,
-            string? reportCode = null,
+            string? documentName = null,
             string? sheetName = null)
-            : base(BuildMessage(RequireElements(elements), isTruncated), ProcessingStage.Parsing, reportCode, sheetName)
+            : base(BuildMessage(RequireElements(elements), isTruncated), ProcessingStage.Parsing, documentName, sheetName)
         {
             Elements = elements;
             IsTruncated = isTruncated;

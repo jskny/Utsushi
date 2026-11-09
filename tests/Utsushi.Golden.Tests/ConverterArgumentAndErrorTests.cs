@@ -88,7 +88,7 @@ namespace Utsushi.Golden.Tests
 
             Assert.IsAssignableFrom<IOException>(ex.InnerException);
             Assert.Equal(ProcessingStage.Rendering, ex.Stage);
-            Assert.Equal("invoice", ex.ReportCode);
+            Assert.Equal("invoice", ex.DocumentName);
             Assert.Equal("請求書", ex.SheetName);
         }
 
@@ -108,7 +108,7 @@ namespace Utsushi.Golden.Tests
                 var ex = Assert.Throws<PdfRenderingException>(() => pdf.Save(Path.Combine(existingFile, "out.pdf")));
 
                 Assert.IsAssignableFrom<IOException>(ex.InnerException);
-                Assert.Equal("invoice", ex.ReportCode);
+                Assert.Equal("invoice", ex.DocumentName);
             }
             finally
             {
@@ -127,11 +127,11 @@ namespace Utsushi.Golden.Tests
             var ex = Assert.Throws<FontNotAvailableException>(() => pdf.ToPdfBytes());
 
             Assert.Equal(ProcessingStage.Layout, ex.Stage);
-            Assert.Equal("invoice", ex.ReportCode);
+            Assert.Equal("invoice", ex.DocumentName);
             Assert.Equal("請求書", ex.SheetName);
             Assert.Equal(MissingFontMetricsProvider.FontName, ex.FontName);
             var inner = Assert.IsType<FontNotAvailableException>(ex.InnerException);
-            Assert.Null(inner.ReportCode);
+            Assert.Null(inner.DocumentName);
         }
 
         [Fact]
@@ -143,7 +143,7 @@ namespace Utsushi.Golden.Tests
             var ex = Assert.Throws<FontNotAvailableException>(() => pdf.ToPdfBytes());
 
             Assert.Equal(ProcessingStage.Rendering, ex.Stage);
-            Assert.Equal("invoice", ex.ReportCode);
+            Assert.Equal("invoice", ex.DocumentName);
             Assert.Equal("請求書", ex.SheetName);
             Assert.IsType<FontNotAvailableException>(ex.InnerException);
         }
@@ -158,7 +158,7 @@ namespace Utsushi.Golden.Tests
             var ex = Assert.Throws<FontNotAvailableException>(() => pdf.Save(outputPath));
 
             Assert.Equal(ProcessingStage.Rendering, ex.Stage);
-            Assert.Equal("invoice", ex.ReportCode);
+            Assert.Equal("invoice", ex.DocumentName);
             Assert.Equal("請求書", ex.SheetName);
             Assert.False(File.Exists(outputPath));
         }

@@ -78,13 +78,13 @@ namespace Utsushi.Layout
                     + $"(用紙 {paperWidthPt:0.#}x{paperHeightPt:0.#}pt、"
                     + $"余白 左{pageSetup.Margins.LeftPt:0.#} 右{pageSetup.Margins.RightPt:0.#} "
                     + $"上{pageSetup.Margins.TopPt:0.#} 下{pageSetup.Margins.BottomPt:0.#}pt)。",
-                    definition.ReportCode,
+                    definition.DocumentName,
                     sheet.Name);
             }
 
             // 複数の印刷範囲はそれぞれ独立したページ群になる(要件3.6)。
             var printRanges = ResolvePrintRanges(sheet, definition);
-            EnsurePrintRangeCellsWithinLimit(printRanges, MaxPrintRangeCells, definition.ReportCode, sheet.Name, pageSetup.PrintTitles);
+            EnsurePrintRangeCellsWithinLimit(printRanges, MaxPrintRangeCells, definition.DocumentName, sheet.Name, pageSetup.PrintTitles);
 
             // 改ページ位置・印刷タイトルを付けるページ・拡大縮小率を印刷範囲ごとに先に決める。
             // 印刷範囲の外にある印刷タイトルが実際に出力されるかどうかは、ページ分割の結果で決まるため、
@@ -95,7 +95,7 @@ namespace Utsushi.Layout
             {
                 var plan = PlanRange(report, printRange, printableWidthPt, printableHeightPt);
                 totalPages += (long)plan.RowBands.Count * plan.ColumnBands.Count;
-                EnsurePageCountWithinLimit(totalPages, MaxPagesPerDocument, definition.ReportCode, sheet.Name);
+                EnsurePageCountWithinLimit(totalPages, MaxPagesPerDocument, definition.DocumentName, sheet.Name);
                 plans.Add(plan);
             }
 
@@ -112,7 +112,7 @@ namespace Utsushi.Layout
 
             // 書式の近似(excel2pdf-consolidation 要件7)も、診断のときだけ集める(保存の描画は変えない。要件7.5)。
             var approximations = checkFit ? new FormatApproximationCollector() : null;
-            var styledBlanks = new StyledBlankPositionCounter(definition.ReportCode, sheet.Name);
+            var styledBlanks = new StyledBlankPositionCounter(definition.DocumentName, sheet.Name);
             if (approximations is not null)
             {
                 RecordConditionalFormatting(sheet, plans, approximations);
@@ -129,7 +129,7 @@ namespace Utsushi.Layout
             {
                 throw new LayoutComputationException(
                     $"シート '{sheet.Name}' から出力可能なページがありませんでした。",
-                    definition.ReportCode,
+                    definition.DocumentName,
                     sheet.Name);
             }
 
@@ -137,7 +137,7 @@ namespace Utsushi.Layout
             // ヘッダー/フッターは全ページを組み立てたあとに付け足す(要件3.8)。
             pages = AppendHeadersAndFooters(report, pages, approximations);
 
-            return new PagedLayout(pages, definition.ReportCode, sheet.Name)
+            return new PagedLayout(pages, definition.DocumentName, sheet.Name)
             {
                 FitIssues = fitIssues?.Issues ?? Array.Empty<FitIssue>(),
                 FitIssuesTruncated = fitIssues?.IsTruncated ?? false,
@@ -258,7 +258,7 @@ namespace Utsushi.Layout
             {
                 throw new LayoutComputationException(
                     "印刷タイトルの行/列だけで印字可能領域を使い切るため、本文を配置できません。",
-                    definition.ReportCode,
+                    definition.DocumentName,
                     sheet.Name);
             }
 
@@ -281,7 +281,7 @@ namespace Utsushi.Layout
         /// タイトルの行数・列数を足して数える(タイトルだけで上限を迂回されないように。security-reviewer指摘)。
         /// </summary>
         internal static void EnsurePrintRangeCellsWithinLimit(
-            IReadOnlyList<CellRange> printRanges, long maxCells, string? reportCode, string sheetName, PrintTitles? titles = null)
+            IReadOnlyList<CellRange> printRanges, long maxCells, string? documentName, string sheetName, PrintTitles? titles = null)
         {
             var titleRows = titles is { HasRows: true } ? Math.Max(0L, (long)titles.LastRow!.Value - titles.FirstRow!.Value + 1) : 0L;
             var titleColumns = titles is { HasColumns: true }
@@ -297,20 +297,20 @@ namespace Utsushi.Layout
                     throw new LayoutComputationException(
                         $"シート '{sheetName}' の印刷範囲が大きすぎます(行数×列数の合計が上限 {maxCells:N0} を超えています)。"
                         + "印刷範囲を設定し直してください。",
-                        reportCode,
+                        documentName,
                         sheetName);
                 }
             }
         }
 
         /// <summary>出力ページ数が上限以下か確認する(要件6.9。テスト用に上限を引数に取る)。</summary>
-        internal static void EnsurePageCountWithinLimit(long pageCount, int maxPages, string? reportCode, string sheetName)
+        internal static void EnsurePageCountWithinLimit(long pageCount, int maxPages, string? documentName, string sheetName)
         {
             if (pageCount > maxPages)
             {
                 throw new LayoutComputationException(
                     $"シート '{sheetName}' の出力ページ数が上限({maxPages}ページ)を超えます。",
-                    reportCode,
+                    documentName,
                     sheetName);
             }
         }
@@ -424,7 +424,7 @@ namespace Utsushi.Layout
                     firstNumber + page.PageNumber - 1,
                     firstNumber + pages.Count - 1,
                     report.Sheet.Name,
-                    report.Definition.ReportCode,
+                    report.Definition.DocumentName,
                     timestamp,
                     report.DefaultFont,
                     IsFirstPage: page.PageNumber == 1);
@@ -471,7 +471,7 @@ namespace Utsushi.Layout
 
             throw new LayoutComputationException(
                 $"シート '{sheet.Name}' に印刷対象のセルがありません。",
-                definition.ReportCode,
+                definition.DocumentName,
                 sheet.Name);
         }
 
@@ -488,7 +488,7 @@ namespace Utsushi.Layout
                     throw new LayoutComputationException(
                         $"値を差し込んだセル {cell} が非表示の行または列(高さ・幅が0の行・列を含む)にあるため、"
                         + "PDFに出力されません。テンプレートの非表示設定・行の高さ・列幅またはセル番地を見直してください。",
-                        report.Definition.ReportCode,
+                        report.Definition.DocumentName,
                         report.Sheet.Name,
                         cell);
                 }
@@ -501,7 +501,7 @@ namespace Utsushi.Layout
                 throw new LayoutComputationException(
                     $"値を差し込んだセル {cell} が印刷範囲の外にあるため、PDFに出力されません。"
                     + "テンプレートの印刷範囲またはセル番地を見直してください。",
-                    report.Definition.ReportCode,
+                    report.Definition.DocumentName,
                     report.Sheet.Name,
                     cell);
             }

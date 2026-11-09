@@ -15,7 +15,7 @@ namespace Utsushi.ReportDefinition.Tests
         {
             var definition = Definition.CreateWithoutDefinition("見積書_2026", "見積");
 
-            Assert.Equal("見積書_2026", definition.ReportCode);
+            Assert.Equal("見積書_2026", definition.DocumentName);
             Assert.Equal("見積", definition.SheetName);
             Assert.Equal(Definition.DefaultMaxDigitWidthPx, definition.MaxDigitWidthPx);
         }
@@ -26,7 +26,7 @@ namespace Utsushi.ReportDefinition.Tests
             // ファサードは documentName が null の場合に空文字列を渡す。
             var definition = Definition.CreateWithoutDefinition(string.Empty, "Sheet1");
 
-            Assert.Equal(string.Empty, definition.ReportCode);
+            Assert.Equal(string.Empty, definition.DocumentName);
             Assert.Equal("Sheet1", definition.SheetName);
         }
 

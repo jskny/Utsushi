@@ -1,4 +1,4 @@
-report=delivery-note sheet=納品書 pages=2
+document=delivery-note sheet=納品書 pages=2
 
 ## page 1 paper=A4/Portrait size=595.28x841.89 scale=1 rows=1-53 cols=1-5
 fill   rect=[50.4,149.5 362.25x13.5] color=#FFDCE6F1

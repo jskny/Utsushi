@@ -107,7 +107,7 @@ namespace Utsushi.Rendering.Tests
 
                 Assert.IsAssignableFrom<IOException>(ex.InnerException);
                 Assert.Equal(ProcessingStage.Rendering, ex.Stage);
-                Assert.Equal("invoice", ex.ReportCode);
+                Assert.Equal("invoice", ex.DocumentName);
                 Assert.Equal("請求書", ex.SheetName);
             }
             finally
