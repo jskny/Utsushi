@@ -119,7 +119,7 @@
 
 - [x] 6.1 `tools/Utsushi.SampleGenerator` で、サンプル帳票の書き込むセルに `shrinkToFit`・`wrapText` を付けてテンプレートを再生成し、同じテンプレートを使う既存のテストが緑であることを確かめる
   - _Requirements: 6.2_
-- [ ] 6.2 `tools/edge-case-samples/generate.py` で、エッジケースのサンプルの書き込むセルに `shrinkToFit` を付けて再生成し、既存のテストが緑であることを確かめる
+- [x] 6.2 `tools/edge-case-samples/generate.py` で、エッジケースのサンプルの書き込むセルに `shrinkToFit` を付けて再生成し、既存のテストが緑であることを確かめる
   - _Requirements: 6.2_
 - [ ] 6.3 `ReportConversionGoldenTests` を `Excel2Pdf` とセル番地の指定に書き換える(`MaxDigitWidthPx`・`DocumentName` を明示する)。
       スナップショットの差分が design.md 6.1 の2種類だけであることを確かめる
