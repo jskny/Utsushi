@@ -14,6 +14,7 @@
 - `samples/edge-cases/<帳票コード>/` — 利用者が作りがちなテンプレートを再現したエッジケース検証用サンプル(`tools/edge-case-samples/generate.py` で生成。Python + openpyxl)
 - `.kiro/steering/` — 常時適用される方針(製品概要・技術方針・プロジェクト構成)
 - `.kiro/specs/excel-report-pdf-conversion/` — 中核機能の要件定義書・設計書・実装タスクリスト
+- `.kiro/specs/excel2pdf-consolidation/` — 入口の `Excel2Pdf` への一本化(帳票定義の廃止)と診断の強化(未対応要素の一覧・既定でエラー、フォントの代替、CLIの `check`/`convert`)。仕様作成段階で、実装は未着手
 - `docs/テンプレート作成ガイド.md` — Excelでテンプレートを作る担当者向けの注意点(フォント・差し込みセルの設定・再現できる機能/できない機能)
 - `docs/帳票定義スキーマ.md` — `definition.json` のスキーマ
 - `docs/ライブラリの使い方.md` — ファサード `Utsushi`(簡易API `Excel2Pdf`・`ReportPdfConverter`)のAPI・例外の使い方
