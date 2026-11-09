@@ -68,11 +68,11 @@
   - _Requirements: 1.2, 1.4_
 - [x] 4.2 `Excel2Pdf` にエンジンを受け取るコンストラクタ(パス・バイト列・ストリーム)を追加する。テスト(`Fonts`・`Render` の指定はエラー、破棄してもエンジンは使える、複数のスレッドで共有できる)を含む
   - _Requirements: 1.1, 1.2_
-- [ ] 4.3 `UnsupportedElementPolicy`(名前空間 `Utsushi`)と `Excel2PdfOptions.UnsupportedElements` を追加する(既定は `Ignore` のまま。旧い同名の列挙は完全修飾名で参照する)
+- [x] 4.3 `UnsupportedElementPolicy`(名前空間 `Utsushi`)と `Excel2PdfOptions.UnsupportedElements` を追加する(既定は `Ignore` のまま。旧い同名の列挙は完全修飾名で参照する)
   - _Requirements: 2.1_
-- [ ] 4.4 保存の時点で、読み込みの直後に未対応要素を判定する。テスト(エラーで全件・`Ignore` で変換できる)を含む
+- [x] 4.4 保存の時点で、読み込みの直後に未対応要素を判定する。テスト(エラーで全件・`Ignore` で変換できる)を含む
   - _Requirements: 2.2, 2.3_
-- [ ] 4.5 既定を `Error` に変える。既存の `Excel2PdfTests` のうち未対応要素を含むサンプルを既定の設定で開くテストに `Ignore` を明示する。`edge-order-form` で既定のエラーを確かめる
+- [x] 4.5 既定を `Error` に変える。既存の `Excel2PdfTests` のうち未対応要素を含むサンプルを既定の設定で開くテストに `Ignore` を明示する。`edge-order-form` で既定のエラーを確かめる
   - _Requirements: 2.1, 6.3_
 - [ ] 4.6 `Excel2Pdf.Check()` と `Excel2PdfDiagnostics` を追加する(文字の収まらない箇所・未対応要素。未対応要素では例外にしない)。テスト(要件4.2〜4.4)を含む
   - _Requirements: 4.1, 4.2, 4.3, 4.4_

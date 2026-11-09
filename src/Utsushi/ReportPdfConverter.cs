@@ -402,7 +402,8 @@ namespace Utsushi
             IReadOnlyDictionary<string, string> values,
             IReadOnlyDictionary<string, string>? cellOverrides,
             IReadOnlyDictionary<string, double>? numericOverrides,
-            bool checkFit)
+            bool checkFit,
+            Action<WorkbookModel>? onWorkbookRead = null)
         {
             ValidateConvertArguments(reportCode, xlsxStream, values);
 
@@ -411,6 +412,7 @@ namespace Utsushi
             var readOptions = new WorkbookReadOptions(definition.ReportCode, definition.SheetName);
 
             var workbook = ReadWorkbook(xlsxStream, readOptions, definition);
+            onWorkbookRead?.Invoke(workbook);
             return BuildLayout(workbook, definition, values, cellOverrides, numericOverrides, checkFit);
         }
 
@@ -431,7 +433,8 @@ namespace Utsushi
             double? maxDigitWidthPx,
             IReadOnlyDictionary<string, double>? numericOverrides,
             bool checkFit,
-            string? sheetName = null)
+            string? sheetName = null,
+            Action<WorkbookModel>? onWorkbookRead = null)
         {
             ValidateMaxDigitWidth(maxDigitWidthPx);
 
@@ -461,6 +464,9 @@ namespace Utsushi
                 workbook.Sheets[0].Name,
                 maxDigitWidthPx ?? ReportDefinition.EstimateMaxDigitWidthPx(workbook.DefaultFont.Name, workbook.DefaultFont.SizePt));
 
+            // 読み込みの直後(置換・レイアウト計算の前)に呼ぶ。保存では未対応要素の扱いの判定に、診断では一覧の受け取りに使う
+            // (excel2pdf-consolidation 要件2.2・4)。
+            onWorkbookRead?.Invoke(workbook);
             return BuildLayout(workbook, definition, NoValues, cellOverrides, numericOverrides, checkFit);
         }
 

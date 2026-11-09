@@ -461,7 +461,7 @@ namespace Utsushi
             ThrowIfDisposed();
             ReportPdfConverter.ValidateOutputPath(pdfPath);
 
-            var layout = ComputeLayout(checkFit: false);
+            var layout = ComputeLayout(checkFit: false, ThrowIfUnsupportedElements);
             _converter.RenderToFile(layout, pdfPath);
         }
 
@@ -523,7 +523,7 @@ namespace Utsushi
                 throw new ArgumentNullException(nameof(output));
             }
 
-            var layout = ComputeLayout(checkFit: false);
+            var layout = ComputeLayout(checkFit: false, ThrowIfUnsupportedElements);
             _converter.RenderToStream(layout, output);
         }
 
@@ -565,7 +565,23 @@ namespace Utsushi
         private string DocumentLabel =>
             ReportCode ?? _options.DocumentName ?? (_source.Path is { } path ? Path.GetFileNameWithoutExtension(path) : string.Empty);
 
-        internal PagedLayout ComputeLayout(bool checkFit)
+        /// <summary>
+        /// 未対応要素の扱いがエラーで、未対応要素が1件以上あれば例外にする(excel2pdf-consolidation 要件2.2)。
+        /// 読み込みの直後(置換・レイアウト計算の前)に呼ばれる。帳票定義ありの変換は、帳票定義の <c>unsupportedElements</c> に従う
+        /// (変換のパイプラインが判定するため、ここでは何もしない。design.md 9)。
+        /// </summary>
+        private void ThrowIfUnsupportedElements(Parsing.Model.WorkbookModel workbook)
+        {
+            if (ReportCode is null
+                && _options.UnsupportedElements == UnsupportedElementPolicy.Error
+                && workbook.UnsupportedElements.Count > 0)
+            {
+                throw new UnsupportedWorkbookElementException(
+                    workbook.UnsupportedElements, workbook.UnsupportedElementsTruncated, DocumentLabel, workbook.Sheets[0].Name);
+            }
+        }
+
+        internal PagedLayout ComputeLayout(bool checkFit, Action<Parsing.Model.WorkbookModel>? onWorkbookRead = null)
         {
             var texts = new Dictionary<string, string>();
             var numbers = new Dictionary<string, double>();
@@ -583,9 +599,9 @@ namespace Utsushi
 
             using var input = _source.Open(DocumentLabel);
             return ReportCode is not null
-                ? _converter.ComputeLayoutCore(ReportCode, input, _fields, texts, numbers, checkFit)
+                ? _converter.ComputeLayoutCore(ReportCode, input, _fields, texts, numbers, checkFit, onWorkbookRead)
                 : _converter.ComputeLayoutWithoutDefinitionCore(
-                    input, texts, DocumentLabel, _options.MaxDigitWidthPx, numbers, checkFit, _options.SheetName);
+                    input, texts, DocumentLabel, _options.MaxDigitWidthPx, numbers, checkFit, _options.SheetName, onWorkbookRead);
         }
 
         private CellAddress ParseCell(string cell)
@@ -764,5 +780,23 @@ namespace Utsushi
         /// ブックに無い場合は保存の時点で <see cref="InvalidExcelFileException"/>(ブック内のシート名を含む)。帳票定義ありでは指定できない。
         /// </summary>
         public string? SheetName { get; init; }
+
+        /// <summary>
+        /// 未対応要素(グラフ・非対応の図形・EMF画像・コメントなど、PDFに出力されない要素。excel2pdf-consolidation 要件2)の扱い。
+        /// 既定は <see cref="UnsupportedElementPolicy.Error"/>(保存の時点で、見つかった要素をすべて持つ <see cref="UnsupportedWorkbookElementException"/>)。
+        /// 欠落を承知で変換する場合は <see cref="UnsupportedElementPolicy.Ignore"/> を指定する。
+        /// 帳票定義ありの変換では、帳票定義の <c>unsupportedElements</c> に従う(この設定は効かない)。
+        /// </summary>
+        public UnsupportedElementPolicy UnsupportedElements { get; init; } = UnsupportedElementPolicy.Error;
+    }
+
+    /// <summary>未対応要素(PDFに出力されない要素)の扱い(excel2pdf-consolidation 要件2.1)。</summary>
+    public enum UnsupportedElementPolicy
+    {
+        /// <summary>保存の時点で、見つかった未対応要素をすべて持つ例外を送出する(既定)。</summary>
+        Error = 0,
+
+        /// <summary>未対応要素を出力せずに変換を続ける。</summary>
+        Ignore = 1,
     }
 }
