@@ -96,7 +96,7 @@
   - _Requirements: 7.2, 7.3_
 - [x] 5.6 条件付き書式: `conditionalFormatting`(拡張の `x14` を含む)の範囲を読み(ブロックの数・1つの範囲指定に含む範囲の数の上限)、印刷範囲と重なる部分を記録する
   - _Requirements: 7.2, 7.3_
-- [ ] 5.7 リッチテキスト: ランの書式がセルの書式と異なる印を読み、記録する。`SetText`・`SetValue` で上書きしたセルの印を消す
+- [x] 5.7 リッチテキスト: ランの書式がセルの書式と異なる印を読み、記録する。`SetText`・`SetValue` で上書きしたセルの印を消す
   - _Requirements: 7.2, 7.3_
 - [ ] 5.8 表示形式: 解釈できない書式・表せない値の印を `NumberFormatter` で載せ、記録する。`SetValue` 用に `NumberFormatting` の internal のオーバーロードを加え、上書きしたセルは書き込んだ値で求め直す
   - _Requirements: 7.2, 7.3_

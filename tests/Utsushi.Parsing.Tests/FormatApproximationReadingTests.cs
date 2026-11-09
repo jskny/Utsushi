@@ -94,6 +94,31 @@ namespace Utsushi.Parsing.Tests
             Assert.Equal(3, OpenXmlWorkbookReader.ReadConditionalFormattingRanges(worksheet, maxRanges: 3).Count);
         }
 
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, true)]
+        public void ランの書式がセルの書式と異なるときだけリッチテキストとして読む(bool bold, bool expected)
+        {
+            var run = new DocumentFormat.OpenXml.Spreadsheet.Run(
+                new DocumentFormat.OpenXml.Spreadsheet.RunProperties(
+                    new DocumentFormat.OpenXml.Spreadsheet.RunFont { Val = FontStyle.Default.Name },
+                    new DocumentFormat.OpenXml.Spreadsheet.FontSize { Val = FontStyle.Default.SizePt },
+                    new DocumentFormat.OpenXml.Spreadsheet.Bold { Val = bold }),
+                new DocumentFormat.OpenXml.Spreadsheet.Text("文字"));
+            var path = SafetyLimitWorkbookFixtures.CreateWithSharedStrings(new DocumentFormat.OpenXml.Spreadsheet.SharedStringItem(run));
+            try
+            {
+                var cell = Assert.Single(_reader.ReadFile(path).Sheets[0].Cells.Values, c => c.DisplayValue == "文字");
+
+                Assert.Equal(expected, cell.HasRichText);
+                Assert.False(cell.WithText("書き込み").HasRichText);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         [Fact]
         public void セルの文字の回転を読み取る()
         {

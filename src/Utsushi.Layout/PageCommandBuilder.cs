@@ -1541,6 +1541,17 @@ namespace Utsushi.Layout
                     style.TextRotation == 255 ? "縦書きは横書きで描きます。" : "文字の回転は、回転せずに横書きで描きます。");
             }
 
+            if (cell.HasRichText)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.RichText,
+                    sheet,
+                    location,
+                    null,
+                    null,
+                    "一部の文字の書式(リッチテキスト)は反映せず、セル全体をセルの書式で描きます。");
+            }
+
             var hMessage = style.HAlign switch
             {
                 HorizontalAlignment.Justify or HorizontalAlignment.Distributed =>

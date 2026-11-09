@@ -38,6 +38,18 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
+        public void 注文書のリッチテキストを返し値を書き込んだセルでは返さない()
+        {
+            Assert.Contains(Check("edge-order-form").FormatApproximations,
+                a => a.Kind == FormatApproximationKind.RichText && a.Location == CellRange.Parse("B6:D6"));
+
+            using var pdf = new Excel2Pdf(Template("edge-order-form"), new Excel2PdfOptions { Fonts = FontResolverOptions.AllowFallback() });
+            pdf.SetText("B6", "書き込んだ文字列");
+            Assert.DoesNotContain(pdf.Check().FormatApproximations,
+                a => a.Kind == FormatApproximationKind.RichText && a.Location == CellRange.Parse("B6:D6"));
+        }
+
+        [Fact]
         public void 工程表の90度回転した日付見出しを返す()
         {
             var result = Check("edge-schedule");

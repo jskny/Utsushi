@@ -41,6 +41,12 @@ namespace Utsushi.Parsing.Model
         public ArgbColor? FormatColor { get; init; }
 
         /// <summary>
+        /// 一部またはすべての文字の書式(リッチテキストのラン)がセルの書式と異なるかどうか。Utsushi はセル全体をセルの書式で描く
+        /// (書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(d))。値を書き込むと消える。
+        /// </summary>
+        public bool HasRichText { get; init; }
+
+        /// <summary>
         /// 値のみを差し替えた複製を返す(書式は変更しない。要件2.2)。差し込んだ文字列は数値書式で表示しないため、
         /// 数値書式の色(<see cref="FormatColor"/>)は消す(要件4.12)。
         /// </summary>
@@ -55,6 +61,7 @@ namespace Utsushi.Parsing.Model
                 FormattedValue = formattedValue,
                 HasFormula = false,
                 FormatColor = formatColor,
+                HasRichText = false,
             };
 
         public CellModel WithText(string text) =>
@@ -65,6 +72,7 @@ namespace Utsushi.Parsing.Model
                 FormattedValue = text,
                 HasFormula = false,
                 FormatColor = null,
+                HasRichText = false,
             };
     }
 }

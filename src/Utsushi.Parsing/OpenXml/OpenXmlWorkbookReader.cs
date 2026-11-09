@@ -138,6 +138,7 @@ namespace Utsushi.Parsing.OpenXml
                 var colors = ColorResolver.Create(workbookPart);
                 var styles = StyleTable.Create(workbookPart, colors);
                 var sharedStrings = ReadSharedStrings(workbookPart, options.ReportCode);
+                var richText = RichTextFormats.Create(workbookPart, colors, sharedStrings.Count);
                 var definedNames = ReadDefinedNames(workbookPart);
                 var drawingColors = DrawingColorResolver.Create(workbookPart);
 
@@ -191,7 +192,7 @@ namespace Utsushi.Parsing.OpenXml
                         continue;
                     }
 
-                    sheets.Add(ReadSheet(name!, worksheetPart, styles, sharedStrings, definedNames, drawingColors, options, unsupported));
+                    sheets.Add(ReadSheet(name!, worksheetPart, styles, sharedStrings, richText, colors, definedNames, drawingColors, options, unsupported));
 
                     // 対象を1枚に絞っている場合は、見つけた時点で打ち切る。Excelはシート名の重複を許さないが、
                     // OpenXml SDK は検証しないため、同じ名前の <sheet> を大量に並べたファイルで同じシートを
@@ -335,6 +336,8 @@ namespace Utsushi.Parsing.OpenXml
             WorksheetPart worksheetPart,
             StyleTable styles,
             IReadOnlyList<string> sharedStrings,
+            RichTextFormats richText,
+            ColorResolver colors,
             IReadOnlyDictionary<string, Dictionary<string, string>> definedNames,
             DrawingColorResolver drawingColors,
             WorkbookReadOptions options,
@@ -411,7 +414,7 @@ namespace Utsushi.Parsing.OpenXml
                         cellCount++;
                         EnsureCellCountWithinLimit(cellCount, name, options.ReportCode);
 
-                        cells[address] = ReadCell(cell, styles, sharedStrings, name, options.ReportCode);
+                        cells[address] = ReadCell(cell, styles, sharedStrings, richText, colors, name, options.ReportCode);
                     }
                 }
             }
@@ -461,7 +464,13 @@ namespace Utsushi.Parsing.OpenXml
         }
 
         private static CellModel ReadCell(
-            X.Cell cell, StyleTable styles, IReadOnlyList<string> sharedStrings, string sheetName, string? reportCode)
+            X.Cell cell,
+            StyleTable styles,
+            IReadOnlyList<string> sharedStrings,
+            RichTextFormats richText,
+            ColorResolver colors,
+            string sheetName,
+            string? reportCode)
         {
             var style = styles.GetCellStyle(cell.StyleIndex?.Value is { } s ? (int)s : null);
             var hasFormula = cell.CellFormula is not null;
@@ -477,7 +486,10 @@ namespace Utsushi.Parsing.OpenXml
                     ? inline.Text?.Text ?? string.Concat(inline.Elements<X.Run>().Select(r => r.Text?.Text ?? string.Empty))
                     : string.Empty;
                 EnsureTextLengthWithinLimit(text, MaxCellTextLength, $"シート '{sheetName}' のセルの文字列", reportCode);
-                return new CellModel(text, CellValueKind.Text, style, text, hasFormula);
+                return new CellModel(text, CellValueKind.Text, style, text, hasFormula)
+                {
+                    HasRichText = cell.InlineString is { } runs && RichTextFormats.InlineDiffers(runs.Elements<X.Run>(), style.Font, colors),
+                };
             }
 
             // 共有文字列
@@ -487,7 +499,10 @@ namespace Utsushi.Parsing.OpenXml
                     && index >= 0 && index < sharedStrings.Count)
                 {
                     var text = sharedStrings[index];
-                    return new CellModel(text, CellValueKind.Text, style, text, hasFormula);
+                    return new CellModel(text, CellValueKind.Text, style, text, hasFormula)
+                    {
+                        HasRichText = richText.SharedStringDiffers(index, style.Font),
+                    };
                 }
 
                 return new CellModel(null, CellValueKind.Blank, style, null, hasFormula);
