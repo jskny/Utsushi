@@ -108,9 +108,9 @@
   - _Requirements: 7.2, 7.3_
 - [x] 5.12 ヘッダー/フッター: `HeaderFooterCommandBuilder.ScaleRuns` で改行を取り除くときに `MultiLineHeaderFooter` を記録する
   - _Requirements: 7.2_
-- [ ] 5.13 ページの分割: `MergedCellAcrossPageBreak`・`DrawingAcrossPageBreak`・`MergedCellHiddenEdge` を記録する
+- [x] 5.13 ページの分割: `MergedCellAcrossPageBreak`・`DrawingAcrossPageBreak`・`MergedCellHiddenEdge` を記録する
   - _Requirements: 7.2, 7.3, 7.4_
-- [ ] 5.14 タスク5の開始前と比べて、ゴールデンの描画命令の行が変わっていないことを確かめる。保存(`checkFit` なし)では集めないことを確かめる
+- [x] 5.14 タスク5の開始前と比べて、ゴールデンの描画命令の行が変わっていないことを確かめる。保存(`checkFit` なし)では集めないことを確かめる
   - _Requirements: 7.5_
 - [ ] 5.15 layout-fidelity-reviewer・security-reviewer(新しい読み取りの上限)・code-reviewer
   - _Requirements: 7.2, 7.3_

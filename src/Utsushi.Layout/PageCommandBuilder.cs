@@ -176,6 +176,8 @@ namespace Utsushi.Layout
                             continue;
                         }
 
+                        RecordMergedApproximations(merged.Range, rowIndex, columnIndex);
+
                         var anchorCell = _sheet.GetCell(merged.Anchor);
                         var borders = ResolveMergedBorders(
                             merged.Range, _sheet.GetEffectiveStyle(merged.Anchor).Borders, rowIndex, columnIndex);
@@ -263,7 +265,7 @@ namespace Utsushi.Layout
                     continue;
                 }
 
-                RecordDrawingApproximations(drawingObject, ordinal);
+                RecordDrawingApproximations(drawingObject, ordinal, rect, rowIndex, columnIndex);
 
                 switch (drawingObject)
                 {
@@ -294,7 +296,12 @@ namespace Utsushi.Layout
         /// 画像・図形・グループ(の中の要素)の書式の近似を記録する(excel2pdf-consolidation 要件7.2(a)(g)(h))。診断のときだけ。
         /// 位置はトップレベルのアンカーのセル。要素の識別は描画オブジェクトのID(無ければ描画パートの中の順番)。
         /// </summary>
-        private void RecordDrawingApproximations(DrawingObjectModel drawingObject, int ordinal)
+        private void RecordDrawingApproximations(
+            DrawingObjectModel drawingObject,
+            int ordinal,
+            RectPt rect,
+            IReadOnlyDictionary<int, int> rowIndex,
+            IReadOnlyDictionary<int, int> columnIndex)
         {
             if (_approximations is null)
             {
@@ -303,6 +310,24 @@ namespace Utsushi.Layout
 
             var anchor = drawingObject.AnchorCell;
             var location = new CellRange(anchor.Row, anchor.Column, anchor.Row, anchor.Column);
+
+            // 左上が属するページにだけ描くため、ページの本文の外へはみ出す部分は次のページに描かれない(要件7.2(j))。
+            // はみ出す向きに続きのページがある(印刷範囲がこのページの先に続く)場合だけを数える。印刷範囲の端の外への
+            // はみ出しは改ページをまたぐものではないため、ここでは数えない。
+            var continuesRight = columnIndex.Count > 0 && columnIndex.Keys.Max() < _grid.PrintRange.LastColumn;
+            var continuesDown = rowIndex.Count > 0 && rowIndex.Keys.Max() < _grid.PrintRange.LastRow;
+            if ((continuesRight && rect.Right > _pageBodyRect.Right + FitTolerancePt)
+                || (continuesDown && rect.Bottom > _pageBodyRect.Bottom + FitTolerancePt))
+            {
+                _approximations.Add(
+                    FormatApproximationKind.DrawingAcrossPageBreak,
+                    _sheet.Name,
+                    location,
+                    "#" + ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    null,
+                    "改ページをまたぐ画像・図形は、左上が属するページにだけ描きます(次のページにかかる部分は描きません)。");
+            }
+
             switch (drawingObject)
             {
                 case ImageModel image:
@@ -386,6 +411,58 @@ namespace Utsushi.Layout
                     identity,
                     "rot=" + rotationDegrees.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
                     "45〜135度(225〜315度)回転した画像は、位置・大きさがExcelとずれることがあります。");
+            }
+        }
+
+        /// <summary>
+        /// 結合範囲の書式の近似を記録する(要件7.2(j))。印刷される行・列のうちこのページに無いものがあれば改ページをまたぐ結合セル、
+        /// 最後の行・列が印刷されない(非表示・高さ0)なら外周の罫線の一部を描かない結合セル。
+        /// </summary>
+        private void RecordMergedApproximations(
+            CellRange range, IReadOnlyDictionary<int, int> rowIndex, IReadOnlyDictionary<int, int> columnIndex)
+        {
+            if (_approximations is null)
+            {
+                return;
+            }
+
+            var printRange = _grid.PrintRange;
+            var spans = false;
+            for (var row = Math.Max(range.FirstRow, printRange.FirstRow); !spans && row <= Math.Min(range.LastRow, printRange.LastRow); row++)
+            {
+                spans = !rowIndex.ContainsKey(row) && _grid.GetRowHeightPt(row) > 0;
+            }
+
+            for (var column = Math.Max(range.FirstColumn, printRange.FirstColumn);
+                 !spans && column <= Math.Min(range.LastColumn, printRange.LastColumn);
+                 column++)
+            {
+                spans = !columnIndex.ContainsKey(column) && _grid.GetColumnWidthPt(column) > 0;
+            }
+
+            if (spans)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.MergedCellAcrossPageBreak,
+                    _sheet.Name,
+                    range,
+                    null,
+                    null,
+                    "改ページをまたぐ結合セルは、両方のページに同じ文字を描きます。");
+            }
+
+            var lastRowHidden = range.LastRow > range.FirstRow && SheetGrid.IsRowNotPrinted(_sheet, range.LastRow);
+            var lastColumnHidden = range.LastColumn > range.FirstColumn
+                && SheetGrid.PrintedColumnWidthPt(_sheet, range.LastColumn, _report.Definition.MaxDigitWidthPx) <= 0;
+            if (lastRowHidden || lastColumnHidden)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.MergedCellHiddenEdge,
+                    _sheet.Name,
+                    range,
+                    null,
+                    lastRowHidden ? "lastRowHidden" : "lastColumnHidden",
+                    "最後の行・列が非表示の結合セルは、外周の罫線の一部を描かないことがあります。");
             }
         }
 

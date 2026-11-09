@@ -85,6 +85,7 @@ namespace Utsushi.Golden.Tests
             var result = Check("edge-schedule");
 
             Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.TextRotation && a.Detail == "textRotation=90");
+            Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.MergedCellAcrossPageBreak);
         }
     }
 }

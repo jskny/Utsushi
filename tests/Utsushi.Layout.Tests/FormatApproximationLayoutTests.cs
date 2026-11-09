@@ -182,6 +182,62 @@ namespace Utsushi.Layout.Tests
             Assert.All(items, i => Assert.Null(i.Location));
         }
 
+        private static SheetModel LongSheet(params CellRange[] merged) =>
+            UniformSheet(rows: 120, columns: 3, pageSetup: NoMarginA4(), mergedRanges: merged);
+
+        private static ShapeModel TallShape(string anchor, double heightPt) =>
+            new(
+                3u, ShapePresetType.Rect, System.Array.Empty<double>(), 0, null, null, null,
+                CellAddress.Parse(anchor), new PointPt(0, 0), new FixedAnchorExtent(40.0, heightPt));
+
+        [Fact]
+        public void 改ページをまたぐ結合セルを1件だけ記録する()
+        {
+            var layout = Compute(LongSheet(CellRange.Parse("A40:A45")));
+
+            Assert.True(layout.Pages.Count > 1);
+            Assert.Equal(CellRange.Parse("A40:A45"), Single(layout, FormatApproximationKind.MergedCellAcrossPageBreak).Location);
+        }
+
+        [Fact]
+        public void 一つのページに収まる結合セルは記録しない()
+        {
+            var layout = Compute(LongSheet(CellRange.Parse("A2:B3")));
+
+            Assert.DoesNotContain(layout.FormatApproximations, a => a.Kind == FormatApproximationKind.MergedCellAcrossPageBreak);
+        }
+
+        [Fact]
+        public void 最後の行が非表示の結合セルを記録する()
+        {
+            var sheet = Sheet() with
+            {
+                HiddenRows = new HashSet<int> { 3 },
+                MergedRanges = new[] { new MergedRange(CellRange.Parse("A2:B3")) },
+            };
+
+            var item = Single(Compute(sheet), FormatApproximationKind.MergedCellHiddenEdge);
+
+            Assert.Equal(CellRange.Parse("A2:B3"), item.Location);
+            Assert.Equal("lastRowHidden", item.Detail);
+        }
+
+        [Fact]
+        public void 改ページをまたぐ図形を記録する()
+        {
+            var sheet = LongSheet() with { DrawingObjects = new DrawingObjectModel[] { TallShape("A40", 200.0) } };
+
+            Assert.Equal(CellRange.Parse("A40:A40"), Single(Compute(sheet), FormatApproximationKind.DrawingAcrossPageBreak).Location);
+        }
+
+        [Fact]
+        public void 続きのページが無い方向へのはみ出しは改ページをまたぐ図形として記録しない()
+        {
+            var sheet = Sheet() with { DrawingObjects = new DrawingObjectModel[] { TallShape("A2", 500.0) } };
+
+            Assert.DoesNotContain(Compute(sheet).FormatApproximations, a => a.Kind == FormatApproximationKind.DrawingAcrossPageBreak);
+        }
+
         [Fact]
         public void 印刷範囲の外のセルは記録しない()
         {
