@@ -64,9 +64,9 @@
 
 ## 4. ファサード: エンジン・未対応要素の扱い・診断
 
-- [ ] 4.1 `Excel2PdfEngine` を追加する(`Create`・`Dispose`。内部に `ReportPdfConverter` を持つ)。部品と `FontResolver` を受け取る internal のコンストラクタを加える
+- [x] 4.1 `Excel2PdfEngine` を追加する(`Create`・`Dispose`。内部に `ReportPdfConverter` を持つ)。部品と `FontResolver` を受け取る internal のコンストラクタを加える
   - _Requirements: 1.2, 1.4_
-- [ ] 4.2 `Excel2Pdf` にエンジンを受け取るコンストラクタ(パス・バイト列・ストリーム)を追加する。テスト(`Fonts`・`Render` の指定はエラー、破棄してもエンジンは使える、複数のスレッドで共有できる)を含む
+- [x] 4.2 `Excel2Pdf` にエンジンを受け取るコンストラクタ(パス・バイト列・ストリーム)を追加する。テスト(`Fonts`・`Render` の指定はエラー、破棄してもエンジンは使える、複数のスレッドで共有できる)を含む
   - _Requirements: 1.1, 1.2_
 - [ ] 4.3 `UnsupportedElementPolicy`(名前空間 `Utsushi`)と `Excel2PdfOptions.UnsupportedElements` を追加する(既定は `Ignore` のまま。旧い同名の列挙は完全修飾名で参照する)
   - _Requirements: 2.1_

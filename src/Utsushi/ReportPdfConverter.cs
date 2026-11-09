@@ -598,7 +598,7 @@ namespace Utsushi
         /// 帳票定義ルートを持たない構成(<see cref="CreateDefault(FontResolverOptions?, PdfRenderOptions?)"/>)で使う。
         /// 帳票コードを指定した変換は常に「帳票定義が見つからない」エラーにする(要件1.4)。
         /// </summary>
-        private sealed class NoReportDefinitionRepository : IReportDefinitionRepository
+        internal sealed class NoReportDefinitionRepository : IReportDefinitionRepository
         {
             public ReportDefinition Load(string reportCode) =>
                 throw new ReportDefinitionNotFoundException(

@@ -42,6 +42,9 @@ namespace Utsushi
 
         private readonly ReportPdfConverter _converter;
         private readonly bool _ownsConverter;
+
+        /// <summary>エンジン(渡されたもの、または自身で作ったもの)。利用者が <see cref="ReportPdfConverter"/> を渡した場合は null。</summary>
+        private readonly Excel2PdfEngine? _engine;
         private readonly Excel2PdfOptions _options;
         private readonly TemplateSource _source;
 
@@ -57,7 +60,7 @@ namespace Utsushi
         /// <param name="xlsxPath">入力の Excel ファイルのパス。</param>
         /// <param name="options">フォント・PDF出力などの設定。null の場合は既定(フォントは厳格モード)。</param>
         public Excel2Pdf(string xlsxPath, Excel2PdfOptions? options = null)
-            : this(_ => TemplateSource.FromPath(xlsxPath), reportCode: null, options, converter: null, reportDefinitionRoot: null)
+            : this(_ => TemplateSource.FromPath(xlsxPath), reportCode: null, options, converter: null, reportDefinitionRoot: null, engine: null)
         {
         }
 
@@ -72,7 +75,8 @@ namespace Utsushi
                 reportCode ?? throw new ArgumentNullException(nameof(reportCode)),
                 options,
                 converter: null,
-                reportDefinitionRoot ?? throw new ArgumentNullException(nameof(reportDefinitionRoot)))
+                reportDefinitionRoot ?? throw new ArgumentNullException(nameof(reportDefinitionRoot)),
+                engine: null)
         {
         }
 
@@ -96,7 +100,8 @@ namespace Utsushi
                 reportCode,
                 options,
                 converter ?? throw new ArgumentNullException(nameof(converter)),
-                reportDefinitionRoot: null)
+                reportDefinitionRoot: null,
+                engine: null)
         {
         }
 
@@ -108,7 +113,7 @@ namespace Utsushi
         /// <param name="options">設定。帳票定義なしの文書名を省略すると空文字列になる。</param>
         /// <exception cref="InvalidExcelFileException">内容が上限(100MB)を超える場合(<c>Reason=TooLarge</c>)。</exception>
         public Excel2Pdf(byte[] xlsxContent, Excel2PdfOptions? options = null)
-            : this(label => TemplateSource.FromBytes(xlsxContent, label), reportCode: null, options, converter: null, reportDefinitionRoot: null)
+            : this(label => TemplateSource.FromBytes(xlsxContent, label), reportCode: null, options, converter: null, reportDefinitionRoot: null, engine: null)
         {
         }
 
@@ -119,7 +124,8 @@ namespace Utsushi
                 reportCode ?? throw new ArgumentNullException(nameof(reportCode)),
                 options,
                 converter: null,
-                reportDefinitionRoot ?? throw new ArgumentNullException(nameof(reportDefinitionRoot)))
+                reportDefinitionRoot ?? throw new ArgumentNullException(nameof(reportDefinitionRoot)),
+                engine: null)
         {
         }
 
@@ -130,7 +136,8 @@ namespace Utsushi
                 reportCode,
                 options,
                 converter ?? throw new ArgumentNullException(nameof(converter)),
-                reportDefinitionRoot: null)
+                reportDefinitionRoot: null,
+                engine: null)
         {
         }
 
@@ -142,7 +149,7 @@ namespace Utsushi
         /// <param name="options">設定。帳票定義なしの文書名を省略すると空文字列になる。</param>
         /// <exception cref="InvalidExcelFileException">内容が上限(100MB)を超える場合(<c>Reason=TooLarge</c>)。</exception>
         public Excel2Pdf(Stream xlsxStream, Excel2PdfOptions? options = null)
-            : this(label => TemplateSource.FromStream(xlsxStream, label), reportCode: null, options, converter: null, reportDefinitionRoot: null)
+            : this(label => TemplateSource.FromStream(xlsxStream, label), reportCode: null, options, converter: null, reportDefinitionRoot: null, engine: null)
         {
         }
 
@@ -153,7 +160,8 @@ namespace Utsushi
                 reportCode ?? throw new ArgumentNullException(nameof(reportCode)),
                 options,
                 converter: null,
-                reportDefinitionRoot ?? throw new ArgumentNullException(nameof(reportDefinitionRoot)))
+                reportDefinitionRoot ?? throw new ArgumentNullException(nameof(reportDefinitionRoot)),
+                engine: null)
         {
         }
 
@@ -164,7 +172,53 @@ namespace Utsushi
                 reportCode,
                 options,
                 converter ?? throw new ArgumentNullException(nameof(converter)),
-                reportDefinitionRoot: null)
+                reportDefinitionRoot: null,
+                engine: null)
+        {
+        }
+
+        /// <summary>
+        /// 呼び出し元が作ったエンジンを使って、帳票定義を使わずに変換する(excel2pdf-consolidation 要件1.2)。
+        /// 大量に発行する場合・サーバーで使う場合に、フォントの解決結果を使い回すために使う。エンジンは <see cref="Dispose"/> で解放しない。
+        /// </summary>
+        /// <param name="xlsxPath">入力の Excel ファイルのパス。</param>
+        /// <param name="engine">変換に使うエンジン。</param>
+        /// <param name="options">
+        /// 文書名・最大数字幅・シート名・未対応要素の扱い。フォント・PDF出力の設定(<see cref="Excel2PdfOptions.Fonts"/>・
+        /// <see cref="Excel2PdfOptions.Render"/>)はエンジンのものを使うため、指定するとエラー。
+        /// </param>
+        public Excel2Pdf(string xlsxPath, Excel2PdfEngine engine, Excel2PdfOptions? options = null)
+            : this(
+                _ => TemplateSource.FromPath(xlsxPath),
+                reportCode: null,
+                options,
+                converter: null,
+                reportDefinitionRoot: null,
+                engine ?? throw new ArgumentNullException(nameof(engine)))
+        {
+        }
+
+        /// <summary>Excel ファイルの内容(バイト列)から、呼び出し元が作ったエンジンで変換する。</summary>
+        public Excel2Pdf(byte[] xlsxContent, Excel2PdfEngine engine, Excel2PdfOptions? options = null)
+            : this(
+                label => TemplateSource.FromBytes(xlsxContent, label),
+                reportCode: null,
+                options,
+                converter: null,
+                reportDefinitionRoot: null,
+                engine ?? throw new ArgumentNullException(nameof(engine)))
+        {
+        }
+
+        /// <summary>Excel ファイルのストリームから、呼び出し元が作ったエンジンで変換する。ストリームは作成の時点で最後まで読み、閉じない。</summary>
+        public Excel2Pdf(Stream xlsxStream, Excel2PdfEngine engine, Excel2PdfOptions? options = null)
+            : this(
+                label => TemplateSource.FromStream(xlsxStream, label),
+                reportCode: null,
+                options,
+                converter: null,
+                reportDefinitionRoot: null,
+                engine ?? throw new ArgumentNullException(nameof(engine)))
         {
         }
 
@@ -177,7 +231,8 @@ namespace Utsushi
             string? reportCode,
             Excel2PdfOptions? options,
             ReportPdfConverter? converter,
-            string? reportDefinitionRoot)
+            string? reportDefinitionRoot,
+            Excel2PdfEngine? engine)
         {
             _options = options ?? new Excel2PdfOptions();
             ReportPdfConverter.ValidateMaxDigitWidth(_options.MaxDigitWidthPx);
@@ -207,10 +262,10 @@ namespace Utsushi
                 throw new ArgumentException("帳票コードが空です。帳票定義なしで変換する場合は null を渡してください。", nameof(reportCode));
             }
 
-            if (converter is not null && (_options.Fonts is not null || _options.Render is not null))
+            if ((converter is not null || engine is not null) && (_options.Fonts is not null || _options.Render is not null))
             {
                 throw new ArgumentException(
-                    $"コンバータを渡す場合、フォント・PDF出力の設定はコンバータのものを使います。"
+                    $"コンバータ・エンジンを渡す場合、フォント・PDF出力の設定はそのものを使います。"
                         + $"{nameof(Excel2PdfOptions.Fonts)}・{nameof(Excel2PdfOptions.Render)} は指定できません。",
                     nameof(options));
             }
@@ -218,16 +273,27 @@ namespace Utsushi
             ReportCode = reportCode;
             _source = createSource(reportCode ?? _options.DocumentName);
 
-            if (converter is not null)
+            if (engine is not null)
+            {
+                _engine = engine;
+                _converter = engine.Converter;
+                _ownsConverter = false;
+            }
+            else if (converter is not null)
             {
                 _converter = converter;
                 _ownsConverter = false;
             }
+            else if (reportDefinitionRoot is not null)
+            {
+                _converter = ReportPdfConverter.CreateDefault(reportDefinitionRoot, _options.Fonts, _options.Render);
+                _ownsConverter = true;
+            }
             else
             {
-                _converter = reportDefinitionRoot is null
-                    ? ReportPdfConverter.CreateDefault(_options.Fonts, _options.Render)
-                    : ReportPdfConverter.CreateDefault(reportDefinitionRoot, _options.Fonts, _options.Render);
+                // 帳票定義なしでは自身でエンジンを作る(診断でフォントの代替を問い合わせるため。design.md 9)。
+                _engine = Excel2PdfEngine.Create(_options.Fonts, _options.Render);
+                _converter = _engine.Converter;
                 _ownsConverter = true;
             }
         }
@@ -481,7 +547,14 @@ namespace Utsushi
             _disposed = true;
             if (_ownsConverter)
             {
-                _converter.Dispose();
+                if (_engine is not null)
+                {
+                    _engine.Dispose();
+                }
+                else
+                {
+                    _converter.Dispose();
+                }
             }
         }
 
