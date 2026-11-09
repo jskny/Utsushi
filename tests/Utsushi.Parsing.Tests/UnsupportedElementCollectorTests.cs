@@ -98,6 +98,12 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 正規化は行区切りと段落区切りを除く()
+        {
+            Assert.Equal("abc", DiagnosticText.Normalize("a\u2028b\u2029c"));
+        }
+
+        [Fact]
         public void 正規化は上限ちょうどの長さなら切り詰めない()
         {
             var text = new string('x', DiagnosticText.MaxLength);

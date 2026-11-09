@@ -123,11 +123,14 @@ namespace Utsushi.Layout.Tests
         [Theory]
         [InlineData(90.0, true)]
         [InlineData(45.0, true)]
+        [InlineData(134.9, true)]
+        [InlineData(135.0, false)]
         [InlineData(270.0, true)]
+        [InlineData(315.0, false)]
         [InlineData(-90.0, true)]
         [InlineData(30.0, false)]
         [InlineData(200.0, false)]
-        public void 回転角を180度で折り返して45度から135度の画像を記録する(double rotation, bool expected)
+        public void 回転角を180度で折り返して45度以上135度未満の画像を記録する(double rotation, bool expected)
         {
             var sheet = Sheet() with { DrawingObjects = new DrawingObjectModel[] { Image(5, rotation) } };
 
@@ -148,7 +151,7 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void グループの中の画像はグループの回転を足した角度と反転で判定する()
+        public void グループの中の画像は回転を記録せず外側のグループの反転を含めて反転を記録する()
         {
             var child = new GroupChildImage(9, new RectPt(0, 0, 10, 10), new byte[] { 1 }, "image/png", 30.0);
             var group = new GroupShapeModel(
@@ -159,9 +162,9 @@ namespace Utsushi.Layout.Tests
 
             var layout = Compute(sheet);
 
-            Assert.Equal(CellRange.Parse("A1:A1"), Single(layout, FormatApproximationKind.ImageRotation).Location);
-            Assert.Equal("rot=90", Single(layout, FormatApproximationKind.ImageRotation).Detail);
-            Assert.NotNull(Single(layout, FormatApproximationKind.ImageFlip));
+            // 子の位置・大きさは回転前の矩形で、中心で回して描くため、回転は近似ではない(layout-fidelity-reviewer指摘)。
+            Assert.DoesNotContain(layout.FormatApproximations, a => a.Kind == FormatApproximationKind.ImageRotation);
+            Assert.Equal(CellRange.Parse("A1:A1"), Single(layout, FormatApproximationKind.ImageFlip).Location);
         }
 
         [Fact]
@@ -182,8 +185,30 @@ namespace Utsushi.Layout.Tests
             Assert.All(items, i => Assert.Null(i.Location));
         }
 
+        [Fact]
+        public void 先頭ページ用と偶数ページ用のヘッダーは識別に別を含める()
+        {
+            var headerFooter = new HeaderFooterModel(
+                OddHeader: "&L奇数", OddFooter: null,
+                EvenHeader: "&L偶数\n2行目", EvenFooter: null,
+                FirstHeader: "&R先頭\n2行目", FirstFooter: null,
+                DifferentOddEven: true, DifferentFirst: true, ScaleWithDocument: true);
+            var sheet = UniformSheet(rows: 120, columns: 3, pageSetup: NoMarginA4() with { HeaderFooter = headerFooter });
+
+            var layout = Compute(sheet);
+
+            Assert.True(layout.Pages.Count > 2);
+            var items = layout.FormatApproximations.Where(a => a.Kind == FormatApproximationKind.MultiLineHeaderFooter).ToList();
+            Assert.Equal(new[] { "evenHeader/left", "firstHeader/right" }, items.Select(i => i.Detail).OrderBy(d => d).ToArray());
+        }
+
         private static SheetModel LongSheet(params CellRange[] merged) =>
             UniformSheet(rows: 120, columns: 3, pageSetup: NoMarginA4(), mergedRanges: merged);
+
+        private static ShapeModel WideShape(string anchor, double widthPt) =>
+            new(
+                3u, ShapePresetType.Rect, System.Array.Empty<double>(), 0, null, null, null,
+                CellAddress.Parse(anchor), new PointPt(0, 0), new FixedAnchorExtent(widthPt, 10.0));
 
         private static ShapeModel TallShape(string anchor, double heightPt) =>
             new(
@@ -208,9 +233,14 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void 最後の行が非表示の結合セルを記録する()
+        public void 最後の行が非表示で下端に罫線のある結合セルを記録する()
         {
-            var sheet = Sheet() with
+            var thin = new BorderEdge(BorderLineStyle.Thin, ArgbColor.Black);
+            var bottomBorder = CellStyle.Default with
+            {
+                Borders = new BorderSet(BorderEdge.None, BorderEdge.None, BorderEdge.None, thin, BorderEdge.None, BorderEdge.None),
+            };
+            var sheet = Sheet(("A3", Text(string.Empty, bottomBorder))) with
             {
                 HiddenRows = new HashSet<int> { 3 },
                 MergedRanges = new[] { new MergedRange(CellRange.Parse("A2:B3")) },
@@ -220,6 +250,66 @@ namespace Utsushi.Layout.Tests
 
             Assert.Equal(CellRange.Parse("A2:B3"), item.Location);
             Assert.Equal("lastRowHidden", item.Detail);
+        }
+
+        [Fact]
+        public void 最後の行が非表示でも罫線の無い結合セルは記録しない()
+        {
+            // 描かない辺に罫線が無ければ、見た目は Excel と変わらない(layout-fidelity-reviewer指摘)。
+            var sheet = Sheet() with
+            {
+                HiddenRows = new HashSet<int> { 3 },
+                MergedRanges = new[] { new MergedRange(CellRange.Parse("A2:B3")) },
+            };
+
+            Assert.DoesNotContain(Compute(sheet).FormatApproximations, a => a.Kind == FormatApproximationKind.MergedCellHiddenEdge);
+        }
+
+        [Fact]
+        public void 印刷範囲の末尾の列が非表示なら右へのはみ出しを改ページをまたぐ図形として記録しない()
+        {
+            // 印刷範囲 A1:E3 のうち D:E が非表示で、1ページに収まる。続きのページは無い(layout-fidelity-reviewer指摘)。
+            var sheet = UniformSheet(rows: 3, columns: 5, pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("A1:E3") })) with
+            {
+                HiddenColumns = new HashSet<int> { 4, 5 },
+                DrawingObjects = new DrawingObjectModel[] { WideShape("C2", 300.0) },
+            };
+
+            var layout = Compute(sheet);
+
+            Assert.Equal(1, layout.Pages.Count);
+            Assert.DoesNotContain(layout.FormatApproximations, a => a.Kind == FormatApproximationKind.DrawingAcrossPageBreak);
+        }
+
+        [Fact]
+        public void 印刷タイトルにかかる条件付き書式を記録する()
+        {
+            // 印刷タイトルの行(1〜4行目)は印刷範囲の外にあるが、各ページに印刷される(要件7.3)。
+            var sheet = UniformSheet(
+                rows: 120,
+                columns: 3,
+                pageSetup: NoMarginA4(
+                    printAreas: new[] { CellRange.Parse("A5:C120") },
+                    printTitles: new PrintTitles(1, 4, null, null))) with
+            {
+                ConditionalFormattingRanges = new[] { CellRange.Parse("A1:C4") },
+            };
+
+            Assert.Equal(CellRange.Parse("A1:C4"), Single(Compute(sheet), FormatApproximationKind.ConditionalFormatting).Location);
+        }
+
+        [Fact]
+        public void 条件付き書式は印刷される行の範囲だけを記録し非表示の行だけにかかるものは記録しない()
+        {
+            var sheet = Sheet() with
+            {
+                HiddenRows = new HashSet<int> { 3 },
+                ConditionalFormattingRanges = new[] { CellRange.Parse("A2:C3"), CellRange.Parse("A3:B3") },
+            };
+
+            var item = Single(Compute(sheet), FormatApproximationKind.ConditionalFormatting);
+
+            Assert.Equal(CellRange.Parse("A2:C2"), item.Location);
         }
 
         [Fact]

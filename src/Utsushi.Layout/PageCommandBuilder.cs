@@ -312,10 +312,13 @@ namespace Utsushi.Layout
             var location = new CellRange(anchor.Row, anchor.Column, anchor.Row, anchor.Column);
 
             // 左上が属するページにだけ描くため、ページの本文の外へはみ出す部分は次のページに描かれない(要件7.2(j))。
-            // はみ出す向きに続きのページがある(印刷範囲がこのページの先に続く)場合だけを数える。印刷範囲の端の外への
-            // はみ出しは改ページをまたぐものではないため、ここでは数えない。
-            var continuesRight = columnIndex.Count > 0 && columnIndex.Keys.Max() < _grid.PrintRange.LastColumn;
-            var continuesDown = rowIndex.Count > 0 && rowIndex.Keys.Max() < _grid.PrintRange.LastRow;
+            // はみ出す向きに続きのページがある(このページの先に印刷される行・列がある)場合だけを数える。印刷範囲の端の外への
+            // はみ出しは改ページをまたぐものではないため、ここでは数えない。印刷範囲の末尾の非表示の行・列は印刷されないため、
+            // 比べる相手は印刷される最後の行・列にする。
+            var continuesRight = columnIndex.Count > 0 && _grid.Columns.Count > 0
+                && columnIndex.Keys.Max() < _grid.Columns[_grid.Columns.Count - 1];
+            var continuesDown = rowIndex.Count > 0 && _grid.Rows.Count > 0
+                && rowIndex.Keys.Max() < _grid.Rows[_grid.Rows.Count - 1];
             if ((continuesRight && rect.Right > _pageBodyRect.Right + FitTolerancePt)
                 || (continuesDown && rect.Bottom > _pageBodyRect.Bottom + FitTolerancePt))
             {
@@ -334,6 +337,7 @@ namespace Utsushi.Layout
                     RecordImageApproximations(
                         image.FlipHorizontal || image.FlipVertical,
                         image.RotationDegrees,
+                        checkRotation: true,
                         location,
                         DrawingIdentity(image.Id, ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture)));
                     break;
@@ -346,16 +350,18 @@ namespace Utsushi.Layout
                         group.Children,
                         location,
                         ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        group.RotationDegrees,
                         group.FlipHorizontal || group.FlipVertical);
                     break;
             }
         }
 
-        /// <param name="rotationDegrees">外側のグループの回転の合計(グループの中の画像の実効の回転角の判定に使う)。</param>
         /// <param name="flipped">外側のグループのいずれかが反転しているかどうか。</param>
+        /// <remarks>
+        /// グループの中の画像の回転は記録しない。子の <c>a:xfrm</c> の位置・大きさは回転前の矩形であり、その中心で回して描くため、
+        /// 幅と高さを入れ替えた外接矩形を表すトップレベルのアンカーとは異なり、ずれが生じない。
+        /// </remarks>
         private void RecordGroupChildApproximations(
-            IReadOnlyList<GroupChildModel> children, CellRange location, string path, double rotationDegrees, bool flipped)
+            IReadOnlyList<GroupChildModel> children, CellRange location, string path, bool flipped)
         {
             for (var i = 0; i < children.Count; i++)
             {
@@ -368,7 +374,8 @@ namespace Utsushi.Layout
                     case GroupChildImage image:
                         RecordImageApproximations(
                             flipped || image.FlipHorizontal || image.FlipVertical,
-                            rotationDegrees + image.RotationDegrees,
+                            image.RotationDegrees,
+                            checkRotation: false,
                             location,
                             DrawingIdentity(image.Id, childPath));
                         break;
@@ -377,7 +384,6 @@ namespace Utsushi.Layout
                             nested.Children,
                             location,
                             childPath,
-                            rotationDegrees + nested.RotationDegrees,
                             flipped || nested.FlipHorizontal || nested.FlipVertical);
                         break;
                 }
@@ -385,15 +391,23 @@ namespace Utsushi.Layout
         }
 
         /// <summary>
-        /// 画像の反転と、45〜135度・225〜315度の回転を記録する(要件7.2(h))。回転は180度で折り返して判定する
-        /// (Excel がこの範囲で幅と高さを入れ替えて配置するとされるため。実機では未確認)。
+        /// 画像の反転と、トップレベルの画像の45度以上135度未満(225度以上315度未満)の回転を記録する(要件7.2(h))。
+        /// 回転は180度で折り返して判定する(Excel がこの範囲でアンカーを幅と高さを入れ替えた外接矩形として保存するとされるため。
+        /// 実機では未確認)。
         /// </summary>
-        private void RecordImageApproximations(bool flipped, double rotationDegrees, CellRange location, string identity)
+        /// <param name="checkRotation">回転を判定するかどうか(トップレベルの画像だけ)。</param>
+        private void RecordImageApproximations(
+            bool flipped, double rotationDegrees, bool checkRotation, CellRange location, string identity)
         {
             if (flipped)
             {
                 _approximations!.Add(
                     FormatApproximationKind.ImageFlip, _sheet.Name, location, identity, null, "画像の反転は再現せず、反転せずに描きます。");
+            }
+
+            if (!checkRotation)
+            {
+                return;
             }
 
             var folded = rotationDegrees % 180.0;
@@ -402,7 +416,7 @@ namespace Utsushi.Layout
                 folded += 180.0;
             }
 
-            if (folded >= 45.0 && folded <= 135.0)
+            if (folded >= 45.0 && folded < 135.0)
             {
                 _approximations!.Add(
                     FormatApproximationKind.ImageRotation,
@@ -410,7 +424,7 @@ namespace Utsushi.Layout
                     location,
                     identity,
                     "rot=" + rotationDegrees.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
-                    "45〜135度(225〜315度)回転した画像は、位置・大きさがExcelとずれることがあります。");
+                    "45度以上135度未満(225度以上315度未満)回転した画像は、位置・大きさがExcelとずれることがあります。");
             }
         }
 
@@ -451,9 +465,12 @@ namespace Utsushi.Layout
                     "改ページをまたぐ結合セルは、両方のページに同じ文字を描きます。");
             }
 
-            var lastRowHidden = range.LastRow > range.FirstRow && SheetGrid.IsRowNotPrinted(_sheet, range.LastRow);
+            // 描かれないのは、最後の行の下端(最後の列の右端)の罫線である(ResolveMergedBorders)。罫線が無ければ見た目は変わらない。
+            var lastRowHidden = range.LastRow > range.FirstRow && SheetGrid.IsRowNotPrinted(_sheet, range.LastRow)
+                && ResolveRowEdge(range.LastRow, range.FirstColumn, range.LastColumn, b => b.Bottom).IsVisible;
             var lastColumnHidden = range.LastColumn > range.FirstColumn
-                && SheetGrid.PrintedColumnWidthPt(_sheet, range.LastColumn, _report.Definition.MaxDigitWidthPx) <= 0;
+                && SheetGrid.PrintedColumnWidthPt(_sheet, range.LastColumn, _report.Definition.MaxDigitWidthPx) <= 0
+                && ResolveColumnEdge(range.LastColumn, range.FirstRow, range.LastRow, b => b.Right).IsVisible;
             if (lastRowHidden || lastColumnHidden)
             {
                 _approximations.Add(
@@ -462,7 +479,7 @@ namespace Utsushi.Layout
                     range,
                     null,
                     lastRowHidden ? "lastRowHidden" : "lastColumnHidden",
-                    "最後の行・列が非表示の結合セルは、外周の罫線の一部を描かないことがあります。");
+                    "最後の行・列が非表示の結合セルは、外周の罫線の一部(下端・右端)を描きません。");
             }
         }
 
@@ -1712,7 +1729,7 @@ namespace Utsushi.Layout
                     style.TextRotation == 255 ? "縦書きは横書きで描きます。" : "文字の回転は、回転せずに横書きで描きます。");
             }
 
-            if (cell.NumberFormatFellBack)
+            if (cell.NumberFormatFallback != Parsing.NumberFormatFallback.None)
             {
                 _approximations.Add(
                     FormatApproximationKind.NumberFormat,
@@ -1720,7 +1737,9 @@ namespace Utsushi.Layout
                     location,
                     null,
                     style.NumberFormat,
-                    "表示形式を解釈できない、または表示形式で表せない値のため、標準の表示形式で表示します。");
+                    cell.NumberFormatFallback == Parsing.NumberFormatFallback.UnrepresentableValue
+                        ? "表示形式で表せない値(負の経過時間・明治より前の日付の和暦など)のため、標準の表示形式で表示します。"
+                        : "表示形式を解釈できない(分数・指数など)ため、標準の表示形式で表示します。");
             }
 
             if (cell.HasRichText)
@@ -1737,9 +1756,9 @@ namespace Utsushi.Layout
             var hMessage = style.HAlign switch
             {
                 HorizontalAlignment.Justify or HorizontalAlignment.Distributed =>
-                    "横位置の両端揃え・均等割り付けは左揃えで描き、折り返しません(Excelは折り返します)。",
+                    "横位置の両端揃え・均等割り付けは左揃えで描きます(Excelと配置・折り返しが異なることがあります)。",
                 HorizontalAlignment.Fill => "横位置の繰り返しは、繰り返さずに左揃えで描きます。",
-                HorizontalAlignment.CenterContinuous => "横位置の選択範囲内で中央は、そのセルの中だけで中央揃えにします。",
+                HorizontalAlignment.CenterContinuous => "横位置の選択範囲内で中央は、そのセルの中だけで中央揃えにします(右隣のセルにまたがる場合はExcelと位置が異なります)。",
                 _ => null,
             };
             if (hMessage is not null)
@@ -1756,7 +1775,7 @@ namespace Utsushi.Layout
                     location,
                     null,
                     "vertical=" + style.VAlign,
-                    "縦位置の両端揃え・均等割り付けは中央揃えで描き、折り返しません(Excelは折り返します)。");
+                    "縦位置の両端揃え・均等割り付けは中央揃えで描きます(Excelと配置・折り返しが異なることがあります)。");
             }
 
             if (style.Indent > 0

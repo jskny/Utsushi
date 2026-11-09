@@ -50,7 +50,7 @@ namespace Utsushi.Parsing.Model
         /// 数値書式を解釈できない、または書式で表せない値のため、標準の表示形式で表示したかどうか
         /// (書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(e))。
         /// </summary>
-        public bool NumberFormatFellBack { get; init; }
+        public NumberFormatFallback NumberFormatFallback { get; init; }
 
         /// <summary>
         /// 値のみを差し替えた複製を返す(書式は変更しない。要件2.2)。差し込んだ文字列は数値書式で表示しないため、
@@ -60,13 +60,13 @@ namespace Utsushi.Parsing.Model
         /// 数値に置き換えた複製を返す(書式は変更しない。要件14.3)。表示文字列と色は呼び出し元がセルの数値書式で求めて渡す。
         /// </summary>
         public CellModel WithNumber(string rawValue, string formattedValue, ArgbColor? formatColor) =>
-            WithNumber(rawValue, formattedValue, formatColor, numberFormatFellBack: false);
+            WithNumber(rawValue, formattedValue, formatColor, NumberFormatFallback.None);
 
         /// <summary>
-        /// <see cref="WithNumber(string, string, ArgbColor?)"/> と同じ。<paramref name="numberFormatFellBack"/> は、数値書式で表示できずに
-        /// 標準の表示にしたかどうか(<see cref="NumberFormatFellBack"/>)。
+        /// <see cref="WithNumber(string, string, ArgbColor?)"/> と同じ。<paramref name="numberFormatFallback"/> は、数値書式で表示できずに
+        /// 標準の表示にしたかどうかと、その理由(<see cref="NumberFormatFallback"/>)。
         /// </summary>
-        public CellModel WithNumber(string rawValue, string formattedValue, ArgbColor? formatColor, bool numberFormatFellBack) =>
+        public CellModel WithNumber(string rawValue, string formattedValue, ArgbColor? formatColor, NumberFormatFallback numberFormatFallback) =>
             this with
             {
                 Value = rawValue,
@@ -75,7 +75,7 @@ namespace Utsushi.Parsing.Model
                 HasFormula = false,
                 FormatColor = formatColor,
                 HasRichText = false,
-                NumberFormatFellBack = numberFormatFellBack,
+                NumberFormatFallback = numberFormatFallback,
             };
 
         public CellModel WithText(string text) =>
@@ -87,7 +87,7 @@ namespace Utsushi.Parsing.Model
                 HasFormula = false,
                 FormatColor = null,
                 HasRichText = false,
-                NumberFormatFellBack = false,
+                NumberFormatFallback = NumberFormatFallback.None,
             };
     }
 }

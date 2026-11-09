@@ -116,7 +116,7 @@ namespace Utsushi.Parsing.OpenXml
             var indent = (int)(alignment?.Indent?.Value ?? 0U);
 
             // Excel が許す値(0〜180、縦書きの255)以外は回転なしとして扱う(要件6.12と同じく不正な値は既定値にする)。
-            var rotation = (int)(alignment?.TextRotation?.Value ?? 0U);
+            var rotation = (int)LenientValue.Read(() => alignment?.TextRotation?.Value ?? 0U, 0U);
             if (rotation is < 0 or > 180 && rotation != 255)
             {
                 rotation = 0;

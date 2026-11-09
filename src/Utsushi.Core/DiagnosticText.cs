@@ -61,7 +61,7 @@ namespace Utsushi.Core
                 }
 
                 var category = CharUnicodeInfo.GetUnicodeCategory(c);
-                if (category == UnicodeCategory.Control || category == UnicodeCategory.Format)
+                if (IsRemoved(category))
                 {
                     continue;
                 }
@@ -77,5 +77,13 @@ namespace Utsushi.Core
 
             return truncated ? builder.Append('…').ToString() : builder.ToString();
         }
+
+        /// <summary>
+        /// 診断の文から取り除く文字の種類。制御文字・書式文字に加え、行区切り・段落区切り(U+2028・U+2029)も取り除く
+        /// (改行として扱うログのビューアで、偽の行を差し込ませないため)。
+        /// </summary>
+        public static bool IsRemoved(UnicodeCategory category) =>
+            category is UnicodeCategory.Control or UnicodeCategory.Format
+                or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator;
     }
 }

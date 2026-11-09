@@ -294,9 +294,9 @@ public enum FormatApproximationKind
     CellFillPattern,           // セルの網かけ                                             (f)
     CellFillGradient,          // セルのグラデーション                                     (f)
     ShapeFill,                 // 図形の塗りつぶしの近似・欠落                             (g)
-    ShapeFont,                 // 図形の文字のスタイル(fontRef)が指す書体                  (g)
+    ShapeFont,                 // 図形の文字のスタイル(fontRef)・テーマが指す書体、東アジアの書体の欠落 (g)
     ImageFlip,                 // 反転した画像                                             (h)
-    ImageRotation,             // 45〜135度・225〜315度回転した画像                        (h)
+    ImageRotation,             // 45度以上135度未満・225度以上315度未満回転したトップレベルの画像 (h)
     MultiLineHeaderFooter,     // 複数行のヘッダー/フッター                                (i)
     MergedCellAcrossPageBreak, // 改ページをまたぐ結合セル                                 (j)
     DrawingAcrossPageBreak,    // 改ページをまたぐ画像・図形                               (j)
@@ -328,8 +328,8 @@ public sealed record FormatApproximation(
 | NumberFormat | 表示文字列を作るときに、(1)表示形式を解釈できず標準にした、(2)表示形式で表せない値(負の経過時間・明治より前の和暦)のため標準にした、のいずれかの印を `CellModel` に載せる(`NumberFormatter`)。`@` だけの書式で標準にするのはExcelと同じ表示のため印を付けない。`SetValue` の書き込みでは、公開の `NumberFormatting.Format` は変えず、印も返す internal のオーバーロードを使う | セルの文字を組み立てるとき |
 | CellFillPattern・CellFillGradient | `StyleTable.ReadFills` で、単色以外の網かけ・グラデーションの塗りつぶしを `CellStyle` の印に読む(現在は背景色・塗りつぶしなしに置き換えるだけ) | 印の付いた書式を持つ、印刷されるセル位置を組み立てるとき(`PageCommandBuilder.EmitCell`。塗りつぶしを描かない場合も含む。セルが無い位置を行・列の書式で描く場合も含む) |
 | ShapeFill | 図形の塗りつぶし(`ReadShapeFill`)で、次の場合の印を `ShapeModel` に載せる。(1)スタイル(`fillRef`)が指すテーマの `fillStyleLst` の項目が単色でない(テーマの `fillStyleLst` を新たに読む。現在は `fillRef` の idx が0より大きければ単色にしている。既定のテーマの idx=1 は単色なので印を付けない)、(2)直接指定の模様・画像・グループの塗りつぶし(`pattFill`・`blipFill`・`grpFill`。現在は塗りつぶしなし)、(3)`a:path` が rect・shape のグラデーション(放射状で近似)、(4)読めないグラデーションのストップ・解決できない色の指定(塗りつぶしなし) | 図形を組み立てるとき |
-| ShapeFont | 図形の文字のフォントが `fontRef` の書体を指すかを読む(現在は使っていない) | 図形の文字を組み立てるとき |
-| ImageFlip・ImageRotation | 回転は読み済み。反転(`a:xfrm/@flipH`・`@flipV`)は `ImageModel`・`GroupChildImage` に新たに読む(現在は図形・接続線・グループだけが読んでいる)。反転したグループの中の画像も対象にする | 画像を組み立てるとき。回転は角度を180度で折り返して45〜135度なら(225〜315度を含む。Excelの判定と一致するかは実機で未確認) |
+| ShapeFont | 図形の文字のフォントが `fontRef`・テーマの書体を指すか、日本語の文字に `a:ea` の書体が無い(またはテーマを指す)かを読む(現在は使っていない) | 図形の文字を組み立てるとき |
+| ImageFlip・ImageRotation | 回転は読み済み。反転(`a:xfrm/@flipH`・`@flipV`)は `ImageModel`・`GroupChildImage` に新たに読む(現在は図形・接続線・グループだけが読んでいる)。反転したグループの中の画像も対象にする | 画像を組み立てるとき。回転は、トップレベルの画像の角度を180度で折り返して45度以上135度未満なら(225度以上315度未満を含む。Excelの判定と一致するかは実機で未確認)。グループの中の画像の回転は、子の `a:xfrm` が回転前の矩形で、中心で回して描くため対象としない |
 | MultiLineHeaderFooter | ヘッダー/フッターの文字列(読み済み) | `HeaderFooterCommandBuilder.ScaleRuns` が改行を取り除くとき。ヘッダー/フッターと左・中央・右の別を `Detail` に入れる |
 | MergedCellAcrossPageBreak・DrawingAcrossPageBreak | (不要) | ページの分割で、結合範囲・要素の矩形がページの境界をまたぐとき |
 | MergedCellHiddenEdge | (不要) | 結合範囲の外周の罫線を組み立てるとき |

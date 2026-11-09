@@ -329,7 +329,7 @@ namespace Utsushi.Layout
             {
                 foreach (var plan in plans)
                 {
-                    if (Intersect(range, plan.PrintRange) is { } overlap)
+                    if (PrintedPart(range, plan) is { } overlap)
                     {
                         approximations.Add(
                             FormatApproximationKind.ConditionalFormatting,
@@ -343,16 +343,62 @@ namespace Utsushi.Layout
             }
         }
 
-        private static CellRange? Intersect(CellRange a, CellRange b)
+        /// <summary>
+        /// <paramref name="range"/> のうち、この印刷範囲で印刷される行・列(印刷範囲の中の非表示でない行・列と、
+        /// いずれかのページに付く印刷タイトルの行・列)を囲む範囲。印刷される部分が無ければ null(要件7.3)。
+        /// </summary>
+        private static CellRange? PrintedPart(CellRange range, RangePlan plan)
         {
-            var firstRow = Math.Max(a.FirstRow, b.FirstRow);
-            var lastRow = Math.Min(a.LastRow, b.LastRow);
-            var firstColumn = Math.Max(a.FirstColumn, b.FirstColumn);
-            var lastColumn = Math.Min(a.LastColumn, b.LastColumn);
-            return firstRow <= lastRow && firstColumn <= lastColumn
-                ? new CellRange(firstRow, firstColumn, lastRow, lastColumn)
-                : null;
+            var printRange = plan.PrintRange;
+            var rows = Union(
+                SpanWithin(plan.Grid.Rows, Math.Max(range.FirstRow, printRange.FirstRow), Math.Min(range.LastRow, printRange.LastRow)),
+                plan.AttachesTitleRowsAnywhere ? SpanWithin(plan.Titles.Rows, range.FirstRow, range.LastRow) : null);
+            var columns = Union(
+                SpanWithin(plan.Grid.Columns, Math.Max(range.FirstColumn, printRange.FirstColumn), Math.Min(range.LastColumn, printRange.LastColumn)),
+                plan.AttachesTitleColumnsAnywhere ? SpanWithin(plan.Titles.Columns, range.FirstColumn, range.LastColumn) : null);
+            return rows is { } r && columns is { } c ? new CellRange(r.First, c.First, r.Last, c.Last) : null;
         }
+
+        /// <summary>昇順の番号の並びのうち、<paramref name="low"/>〜<paramref name="high"/> にある最初と最後の番号(二分探索)。</summary>
+        private static (int First, int Last)? SpanWithin(IReadOnlyList<int> sorted, int low, int high)
+        {
+            if (low > high)
+            {
+                return null;
+            }
+
+            var first = LowerBound(sorted, low);
+            if (first >= sorted.Count || sorted[first] > high)
+            {
+                return null;
+            }
+
+            return (sorted[first], sorted[LowerBound(sorted, high + 1) - 1]);
+        }
+
+        private static int LowerBound(IReadOnlyList<int> sorted, int value)
+        {
+            int low = 0, high = sorted.Count;
+            while (low < high)
+            {
+                var middle = low + ((high - low) / 2);
+                if (sorted[middle] < value)
+                {
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle;
+                }
+            }
+
+            return low;
+        }
+
+        private static (int First, int Last)? Union((int First, int Last)? a, (int First, int Last)? b) =>
+            a is { } x
+                ? (b is { } y ? (Math.Min(x.First, y.First), Math.Max(x.Last, y.Last)) : x)
+                : b;
 
         private List<PageLayout> AppendHeadersAndFooters(
             ReportModel report, List<PageLayout> pages, FormatApproximationCollector? approximations)

@@ -130,16 +130,16 @@ namespace Utsushi.Parsing.OpenXml
         /// </summary>
         /// <param name="value">セルの生の数値。</param>
         /// <param name="formatCode">数値書式文字列。null / "General" の場合は既定表記。</param>
-        public static string FormatNumber(double value, string? formatCode) => FormatNumber(value, formatCode, out _);
+        public static string FormatNumber(double value, string? formatCode) => FormatNumber(value, formatCode, out NumberFormatFallback _);
 
         /// <summary>
-        /// <see cref="FormatNumber(double, string?)"/> と同じ。<paramref name="fellBackToGeneral"/> は、書式を解釈できない、または書式で表せない値
-        /// (負の経過時間・明治より前の和暦など)のために標準の表示にしたかどうか(excel2pdf-consolidation 要件7.2(e))。
-        /// 標準の書式と、<c>@</c> だけの書式(Excel と同じ表示になる)では false。
+        /// <see cref="FormatNumber(double, string?)"/> と同じ。<paramref name="fallback"/> は、書式を解釈できない、または書式で表せない値
+        /// (負の経過時間・明治より前の和暦など)のために標準の表示にしたかどうかと、その理由(excel2pdf-consolidation 要件7.2(e))。
+        /// 標準の書式と、<c>@</c> だけの書式(Excel と同じ表示になる)では <see cref="NumberFormatFallback.None"/>。
         /// </summary>
-        public static string FormatNumber(double value, string? formatCode, out bool fellBackToGeneral)
+        public static string FormatNumber(double value, string? formatCode, out NumberFormatFallback fallback)
         {
-            fellBackToGeneral = false;
+            fallback = NumberFormatFallback.None;
             if (string.IsNullOrWhiteSpace(formatCode) || IsGeneral(formatCode!))
             {
                 return FormatGeneral(value);
@@ -157,13 +157,23 @@ namespace Utsushi.Parsing.OpenXml
             if (TryFormatSection(value, parsed, section, out var text))
             {
                 // 指数・分数など解釈できない数値の書式は、例外にせず標準に近い表示を返すため、ここで区別する。
-                fellBackToGeneral = section.Numeric is { IsSupported: false };
+                if (section.Numeric is { IsSupported: false })
+                {
+                    fallback = NumberFormatFallback.UnsupportedFormat;
+                }
+
                 return text;
             }
 
-            fellBackToGeneral = true;
+            // 同じセクションで代表的な値(1)を表示できるなら、書式ではなく値が原因(負の経過時間・明治より前の和暦など)。
+            fallback = TryFormatSection(FallbackProbeValue, parsed, section, out _)
+                ? NumberFormatFallback.UnrepresentableValue
+                : NumberFormatFallback.UnsupportedFormat;
             return FormatGeneral(value);
         }
+
+        /// <summary>表示できなかった原因が値か書式かを見分けるために、同じセクションで試す値。</summary>
+        private const double FallbackProbeValue = 1.0;
 
         /// <summary>選んだセクションで書式を適用する。解釈できない書式・書式で表せない値なら false。</summary>
         private static bool TryFormatSection(double value, ParsedFormat parsed, FormatSection section, out string text)

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using Utsushi.Core;
 using Utsushi.Parsing.Model;
 using Utsushi.Parsing.OpenXml;
 using Utsushi.TestSupport;
@@ -94,6 +95,24 @@ namespace Utsushi.Parsing.Tests
             Assert.Equal(3, OpenXmlWorkbookReader.ReadConditionalFormattingRanges(worksheet, maxRanges: 3).Count);
         }
 
+        [Fact]
+        public void 条件付き書式の範囲は空白で区切って読み有効な範囲より長い区切りは読み飛ばす()
+        {
+            var worksheet = new DocumentFormat.OpenXml.Spreadsheet.Worksheet(
+                new DocumentFormat.OpenXml.Spreadsheet.SheetData(),
+                new DocumentFormat.OpenXml.Spreadsheet.ConditionalFormatting
+                {
+                    SequenceOfReferences = new DocumentFormat.OpenXml.ListValue<DocumentFormat.OpenXml.StringValue>
+                    {
+                        InnerText = "  A1 " + new string('A', 1000) + "\t$XFD$1048575:$XFD$1048576  B2:C3 ",
+                    },
+                });
+
+            var ranges = OpenXmlWorkbookReader.ReadConditionalFormattingRanges(worksheet, maxRanges: 100);
+
+            Assert.Equal(new[] { "A1:A1", "XFD1048575:XFD1048576", "B2:C3" }, ranges.Select(r => r.ToString()).ToArray());
+        }
+
         [Theory]
         [InlineData(false, false)]
         [InlineData(true, true)]
@@ -119,18 +138,65 @@ namespace Utsushi.Parsing.Tests
             }
         }
 
+        [Fact]
+        public void 同じ書式のランを大量に並べた共有文字列はリッチテキストとして読まない()
+        {
+            // 同じ書式のランは重複を除いて1件として保持する(セルの数×ランの数の比較にしない。security-reviewer指摘)。
+            var runs = Enumerable.Range(0, 5000)
+                .Select(_ => new DocumentFormat.OpenXml.Spreadsheet.Run(
+                    new DocumentFormat.OpenXml.Spreadsheet.RunProperties(),
+                    new DocumentFormat.OpenXml.Spreadsheet.Text("字")))
+                .ToArray();
+            var path = SafetyLimitWorkbookFixtures.CreateWithSharedStrings(new DocumentFormat.OpenXml.Spreadsheet.SharedStringItem(runs));
+            try
+            {
+                var cell = _reader.ReadFile(path).Sheets[0].Cells[CellAddress.Parse("A2")];
+
+                Assert.False(cell.HasRichText);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         [Theory]
-        [InlineData("# ?/?", 0.5, true)]
-        [InlineData("0.00E+00", 12345678.0, true)]
-        [InlineData("[h]:mm", -0.5, true)]
-        [InlineData("@", 1.0, false)]
-        [InlineData("#,##0", 1234.0, false)]
-        [InlineData(null, 1.0, false)]
-        public void 表示形式で表示できず標準にした場合を区別する(string? format, double value, bool expected)
+        [InlineData("<x:i val=\"0\"/>", false)]
+        [InlineData("<x:b val=\"maybe\"/>", true)]
+        [InlineData("<x:sz val=\"abc\"/>", false)]
+        [InlineData("<x:vertAlign val=\"superscript\"/>", true)]
+        public void ランの書式の不正な値はファイルの破損として扱わない(string runProperties, bool expected)
+        {
+            var run = new DocumentFormat.OpenXml.Spreadsheet.Run(
+                new DocumentFormat.OpenXml.Spreadsheet.RunProperties(
+                    "<x:rPr xmlns:x=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">" + runProperties + "</x:rPr>"),
+                new DocumentFormat.OpenXml.Spreadsheet.Text("文字"));
+            var path = SafetyLimitWorkbookFixtures.CreateWithSharedStrings(new DocumentFormat.OpenXml.Spreadsheet.SharedStringItem(run));
+            try
+            {
+                var cell = _reader.ReadFile(path).Sheets[0].Cells[CellAddress.Parse("A2")];
+
+                Assert.Equal(expected, cell.HasRichText);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Theory]
+        [InlineData("# ?/?", 0.5, NumberFormatFallback.UnsupportedFormat)]
+        [InlineData("0.00E+00", 12345678.0, NumberFormatFallback.UnsupportedFormat)]
+        [InlineData("[h]:mm", -0.5, NumberFormatFallback.UnrepresentableValue)]
+        [InlineData("@", 1.0, NumberFormatFallback.None)]
+        [InlineData("#,##0", 1234.0, NumberFormatFallback.None)]
+        [InlineData(null, 1.0, NumberFormatFallback.None)]
+        public void 表示形式で表示できず標準にした場合を理由とともに区別する(string? format, double value, NumberFormatFallback expected)
         {
             var result = NumberFormatting.FormatWithFallback(value, format);
 
-            Assert.Equal(expected, result.FellBackToGeneral);
+            Assert.Equal(expected, result.Fallback);
+            Assert.Equal(expected != NumberFormatFallback.None, result.FellBackToGeneral);
             Assert.Equal(NumberFormatting.Format(value, format), result.Text);
         }
 
@@ -182,14 +248,17 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Theory]
-        [InlineData(null, "fontRef=Minor")]
-        [InlineData("<a:latin typeface=\"+mn-lt\"/>", "+mn-lt")]
-        [InlineData("<a:latin typeface=\"Arial\"/>", null)]
-        public void スタイルやテーマの書体を指す図形の文字を読む(string? runFont, string? expected)
+        [InlineData(null, "fontRef=Minor", "文字")]
+        [InlineData("<a:latin typeface=\"+mn-lt\"/>", "+mn-lt", "文字")]
+        [InlineData("<a:latin typeface=\"Arial\"/>", "ea=-", "文字")]
+        [InlineData("<a:latin typeface=\"Arial\"/><a:ea typeface=\"+mn-ea\"/>", "ea=+mn-ea", "文字")]
+        [InlineData("<a:latin typeface=\"Arial\"/><a:ea typeface=\"MS Gothic\"/>", null, "文字")]
+        [InlineData("<a:latin typeface=\"Arial\"/>", null, "Total")]
+        public void スタイルやテーマの書体を指す図形の文字を読む(string? runFont, string? expected, string text = "文字")
         {
             var shape = ReadSingleShape(DrawingStyleWorkbookFixtures.ShapeAnchor(
                 style: DrawingStyleWorkbookFixtures.ExcelDefaultShapeStyle,
-                textBody: DrawingStyleWorkbookFixtures.TextBody("文字", runFont)));
+                textBody: DrawingStyleWorkbookFixtures.TextBody(text, runFont)));
 
             Assert.Equal(expected, shape.Text!.StyleFont);
         }
@@ -209,6 +278,28 @@ namespace Utsushi.Parsing.Tests
 
                 Assert.True(image.FlipHorizontal);
                 Assert.False(image.FlipVertical);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 画像の反転の不正な値はファイルの破損として扱わず反転なしとする()
+        {
+            // 診断にしか使わない値のため、不正な値でファイル全体を変換できなくしない(security-reviewer指摘)。
+            var path = ImageWorkbookFixtures.CreateWithPicture("image/png", ImageWorkbookFixtures.TinyPng(), rotationEmu: 60000);
+            try
+            {
+                SafetyLimitWorkbookFixtures.ModifyEntry(
+                    path,
+                    SafetyLimitWorkbookFixtures.EntryNameEndingWith(path, "drawing1.xml"),
+                    xml => xml.Replace("<a:xfrm ", "<a:xfrm flipH=\"maybe\" ", System.StringComparison.Ordinal));
+
+                var image = Assert.Single(_reader.ReadFile(path).Sheets[0].DrawingObjects.OfType<ImageModel>());
+
+                Assert.False(image.FlipHorizontal);
             }
             finally
             {

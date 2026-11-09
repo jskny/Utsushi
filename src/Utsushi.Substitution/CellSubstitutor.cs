@@ -150,7 +150,7 @@ namespace Utsushi.Substitution
                 var cell = cells[address];
                 var format = cell.Style.NumberFormat;
                 var formatted = Parsing.NumberFormatting.FormatWithFallback(value, format);
-                cells[address] = cell.WithNumber(asText[addressText], formatted.Text, formatted.Color, formatted.FellBackToGeneral);
+                cells[address] = cell.WithNumber(asText[addressText], formatted.Text, formatted.Color, formatted.Fallback);
             }
 
             return overridden with { Sheet = sheet with { Cells = cells } };

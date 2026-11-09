@@ -239,6 +239,9 @@ namespace Utsushi.Parsing.OpenXml
         /// </summary>
         internal const int MaxConditionalFormattingRanges = 1_000;
 
+        /// <summary>セル範囲の参照として有効な最大の長さ(<c>$XFD$1048576:$XFD$1048576</c> は25文字)。</summary>
+        private const int MaxCellRangeReferenceLength = 25;
+
         /// <summary>
         /// 条件付き書式を設定した範囲を読む(excel2pdf-consolidation 要件7.2(c))。<c>conditionalFormatting/@sqref</c> と、
         /// Excel 2010 以降の拡張(<c>extLst</c> の <c>x14:conditionalFormatting</c> の <c>xm:sqref</c>)の両方を読む。
@@ -258,15 +261,36 @@ namespace Utsushi.Parsing.OpenXml
                     return true;
                 }
 
-                // 範囲は空白で区切られる。1つの sqref に大量の範囲を並べた入力でも、上限に達したら読み進めない。
-                foreach (var token in references!.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                // 範囲は空白で区切られる。1つの sqref に大量の範囲を並べた入力でも、上限に達したら読み進めない
+                // (一括で分割すると、上限の判定の前に巨大な配列ができるため、1つずつ切り出す)。
+                // 有効な範囲より長い区切りは、文字列を作らずに読み飛ばす。
+                var text = references!;
+                var position = 0;
+                while (position < text.Length)
                 {
+                    while (position < text.Length && char.IsWhiteSpace(text[position]))
+                    {
+                        position++;
+                    }
+
+                    var start = position;
+                    while (position < text.Length && !char.IsWhiteSpace(text[position]))
+                    {
+                        position++;
+                    }
+
+                    var length = position - start;
+                    if (length == 0 || length > MaxCellRangeReferenceLength)
+                    {
+                        continue;
+                    }
+
                     if (result.Count >= maxRanges)
                     {
                         return false;
                     }
 
-                    if (CellRange.TryParse(token, out var range))
+                    if (CellRange.TryParse(text.Substring(start, length), out var range))
                     {
                         result.Add(range);
                     }
@@ -319,7 +343,7 @@ namespace Utsushi.Parsing.OpenXml
             for (var i = 0; !invalid && i < name.Length; i++)
             {
                 var category = CharUnicodeInfo.GetUnicodeCategory(name[i]);
-                invalid = category == UnicodeCategory.Control || category == UnicodeCategory.Format;
+                invalid = DiagnosticText.IsRemoved(category);
             }
 
             if (invalid)
@@ -533,11 +557,11 @@ namespace Utsushi.Parsing.OpenXml
             // 型指定なし = 数値
             if (double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
             {
-                var formatted = NumberFormatter.FormatNumber(number, style.NumberFormat, out var fellBack);
+                var formatted = NumberFormatter.FormatNumber(number, style.NumberFormat, out NumberFormatFallback fallback);
                 return new CellModel(rawValue, CellValueKind.Number, style, formatted, hasFormula)
                 {
                     FormatColor = NumberFormatter.ResolveColor(number, style.NumberFormat),
-                    NumberFormatFellBack = fellBack,
+                    NumberFormatFallback = fallback,
                 };
             }
 
@@ -1418,8 +1442,8 @@ namespace Utsushi.Parsing.OpenXml
 
             return new ImageModel(id, data, contentType, rotationDegrees, anchorCell, anchorOffset, extent)
             {
-                FlipHorizontal = picture.ShapeProperties?.Transform2D?.HorizontalFlip?.Value ?? false,
-                FlipVertical = picture.ShapeProperties?.Transform2D?.VerticalFlip?.Value ?? false,
+                FlipHorizontal = LenientValue.Read(() => picture.ShapeProperties?.Transform2D?.HorizontalFlip?.Value ?? false, false),
+                FlipVertical = LenientValue.Read(() => picture.ShapeProperties?.Transform2D?.VerticalFlip?.Value ?? false, false),
             };
         }
 
@@ -1839,8 +1863,8 @@ namespace Utsushi.Parsing.OpenXml
 
             return new GroupChildImage(id, localRect.Value, data, contentType, rotationDegrees)
             {
-                FlipHorizontal = picture.ShapeProperties?.Transform2D?.HorizontalFlip?.Value ?? false,
-                FlipVertical = picture.ShapeProperties?.Transform2D?.VerticalFlip?.Value ?? false,
+                FlipHorizontal = LenientValue.Read(() => picture.ShapeProperties?.Transform2D?.HorizontalFlip?.Value ?? false, false),
+                FlipVertical = LenientValue.Read(() => picture.ShapeProperties?.Transform2D?.VerticalFlip?.Value ?? false, false),
             };
         }
 
@@ -2068,7 +2092,7 @@ namespace Utsushi.Parsing.OpenXml
 
                 if (gradientFill.GetFirstChild<Dr.PathGradientFill>() is { } pathFill)
                 {
-                    if (pathFill.Path?.Value is { } pathKind && pathKind != Dr.PathShadeValues.Circle)
+                    if (LenientValue.Read(() => pathFill.Path?.Value, null) is { } pathKind && pathKind != Dr.PathShadeValues.Circle)
                     {
                         approximation = "path=" + pathKind;
                     }
@@ -2119,9 +2143,15 @@ namespace Utsushi.Parsing.OpenXml
             // fillRef/@idx が 0 なら塗りなし。1以上はテーマの塗りつぶしの書式を指すが、Excelの既定テーマでは
             // いずれもスタイルの色(phClr)を基にした塗りのため、その色の単色で近似する(要件10.16)。
             if (style?.FillReference is { } fillRef
-                && fillRef.Index?.Value is { } fillIndex && fillIndex > 0
-                && colors.TryResolve(fillRef, placeholder: null, out var styleColor))
+                && fillRef.Index?.Value is { } fillIndex && fillIndex > 0)
             {
+                if (!colors.TryResolve(fillRef, placeholder: null, out var styleColor))
+                {
+                    // 塗りつぶしを指すが色を解決できない場合は塗りつぶさない(要件7.2(g)の「解決できない色」)。
+                    approximation = "color";
+                    return null;
+                }
+
                 // テーマの塗りつぶしの書式が単色でない(グラデーションなど)場合は、単色で近似したことを知らせる。
                 if (!colors.IsSolidFillStyle(fillIndex))
                 {
@@ -2279,6 +2309,20 @@ namespace Utsushi.Parsing.OpenXml
             _ => LineEndSize.Medium,
         };
 
+        /// <summary>ASCII の範囲の外の文字(日本語の文字など)を含むかどうか。</summary>
+        private static bool HasNonAsciiLetter(string text)
+        {
+            foreach (var c in text)
+            {
+                if (c > '\u007F' && !char.IsWhiteSpace(c))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// 図形内テキスト(<c>xdr:txBody</c>)を段落・ラン単位で読み取る(要件10.4)。
         /// 合計文字数が<see cref="MaxShapeTextLength"/>を超えた時点で即座に打ち切り、
@@ -2358,6 +2402,16 @@ namespace Utsushi.Parsing.OpenXml
                         {
                             styleFont = "fontRef=" + (reference.Index?.Value.ToString() ?? "-");
                         }
+                        else if (latin is not null && HasNonAsciiLetter(text!))
+                        {
+                            // 日本語の文字は、Excel では東アジアの書体(a:ea)で描かれる。a:ea が無い(テーマ・スタイルの書体になる)か
+                            // テーマのフォントを指す場合、Utsushi が a:latin の書体で描く日本語の文字は Excel と書体が異なる。
+                            var eastAsian = runProperties?.GetFirstChild<Dr.EastAsianFont>()?.Typeface?.Value;
+                            if (eastAsian is null || eastAsian.StartsWith("+", StringComparison.Ordinal))
+                            {
+                                styleFont = "ea=" + (eastAsian ?? "-");
+                            }
+                        }
                     }
                 }
 
@@ -2383,8 +2437,8 @@ namespace Utsushi.Parsing.OpenXml
 
             var bodyProperties = textBody.BodyProperties;
             var vAlign = MapVerticalAlignment(bodyProperties?.Anchor?.Value);
-            var vertical = bodyProperties?.Vertical?.Value;
-            var rotation = (bodyProperties?.Rotation?.Value ?? 0) / 60000.0;
+            var vertical = LenientValue.Read(() => bodyProperties?.Vertical?.Value, null);
+            var rotation = LenientValue.Read(() => bodyProperties?.Rotation?.Value ?? 0, 0) / 60000.0;
             return new ShapeTextBody(paragraphs, vAlign, ReadShapeTextInsets(bodyProperties))
             {
                 Vertical = vertical is null || vertical.Value == Dr.TextVerticalValues.Horizontal ? null : vertical.Value.ToString(),

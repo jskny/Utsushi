@@ -17,6 +17,15 @@ namespace Utsushi.Parsing.OpenXml
     /// </remarks>
     internal sealed class RichTextFormats
     {
+        /// <summary>
+        /// 1つの文字列について保持する、異なるランの書式の数の上限。超えたら、ランの書式がセルの書式と異なるとみなす
+        /// (同じ共有文字列を参照するセルの数×ランの数の比較で、CPU・メモリを使わせないため)。
+        /// </summary>
+        internal const int MaxDistinctRunFormats = 16;
+
+        /// <summary>異なるランの書式が上限を超えた文字列の印(どのセルの書式とも異なるとみなす)。</summary>
+        private static readonly IReadOnlyList<RunFormat> TooManyFormats = Array.Empty<RunFormat>();
+
         private readonly IReadOnlyList<IReadOnlyList<RunFormat>?> _sharedStringRuns;
 
         private RichTextFormats(IReadOnlyList<IReadOnlyList<RunFormat>?> sharedStringRuns)
@@ -53,14 +62,30 @@ namespace Utsushi.Parsing.OpenXml
         public static bool InlineDiffers(IEnumerable<X.Run> runs, FontStyle cellFont, ColorResolver colors) =>
             ReadRuns(runs, colors) is { } formats && Differs(formats, cellFont);
 
+        /// <summary>
+        /// ランの書式を、重複を除いて読む。書式を持つランが無ければ null。異なる書式が <see cref="MaxDistinctRunFormats"/> を
+        /// 超えたら、読むのをやめて <see cref="TooManyFormats"/> を返す。
+        /// </summary>
         private static IReadOnlyList<RunFormat>? ReadRuns(IEnumerable<X.Run> runs, ColorResolver colors)
         {
+            HashSet<RunFormat>? seen = null;
             List<RunFormat>? formats = null;
             foreach (var run in runs)
             {
-                if (run.RunProperties is { } properties)
+                if (run.RunProperties is not { } properties)
                 {
-                    (formats ??= new List<RunFormat>()).Add(RunFormat.Read(properties, colors));
+                    continue;
+                }
+
+                var format = RunFormat.Read(properties, colors);
+                if ((seen ??= new HashSet<RunFormat>()).Add(format))
+                {
+                    if (seen.Count > MaxDistinctRunFormats)
+                    {
+                        return TooManyFormats;
+                    }
+
+                    (formats ??= new List<RunFormat>()).Add(format);
                 }
             }
 
@@ -69,6 +94,11 @@ namespace Utsushi.Parsing.OpenXml
 
         private static bool Differs(IReadOnlyList<RunFormat> runs, FontStyle font)
         {
+            if (ReferenceEquals(runs, TooManyFormats))
+            {
+                return true;
+            }
+
             foreach (var run in runs)
             {
                 if (run.Differs(font))
@@ -80,15 +110,21 @@ namespace Utsushi.Parsing.OpenXml
             return false;
         }
 
-        /// <summary>1つのランの書式(指定のあるものだけ)。</summary>
+        /// <summary>
+        /// 1つのランの書式。フォント名・サイズ・色は指定のあるものだけ。太字・斜体・下線・取り消し線は、指定が無ければ無し
+        /// (Excel はランの書式をすべて書き出すため、<c>rPr</c> に <c>b</c> が無いランは太字ではない)。
+        /// </summary>
+        /// <remarks>
+        /// 診断にしか使わない値のため、不正な値はファイルの破損として扱わず、無視する(既定値とみなす)。
+        /// </remarks>
         private sealed record RunFormat(
-            string? Name, double? Size, bool? Bold, bool? Italic, bool? Underline, bool? Strike, ArgbColor? Color, bool HasOtherFormatting)
+            string? Name, double? Size, bool Bold, bool Italic, bool Underline, bool Strike, ArgbColor? Color, bool HasOtherFormatting)
         {
             public static RunFormat Read(X.RunProperties properties, ColorResolver colors)
             {
                 string? name = null;
                 double? size = null;
-                bool? bold = null, italic = null, underline = null, strike = null;
+                bool bold = false, italic = false, underline = false, strike = false;
                 ArgbColor? color = null;
                 var other = false;
 
@@ -97,40 +133,44 @@ namespace Utsushi.Parsing.OpenXml
                     switch (element)
                     {
                         case X.RunFont runFont:
-                            name = runFont.Val?.Value;
+                            name = runFont.Val?.InnerText;
                             break;
                         case X.FontSize fontSize:
-                            size = fontSize.Val?.Value;
+                            size = double.TryParse(
+                                fontSize.Val?.InnerText,
+                                System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture,
+                                out var parsed) ? parsed : null;
                             break;
                         case X.Bold b:
-                            bold = b.Val?.Value ?? true;
+                            bold = ReadToggle(b.Val);
                             break;
                         case X.Italic i:
-                            italic = i.Val?.Value ?? true;
+                            italic = ReadToggle(i.Val);
                             break;
                         case X.Underline u:
-                            underline = u.Val?.Value != X.UnderlineValues.None;
+                            underline = u.Val?.InnerText != "none";
                             break;
-                        case X.Strike s:
-                            strike = s.Val?.Value ?? true;
+                        case X.Strike st:
+                            strike = ReadToggle(st.Val);
                             break;
                         case X.Color c:
-                            color = colors.Resolve(c, ArgbColor.Black);
+                            color = TryResolveColor(c, colors);
                             break;
                         case X.VerticalTextAlignment v:
-                            other |= v.Val?.Value is { } align && align != X.VerticalAlignmentRunValues.Baseline;
+                            other |= v.Val?.InnerText is { Length: > 0 } align && align != "baseline";
                             break;
                         case X.Outline o:
-                            other |= o.Val?.Value ?? true;
+                            other |= ReadToggle(o.Val);
                             break;
                         case X.Shadow sh:
-                            other |= sh.Val?.Value ?? true;
+                            other |= ReadToggle(sh.Val);
                             break;
                         case X.Condense cd:
-                            other |= cd.Val?.Value ?? true;
+                            other |= ReadToggle(cd.Val);
                             break;
                         case X.Extend ex:
-                            other |= ex.Val?.Value ?? true;
+                            other |= ReadToggle(ex.Val);
                             break;
                     }
                 }
@@ -138,14 +178,32 @@ namespace Utsushi.Parsing.OpenXml
                 return new RunFormat(name, size, bold, italic, underline, strike, color, other);
             }
 
+            private static ArgbColor? TryResolveColor(X.Color color, ColorResolver colors)
+            {
+                try
+                {
+                    return colors.Resolve(color, ArgbColor.Black);
+                }
+                catch (FormatException)
+                {
+                    return null;
+                }
+            }
+
+            /// <summary>
+            /// <c>val</c> を省略した要素は有効。<c>0</c>・<c>false</c> は無効。それ以外(不正な値を含む)は有効とみなす。
+            /// </summary>
+            private static bool ReadToggle(DocumentFormat.OpenXml.BooleanValue? value) =>
+                value?.InnerText is not ("0" or "false");
+
             public bool Differs(FontStyle font) =>
                 HasOtherFormatting
                 || (Name is not null && !string.Equals(Name, font.Name, StringComparison.OrdinalIgnoreCase))
                 || (Size is { } size && Math.Abs(size - font.SizePt) > 0.01)
-                || (Bold is { } bold && bold != font.Bold)
-                || (Italic is { } italic && italic != font.Italic)
-                || (Underline is { } underline && underline != (font.Underline != UnderlineStyle.None))
-                || (Strike is { } strike && strike != font.Strike)
+                || Bold != font.Bold
+                || Italic != font.Italic
+                || Underline != (font.Underline != UnderlineStyle.None)
+                || Strike != font.Strike
                 || (Color is { } color && !color.Equals(font.Color));
         }
     }
