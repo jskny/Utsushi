@@ -36,7 +36,14 @@ namespace Utsushi.Parsing.Model
         PointPt AnchorOffset,
         AnchorExtent Extent,
         bool FlipHorizontal = false,
-        bool FlipVertical = false) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
+        bool FlipVertical = false) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent)
+    {
+        /// <summary>
+        /// 塗りつぶしを近似・省略した場合の理由(スタイルの塗りつぶしの書式・模様の塗りつぶしなど)。近似していなければ null
+        /// (書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(g))。
+        /// </summary>
+        public string? FillApproximation { get; init; }
+    }
 
     /// <summary>
     /// 対応済みのプリセットジオメトリ(要件10.1補足)。自社帳票での実用上の必要性を
@@ -179,6 +186,12 @@ namespace Utsushi.Parsing.Model
 
         /// <summary>文字の回転(<c>a:bodyPr/@rot</c>。度)。</summary>
         public double RotationDegrees { get; init; }
+
+        /// <summary>
+        /// 文字のフォントが、図形のスタイル(<c>fontRef</c>)やテーマのフォント(<c>+mn-lt</c> など)を指していて、その書体を使わない場合の
+        /// 指定。使っていなければ null(書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(g))。
+        /// </summary>
+        public string? StyleFont { get; init; }
     }
 
     /// <summary>図形内テキストの余白(ポイント、印刷倍率の適用前)。</summary>
@@ -295,7 +308,11 @@ namespace Utsushi.Parsing.Model
         ShapeOutline? Outline,
         ShapeTextBody? Text,
         bool FlipHorizontal = false,
-        bool FlipVertical = false) : GroupChildModel(LocalRect);
+        bool FlipVertical = false) : GroupChildModel(LocalRect)
+    {
+        /// <summary><see cref="ShapeModel.FillApproximation"/> と同じ。</summary>
+        public string? FillApproximation { get; init; }
+    }
 
     /// <summary>グループ内の画像。<see cref="Id"/>は接続線の接続先解決(要件10.11)のために保持する。</summary>
     /// <param name="RotationDegrees"><c>a:xfrm/@rot</c> から変換した回転角(度、時計回り。要件9.7)。</param>

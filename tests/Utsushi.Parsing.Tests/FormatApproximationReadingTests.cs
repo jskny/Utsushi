@@ -134,6 +134,66 @@ namespace Utsushi.Parsing.Tests
             Assert.Equal(NumberFormatting.Format(value, format), result.Text);
         }
 
+        private ShapeModel ReadSingleShape(string anchorXml, string? themeXml = null)
+        {
+            var path = DrawingStyleWorkbookFixtures.CreateWorkbook(anchorXml, themeXml);
+            try
+            {
+                return Assert.Single(_reader.ReadFile(path).Sheets[0].DrawingObjects.OfType<ShapeModel>());
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        private static string Style(string fillIndex) =>
+            DrawingStyleWorkbookFixtures.ExcelDefaultShapeStyle.Replace("<a:fillRef idx=\"1\">", "<a:fillRef idx=\"" + fillIndex + "\">");
+
+        [Fact]
+        public void 既定のテーマで単色のスタイルの塗りつぶしは近似としない()
+        {
+            Assert.Null(ReadSingleShape(DrawingStyleWorkbookFixtures.ShapeAnchor(style: Style("1"))).FillApproximation);
+        }
+
+        [Fact]
+        public void 既定のテーマでグラデーションのスタイルの塗りつぶしは近似として読む()
+        {
+            Assert.Equal("fillRef idx=2", ReadSingleShape(DrawingStyleWorkbookFixtures.ShapeAnchor(style: Style("2"))).FillApproximation);
+        }
+
+        [Fact]
+        public void テーマの塗りつぶしの書式が単色なら近似としない()
+        {
+            var shape = ReadSingleShape(DrawingStyleWorkbookFixtures.ShapeAnchor(style: Style("2")), DrawingStyleWorkbookFixtures.OfficeThemeXml());
+
+            Assert.Null(shape.FillApproximation);
+        }
+
+        [Theory]
+        [InlineData("<a:pattFill prst=\"pct5\"><a:fgClr><a:srgbClr val=\"000000\"/></a:fgClr><a:bgClr><a:srgbClr val=\"FFFFFF\"/></a:bgClr></a:pattFill>", "pattFill")]
+        [InlineData("<a:grpFill/>", "grpFill")]
+        [InlineData("<a:gradFill><a:gsLst><a:gs pos=\"0\"><a:srgbClr val=\"FFFFFF\"/></a:gs><a:gs pos=\"100000\"><a:srgbClr val=\"000000\"/></a:gs></a:gsLst><a:path path=\"rect\"/></a:gradFill>", "path=")]
+        public void 直接指定の塗りつぶしを近似または省略した理由を読む(string fill, string expectedPrefix)
+        {
+            var shape = ReadSingleShape(DrawingStyleWorkbookFixtures.ShapeAnchor(spPrExtra: fill));
+
+            Assert.StartsWith(expectedPrefix, shape.FillApproximation);
+        }
+
+        [Theory]
+        [InlineData(null, "fontRef=Minor")]
+        [InlineData("<a:latin typeface=\"+mn-lt\"/>", "+mn-lt")]
+        [InlineData("<a:latin typeface=\"Arial\"/>", null)]
+        public void スタイルやテーマの書体を指す図形の文字を読む(string? runFont, string? expected)
+        {
+            var shape = ReadSingleShape(DrawingStyleWorkbookFixtures.ShapeAnchor(
+                style: DrawingStyleWorkbookFixtures.ExcelDefaultShapeStyle,
+                textBody: DrawingStyleWorkbookFixtures.TextBody("文字", runFont)));
+
+            Assert.Equal(expected, shape.Text!.StyleFont);
+        }
+
         [Fact]
         public void セルの文字の回転を読み取る()
         {

@@ -102,7 +102,7 @@
   - _Requirements: 7.2, 7.3_
 - [x] 5.9 セルの塗りつぶし: 網かけ・グラデーションの印を `StyleTable` で読み、`EmitCell` で記録する(セルが無い位置を行・列の書式で描く場合を含む)
   - _Requirements: 7.2, 7.3, 7.4_
-- [ ] 5.10 図形の塗りつぶし・書体: テーマの `fillStyleLst` を読み、`ShapeFill` の印(design.md 3.5 の4つの場合)と `fontRef` の印を載せて記録する。既定のテーマの `fillRef idx=1` には印を付けない
+- [x] 5.10 図形の塗りつぶし・書体: テーマの `fillStyleLst` を読み、`ShapeFill` の印(design.md 3.5 の4つの場合)と `fontRef` の印を載せて記録する。既定のテーマの `fillRef idx=1` には印を付けない
   - _Requirements: 7.2, 7.3_
 - [ ] 5.11 画像: 反転(`flipH`・`flipV`)を `ImageModel`・`GroupChildImage` に読み、`ImageFlip`・`ImageRotation` を記録する(反転したグループの中の画像を含む)
   - _Requirements: 7.2, 7.3_

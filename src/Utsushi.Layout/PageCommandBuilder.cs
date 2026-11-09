@@ -306,7 +306,8 @@ namespace Utsushi.Layout
             switch (drawingObject)
             {
                 case ShapeModel shape:
-                    RecordShapeTextApproximations(shape.Text, location, DrawingIdentity(shape.Id, ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                    RecordShapeApproximations(
+                        shape.Text, shape.FillApproximation, location, DrawingIdentity(shape.Id, ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture)));
                     break;
                 case GroupShapeModel group:
                     RecordGroupChildApproximations(group.Children, location, ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -322,7 +323,7 @@ namespace Utsushi.Layout
                 switch (children[i])
                 {
                     case GroupChildShape shape:
-                        RecordShapeTextApproximations(shape.Text, location, DrawingIdentity(shape.Id, childPath));
+                        RecordShapeApproximations(shape.Text, shape.FillApproximation, location, DrawingIdentity(shape.Id, childPath));
                         break;
                     case GroupChildGroup nested:
                         RecordGroupChildApproximations(nested.Children, location, childPath);
@@ -335,8 +336,30 @@ namespace Utsushi.Layout
         private static string DrawingIdentity(uint id, string ordinalPath) =>
             id != 0 ? "id=" + id.ToString(System.Globalization.CultureInfo.InvariantCulture) : "#" + ordinalPath;
 
-        private void RecordShapeTextApproximations(ShapeTextBody? text, CellRange location, string identity)
+        private void RecordShapeApproximations(ShapeTextBody? text, string? fillApproximation, CellRange location, string identity)
         {
+            if (fillApproximation is not null)
+            {
+                _approximations!.Add(
+                    FormatApproximationKind.ShapeFill,
+                    _sheet.Name,
+                    location,
+                    identity,
+                    fillApproximation,
+                    "図形の塗りつぶし(グラデーション・模様・画像など)は、単色で描くか塗りつぶしません。");
+            }
+
+            if (text?.StyleFont is { } styleFont)
+            {
+                _approximations!.Add(
+                    FormatApproximationKind.ShapeFont,
+                    _sheet.Name,
+                    location,
+                    identity,
+                    styleFont,
+                    "図形の文字のスタイル・テーマが指す書体は使わず、既定の書体で描きます。");
+            }
+
             if (text is null || (text.Vertical is null && text.RotationDegrees == 0))
             {
                 return;

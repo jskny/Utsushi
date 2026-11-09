@@ -1558,7 +1558,7 @@ namespace Utsushi.Parsing.OpenXml
 
             var adjustmentValues = ReadShapeAdjustmentValues(preset, presetGeometry);
             var rotationDegrees = (shapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
-            var fill = ReadShapeFill(shapeProperties, shape.ShapeStyle, colors);
+            var fill = ReadShapeFill(shapeProperties, shape.ShapeStyle, colors, out var fillApproximation);
             var outline = ReadShapeOutline(shapeProperties, shape.ShapeStyle, colors);
             var text = ReadShapeText(shape.TextBody, shape.ShapeStyle, colors, out var textTooLong);
 
@@ -1574,7 +1574,10 @@ namespace Utsushi.Parsing.OpenXml
             return new ShapeModel(
                 id, preset, adjustmentValues, rotationDegrees, fill, outline, text, anchorCell, anchorOffset, extent,
                 shapeProperties?.Transform2D?.HorizontalFlip?.Value ?? false,
-                shapeProperties?.Transform2D?.VerticalFlip?.Value ?? false);
+                shapeProperties?.Transform2D?.VerticalFlip?.Value ?? false)
+            {
+                FillApproximation = fillApproximation,
+            };
         }
 
         /// <summary>1つの<c>xdr:cxnSp</c>アンカーを<see cref="ConnectorModel"/>として読み取る(要件10.9)。</summary>
@@ -1780,7 +1783,7 @@ namespace Utsushi.Parsing.OpenXml
 
             var adjustmentValues = ReadShapeAdjustmentValues(preset, presetGeometry);
             var rotationDegrees = (shapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
-            var fill = ReadShapeFill(shapeProperties, shape.ShapeStyle, colors);
+            var fill = ReadShapeFill(shapeProperties, shape.ShapeStyle, colors, out var fillApproximation);
             var outline = ReadShapeOutline(shapeProperties, shape.ShapeStyle, colors);
             var text = ReadShapeText(shape.TextBody, shape.ShapeStyle, colors, out var textTooLong);
 
@@ -1796,7 +1799,10 @@ namespace Utsushi.Parsing.OpenXml
             return new GroupChildShape(
                 id, localRect.Value, preset, adjustmentValues, rotationDegrees, fill, outline, text,
                 shapeProperties?.Transform2D?.HorizontalFlip?.Value ?? false,
-                shapeProperties?.Transform2D?.VerticalFlip?.Value ?? false);
+                shapeProperties?.Transform2D?.VerticalFlip?.Value ?? false)
+            {
+                FillApproximation = fillApproximation,
+            };
         }
 
         /// <summary>グループ内の<c>xdr:pic</c>子要素を<see cref="GroupChildImage"/>として読み取る(要件10.10)。</summary>
@@ -2031,9 +2037,13 @@ namespace Utsushi.Parsing.OpenXml
         /// 図形の塗りつぶし(<c>a:noFill</c>/<c>a:solidFill</c>/<c>a:gradFill</c>)を読み取る。<c>spPr</c>に塗りつぶしの
         /// 指定が無ければ、図形のスタイルの<c>fillRef</c>から求める(要件10.15, 10.16)。
         /// </summary>
+        /// <param name="approximation">
+        /// 塗りつぶしを近似・省略した理由(excel2pdf-consolidation 要件7.2(g))。正確に再現できる場合は null。
+        /// </param>
         private static ShapeFill? ReadShapeFill(
-            Xdr.ShapeProperties? shapeProperties, Xdr.ShapeStyle? style, DrawingColorResolver colors)
+            Xdr.ShapeProperties? shapeProperties, Xdr.ShapeStyle? style, DrawingColorResolver colors, out string? approximation)
         {
+            approximation = null;
             if (shapeProperties?.GetFirstChild<Dr.NoFill>() is not null)
             {
                 return null;
@@ -2044,11 +2054,17 @@ namespace Utsushi.Parsing.OpenXml
                 var stops = ReadGradientStops(gradientFill.GradientStopList, colors);
                 if (stops is null)
                 {
+                    approximation = "gradient stops";
                     return null;
                 }
 
                 if (gradientFill.GetFirstChild<Dr.PathGradientFill>() is { } pathFill)
                 {
+                    if (pathFill.Path?.Value is { } pathKind && pathKind != Dr.PathShadeValues.Circle)
+                    {
+                        approximation = "path=" + pathKind;
+                    }
+
                     // a:path[@path='circle'/'rect'/'shape']のいずれも放射状として近似する
                     // (要件10.6補足)。中心はa:fillToRectの中心、無ければ矩形中心(0.5, 0.5)。
                     var toRect = pathFill.FillToRectangle;
@@ -2064,14 +2080,31 @@ namespace Utsushi.Parsing.OpenXml
 
             if (shapeProperties?.GetFirstChild<Dr.SolidFill>() is { } solidFill)
             {
-                return colors.TryResolve(solidFill, placeholder: null, out var color) ? new SolidShapeFill(color) : null;
+                if (colors.TryResolve(solidFill, placeholder: null, out var color))
+                {
+                    return new SolidShapeFill(color);
+                }
+
+                approximation = "color";
+                return null;
             }
 
             // 画像・模様・グループの塗りつぶしは対応していない。スタイルの塗りつぶしで代用しない。
-            if (shapeProperties?.GetFirstChild<Dr.BlipFill>() is not null
-                || shapeProperties?.GetFirstChild<Dr.PatternFill>() is not null
-                || shapeProperties?.GetFirstChild<Dr.GroupFill>() is not null)
+            if (shapeProperties?.GetFirstChild<Dr.BlipFill>() is not null)
             {
+                approximation = "blipFill";
+                return null;
+            }
+
+            if (shapeProperties?.GetFirstChild<Dr.PatternFill>() is not null)
+            {
+                approximation = "pattFill";
+                return null;
+            }
+
+            if (shapeProperties?.GetFirstChild<Dr.GroupFill>() is not null)
+            {
+                approximation = "grpFill";
                 return null;
             }
 
@@ -2081,6 +2114,12 @@ namespace Utsushi.Parsing.OpenXml
                 && fillRef.Index?.Value is { } fillIndex && fillIndex > 0
                 && colors.TryResolve(fillRef, placeholder: null, out var styleColor))
             {
+                // テーマの塗りつぶしの書式が単色でない(グラデーションなど)場合は、単色で近似したことを知らせる。
+                if (!colors.IsSolidFillStyle(fillIndex))
+                {
+                    approximation = "fillRef idx=" + fillIndex.ToString(CultureInfo.InvariantCulture);
+                }
+
                 return new SolidShapeFill(styleColor);
             }
 
@@ -2256,6 +2295,7 @@ namespace Utsushi.Parsing.OpenXml
             var paragraphs = new List<ShapeTextParagraph>();
             var totalLength = 0;
             var hasText = false;
+            string? styleFont = null;
             foreach (var paragraph in textBody.Elements<Dr.Paragraph>())
             {
                 var runs = new List<ShapeTextRun>();
@@ -2297,6 +2337,20 @@ namespace Utsushi.Parsing.OpenXml
 
                     hasText = true;
                     runs.Add(new ShapeTextRun(text!, ReadShapeRunFont(runProperties, defaultColor, colors)));
+
+                    // 書体の指定が無くスタイルの fontRef を使う文字、テーマのフォント(+mn-lt など)を指す文字は、その書体を使わない。
+                    var latin = runProperties?.GetFirstChild<Dr.LatinFont>()?.Typeface?.Value;
+                    if (styleFont is null && text != "\n")
+                    {
+                        if (latin is not null && latin.StartsWith("+", StringComparison.Ordinal))
+                        {
+                            styleFont = latin;
+                        }
+                        else if (latin is null && style?.FontReference is { } reference)
+                        {
+                            styleFont = "fontRef=" + (reference.Index?.Value.ToString() ?? "-");
+                        }
+                    }
                 }
 
                 // 段落の区切り(2つ目以降の段落の前)も1文字として数える(Excel でも段落の区切りは改行1文字に当たる)。
@@ -2327,6 +2381,7 @@ namespace Utsushi.Parsing.OpenXml
             {
                 Vertical = vertical is null || vertical.Value == Dr.TextVerticalValues.Horizontal ? null : vertical.Value.ToString(),
                 RotationDegrees = double.IsFinite(rotation) ? rotation : 0,
+                StyleFont = styleFont,
             };
         }
 

@@ -269,3 +269,6 @@ group  center=(272.9,149.5) rotation=-8 children=2
 ## fit issues count=2
 fit Clipped cell=F3 page=1 substituted=yes key=InvoiceNo text="INV-2026-0417"
 fit NumberTooWide cell=F5 page=1 substituted=no key=- text="2026年4月30日"
+
+## format approximations count=1
+approx ShapeFont at=A25:A25 detail=fontRef=Minor

@@ -52,11 +52,29 @@ namespace Utsushi.Parsing.OpenXml
         private readonly IReadOnlyDictionary<string, ArgbColor> _scheme;
         private readonly IReadOnlyList<double> _lineStyleWidthsPt;
 
-        private DrawingColorResolver(IReadOnlyDictionary<string, ArgbColor> scheme, IReadOnlyList<double> lineStyleWidthsPt)
+        private DrawingColorResolver(
+            IReadOnlyDictionary<string, ArgbColor> scheme,
+            IReadOnlyList<double> lineStyleWidthsPt,
+            IReadOnlyList<bool>? fillStyleIsSolid = null,
+            IReadOnlyList<bool>? backgroundFillStyleIsSolid = null)
         {
             _scheme = scheme;
             _lineStyleWidthsPt = lineStyleWidthsPt;
+            _fillStyleIsSolid = fillStyleIsSolid ?? DefaultFillStyleIsSolid;
+            _backgroundFillStyleIsSolid = backgroundFillStyleIsSolid ?? DefaultBackgroundFillStyleIsSolid;
         }
+
+        /// <summary>
+        /// 既定のテーマ(Office テーマ)の塗りつぶしの書式(<c>a:fillStyleLst</c>)が単色かどうか。1番目は単色、2・3番目はグラデーション。
+        /// テーマの無いブックで、図形のスタイルの塗りつぶしを近似したかどうかの判定に使う(excel2pdf-consolidation design.md 9)。
+        /// </summary>
+        private static readonly IReadOnlyList<bool> DefaultFillStyleIsSolid = new[] { true, false, false };
+
+        /// <summary>既定のテーマの背景の塗りつぶしの書式(<c>a:bgFillStyleLst</c>)が単色かどうか。</summary>
+        private static readonly IReadOnlyList<bool> DefaultBackgroundFillStyleIsSolid = new[] { true, false, false };
+
+        private readonly IReadOnlyList<bool> _fillStyleIsSolid;
+        private readonly IReadOnlyList<bool> _backgroundFillStyleIsSolid;
 
         /// <summary>テーマの無いブック用(既定の配色)。</summary>
         public static DrawingColorResolver Default { get; } = new(DefaultScheme, DefaultLineStyleWidthsPt);
@@ -97,7 +115,26 @@ namespace Utsushi.Parsing.OpenXml
                 }
             }
 
-            return new DrawingColorResolver(scheme, widths);
+            var formatScheme = theme.ThemeElements!.FormatScheme;
+            return new DrawingColorResolver(
+                scheme,
+                widths,
+                ReadFillStyleKinds(formatScheme?.FillStyleList),
+                ReadFillStyleKinds(formatScheme?.BackgroundFillStyleList));
+        }
+
+        /// <summary>塗りつぶしの書式の一覧の各項目が単色(<c>a:solidFill</c>)かどうかを読む。一覧が無ければ null(既定を使う)。</summary>
+        private static IReadOnlyList<bool>? ReadFillStyleKinds(OpenXmlCompositeElement? list) =>
+            list?.ChildElements.Take(MaxLineStyles).Select(e => e is Dr.SolidFill).ToList();
+
+        /// <summary>
+        /// 図形のスタイルの <c>fillRef/@idx</c> が指す塗りつぶしの書式が単色かどうか(1〜999 は <c>fillStyleLst</c>、1001 以上は
+        /// <c>bgFillStyleLst</c>。1始まり)。該当が無ければ true(近似とはみなさない)。
+        /// </summary>
+        public bool IsSolidFillStyle(uint index)
+        {
+            var (list, position) = index >= 1001 ? (_backgroundFillStyleIsSolid, index - 1000) : (_fillStyleIsSolid, index);
+            return position < 1 || position > list.Count || list[(int)position - 1];
         }
 
         /// <summary>
