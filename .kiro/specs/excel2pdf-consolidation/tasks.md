@@ -15,7 +15,9 @@
   - [ ] 1.1 `.kiro/specs/excel-report-pdf-conversion/requirements.md` を、requirements.md「中核仕様への影響」のとおり改める。
         帳票定義を削除するまで(タスク8)残る機能の要件(1.4, 2.1〜2.6 など)には、「廃止予定(excel2pdf-consolidation のタスク8で削除)」と注記する
     - _Requirements: 1.3, 1.5, 2.1, 2.7, 7.2_
-  - [ ] 1.2 同 design.md・tasks.md を改める(tasks.md は完了済みのタスクを残し、本仕様で廃止・変更する旨を注記する)
+  - [ ] 1.2 同 design.md・tasks.md を改める(tasks.md は完了済みのタスクを残し、本仕様で廃止・変更する旨を注記する)。
+        design.md の「未決事項」の近似する書式には本仕様の要件7で検知する旨を加え、「帳票定義ありの経路では登録済みのシート名に合うファイルしか通らない」という
+        入力の前提の記述を、任意の .xlsx を受け付ける唯一の経路になることに合わせて改める
   - [ ] 1.3 spec-compliance-reviewer・doc-reviewer
 
 - [ ] 2. Parsing: 未対応要素の収集(2.1〜2.4は1つの単位として、ビルドとテストを緑にしてから完了とする)
@@ -23,9 +25,10 @@
     - _Requirements: 2.2, 2.4_
   - [ ] 2.2 `UnsupportedElementCollector`(記録の単位・件数の上限・`Message`/`Detail` の正規化。上限を渡せる internal のオーバーロード)を追加し、`WorkbookModel` に `UnsupportedElements`・`UnsupportedElementsTruncated` を加える
     - _Requirements: 2.4, 2.5_
-  - [ ] 2.3 `OpenXmlWorkbookReader` の扱いの指定を見ている全箇所(23+2)を収集に置き換え、描画オブジェクトの検知をアンカーごとにする。黙って読み飛ばす経路を記録する。
+  - [ ] 2.3 `OpenXmlWorkbookReader` の扱いの指定を見ている全箇所(23+2)を収集に置き換え、描画オブジェクトの検知をアンカーごとにする。ヘッダー/フッターの画像(`legacyDrawingHF`)を検知する。
+        黙って読み飛ばす経路と、グループ全体を出力しない場合を記録する。
         グループの非対応の子要素の種類を直す。`WorkbookReadOptions.UnsupportedElementBehavior` を削除する。
-        帳票定義ありの経路では、`ReportPdfConverter.ReadWorkbook`(`Convert*`・`ComputeLayout*`・`CheckFit*` が共通に通る)で、`unsupportedElements: "error"` のときに一覧から例外を作る(design.md 2.4)。ヘッダー/フッターの画像(`legacyDrawingHF`)を検知する
+        帳票定義ありの経路では、`ReportPdfConverter.ReadWorkbook`(`Convert*`・`ComputeLayout*`・`CheckFit*` が共通に通る)で、`unsupportedElements: "error"` のときに一覧から例外を作る(design.md 2.4)
     - _Requirements: 2.2, 2.3, 2.6, 2.7_
   - [ ] 2.4 テスト(design.md 6.3 の Parsing の観点)。既存の Parsing のテストの `Error`・`ElementKind` の検証を、一覧の検証に書き換える
     - _Requirements: 2.4, 2.5, 2.6, 2.7_
@@ -45,21 +48,24 @@
   - [ ] 4.3 `Excel2Pdf.Check()` と `Excel2PdfDiagnostics`・`FontSubstitution` を追加する(レイアウトの結果のフォントを集めて問い合わせる)
     - _Requirements: 3.1, 3.2, 4.1, 4.2, 4.3, 4.4_
   - [ ] 4.4 テスト(design.md 6.3 のファサードの観点。エンジンの共有・破棄を含む)。`edge-order-form` で既定のエラー・`Check()`・`Ignore` を確かめる
-    - _Requirements: 1.2, 2.1, 2.2, 2.3, 3.2, 4.2, 6.3_
+    - _Requirements: 1.2, 2.1, 2.2, 2.3, 3.2, 4.2, 4.3, 4.4, 6.3_
   - [ ] 4.5 security-reviewer(収集の上限・`Message`/`Detail` に文字列を含めないことと正規化・`src/Utsushi.Parsing/OpenXml/` 全体の、黙って読み飛ばす経路と未対応ループの横断確認)、code-reviewer
     - _Requirements: 2.4, 2.5, 2.6, 2.7_
 
 - [ ] 5. 書式の近似の検知(design.md 3.5)
   - [ ] 5.1 `Utsushi.Core` に `FormatApproximationKind`・`FormatApproximation` を追加する
     - _Requirements: 7.1_
-  - [ ] 5.2 Parsing: `textRotation`・`conditionalFormatting` の範囲・ランの書式の違い・網かけ/グラデーションの印・表示形式の解釈の失敗の印・図形のスタイルの塗りつぶしの近似の印をモデルに読む(件数・長さの上限を含む)
+  - [ ] 5.2 Parsing: design.md 3.5「検知の分担」の表のとおり読む(`textRotation`・図形の文字の向き・`conditionalFormatting`(拡張を含む)・ランの書式・網かけ/グラデーションの印・表示形式の印・
+        テーマの `fillStyleLst` と図形の塗りつぶしの印・`fontRef`・画像の反転)。件数・長さの上限を含む。`SetValue` 用の `NumberFormatting` の internal のオーバーロードを加える
     - _Requirements: 7.2_
-  - [ ] 5.3 Layout: `FormatApproximationCollector` を追加し、印刷されるセル・要素を組み立てるときに記録する(`checkFit` のときだけ)。`PagedLayout` に載せ、ゴールデンのスナップショットに近似の行を出す
+  - [ ] 5.3 Layout: `FormatApproximationCollector`(種類ごとの上限、要素の識別を含む重複の判定)を追加し、印刷されるセル・要素を組み立てるときに記録する(`checkFit` のときだけ)。
+        上書きしたセルのリッチテキストの印を消す。`PagedLayout` に載せ、ゴールデンのスナップショットに近似の行を出す
     - _Requirements: 7.2, 7.3, 7.4, 7.5_
   - [ ] 5.4 ファサード: `Excel2PdfDiagnostics` に `FormatApproximations`・`FormatApproximationsTruncated`・`HasFormatApproximations` を加える
     - _Requirements: 4.1, 4.3, 7.1, 7.5_
-  - [ ] 5.5 テスト(design.md 6.3 の書式の近似の観点)。ゴールデンの差分が近似の行の追加だけで、描画命令が変わらないことを確かめて更新する
-    - _Requirements: 7.2, 7.3, 7.4, 7.5_
+  - [ ] 5.5 テスト(design.md 6.3 の書式の近似の観点)。近似の検知はエッジケースのサンプル(`EdgeCaseSampleTests`)で種類ごとに確かめる。
+        ゴールデンの差分が近似の行の追加だけで、描画命令が変わらないことを確かめて更新する
+    - _Requirements: 4.3, 7.2, 7.3, 7.4, 7.5_
   - [ ] 5.6 layout-fidelity-reviewer・security-reviewer(新しい読み取りの上限)・code-reviewer
     - _Requirements: 7.2, 7.3_
 
@@ -99,7 +105,8 @@
     - _Requirements: 1.3, 5.8_
   - [ ] 9.2 `docs/ライブラリの使い方.md`・`docs/テンプレート作成ガイド.md`・`docs/エッジケース検証レポート.md`・`samples/edge-cases/README.md` を改め、`docs/帳票定義スキーマ.md` を削除する。`docs/実装設計失敗事例集.md` の廃止した機能の節に注記を加える。
         `docs/ライブラリの使い方.md` には、既定がエラーに変わったこと・`ReportCode` の改名と、移行前に `check` で確かめる手順を書く。
-        `docs/テンプレート作成ガイド.md` の「再現しない」の表に、診断で検知できるもの(未対応要素・書式の近似)を示す
+        `docs/テンプレート作成ガイド.md` の「再現しない」の表に、診断で検知できるもの(未対応要素・書式の近似)を示し、
+        表に無い近似(分数・指数の表示形式、右揃えのインデント、図形の塗りつぶし・文字の向き・`fontRef` の書体、画像の反転)の行を加える
     - _Requirements: 1.6, 2.1, 4.1, 5.1, 7.2_
   - [ ] 9.3 `.claude/agents/` の帳票定義への言及を改める
     - _Requirements: 1.5_

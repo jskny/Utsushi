@@ -165,6 +165,9 @@ public sealed record UnsupportedElement(
 - `Message`・`Detail` には、セル・図形の文字列を入れない(要件2.4)。ファイルから読んだ値(content-type・プリセット名など)は任意の文字列になりうる。
   そこで、制御文字を取り除き、64文字で切り詰めてから入れる(処理ログに流れる値の大きさを抑えるため)。
 - 現在 1623 行で、グループ内の非対応の子要素の種類を `"UnsupportedShapePreset"` としているのは誤りである。これを `UnsupportedGroupChild` に直す。
+- グループは、子要素のどれか1つが読めないとグループ全体を出力しない(1616〜1630行)。原因は、非対応の種類の子要素・非対応プリセット・上限の超過・壊れた子要素である。
+  そこで、グループ全体を出力しない場合は、グループのアンカーで `UnsupportedGroupChild` を1件だけ記録し、`Detail` に原因(子要素の種類・上限の種類など)を入れる。
+  子要素の側では重ねて記録しない。グループ全体が消えたことが一覧から分かるようにするためである。
 
 ### 2.2 Parsing の変更
 
@@ -176,7 +179,7 @@ public sealed record UnsupportedElement(
   後者は、検知を常に行う。
 - **描画オブジェクトの検知はアンカーごとに行う**。現在のシート単位の真偽の判定(`ChartParts.Any()`・`HasUnsupportedDrawingObject`)では、
   アンカーも件数も得られないためである。描画パートのアンカー(`twoCellAnchor`・`oneCellAnchor`・`absoluteAnchor`)を1つずつ見て、次のように1件ずつ記録する。
-  - `absoluteAnchor` → `UnsupportedAnchor`(中身が画像・図形でも)
+  - `absoluteAnchor` → `UnsupportedAnchor`(中身が画像・図形でも)。黙って読み飛ばす経路(下記)として重ねて記録しない
   - グラフを参照する図表枠(`graphicFrame` の `c:chart`) → `Chart`
   - それ以外の図表枠と、4種(画像・図形・接続線・グループ)以外の要素 → `UnsupportedDrawingObject`
 
@@ -239,6 +242,7 @@ public sealed class UnsupportedWorkbookElementException : UtsushiException
 
 - 例外の中身が、最初の1件から全件になる。
 - 壊れた描画オブジェクト(`MalformedDrawingObject`)でも止まるようになる。
+- ヘッダー/フッターの画像(`HeaderFooterImage`)でも止まるようになる。
 
 中核仕様は tasks.md のタスク1で先に改訂しておく。
 
@@ -265,33 +269,37 @@ public sealed class UnsupportedWorkbookElementException : UtsushiException
 
 ## 3.5 書式の近似(要件7)
 
+(節の番号は、3(フォントの代替)と同じく診断に載せる情報であることを示すため「3.5」とする。)
+
 ### モデル(`Utsushi.Core`)
 
 ```csharp
 public enum FormatApproximationKind
 {
-    TextRotation,              // 文字の方向・回転・縦書き                              要件7.2(a)
-    HorizontalAlignment,       // 均等割り付け・両端揃え・繰り返し・選択範囲内で中央      (b)
-    VerticalAlignment,         // 縦位置の均等割り付け・両端揃え                         (b)
-    ConditionalFormatting,     // 条件付き書式(範囲ごと)                               (c)
-    RichText,                  // 一部の文字だけ書式が異なるセル                         (d)
-    NumberFormat,              // 解釈できず標準で表示した表示形式                       (e)
-    CellFillPattern,           // セルの網かけ                                           (f)
-    CellFillGradient,          // セルのグラデーション                                   (f)
-    ShapeFillStyle,            // 図形のスタイルが指すグラデーション・テクスチャ・模様     (g)
-    ImageFlip,                 // 反転した画像                                           (h)
-    ImageRotation,             // 45〜135度回転した画像                                  (h)
-    MultiLineHeaderFooter,     // 複数行のヘッダー/フッター                              (i)
-    MergedCellAcrossPageBreak, // 改ページをまたぐ結合セル                               (j)
-    DrawingAcrossPageBreak,    // 改ページをまたぐ画像・図形                             (j)
-    MergedCellHiddenEdge,      // 最後の行・列が非表示の結合セル                         (j)
+    TextRotation,              // セル・図形の文字の方向・回転・縦書き                    要件7.2(a)
+    HorizontalAlignment,       // 均等割り付け・両端揃え・繰り返し・選択範囲内で中央        (b)
+    VerticalAlignment,         // 縦位置の均等割り付け・両端揃え                           (b)
+    Indent,                    // 右揃え・中央揃えのセルのインデント                       (b)
+    ConditionalFormatting,     // 条件付き書式(範囲ごと)                                 (c)
+    RichText,                  // 一部の文字の書式がセルの書式と異なるセル                 (d)
+    NumberFormat,              // 解釈できない表示形式・表示形式で表せない値               (e)
+    CellFillPattern,           // セルの網かけ                                             (f)
+    CellFillGradient,          // セルのグラデーション                                     (f)
+    ShapeFill,                 // 図形の塗りつぶしの近似・欠落                             (g)
+    ShapeFont,                 // 図形の文字のスタイル(fontRef)が指す書体                  (g)
+    ImageFlip,                 // 反転した画像                                             (h)
+    ImageRotation,             // 45〜135度・225〜315度回転した画像                        (h)
+    MultiLineHeaderFooter,     // 複数行のヘッダー/フッター                                (i)
+    MergedCellAcrossPageBreak, // 改ページをまたぐ結合セル                                 (j)
+    DrawingAcrossPageBreak,    // 改ページをまたぐ画像・図形                               (j)
+    MergedCellHiddenEdge,      // 最後の行・列が非表示の結合セル                           (j)
 }
 
 public sealed record FormatApproximation(
     FormatApproximationKind Kind,
-    string? SheetName,
+    string SheetName,
     CellRange? Location,       // セル(1×1の範囲)・セル範囲・要素のアンカー。ヘッダー/フッターは null
-    string? Detail,            // 書式の値(例: "textRotation=255"、"horizontal=distributed"、表示形式のコード)
+    string? Detail,            // 書式の値(例: "textRotation=255"、"horizontal=distributed"、表示形式のコード、"header/left")
     string Message);
 ```
 
@@ -304,29 +312,37 @@ public sealed record FormatApproximation(
 
 | 種類 | Parsing で読むもの(現状) | Layout で記録する時点 |
 |---|---|---|
-| TextRotation | `alignment/@textRotation` を `CellStyle.TextRotation` に読む(現在は読んでいない) | セルの文字を組み立てるとき、0以外なら |
-| Horizontal/VerticalAlignment | `CellStyle` の配置(読み済み。`Justify`・`Distributed`・`CenterContinuous`・`Fill`) | セルの文字を組み立てるとき、近似する配置なら |
-| ConditionalFormatting | `conditionalFormatting/@sqref` の範囲を `SheetModel.ConditionalFormattingRanges` に読む(現在は読んでいない。件数に上限を設ける) | 印刷範囲と重なる範囲を、重なる部分の範囲で記録する |
-| RichText | 共有文字列・インライン文字列で、書式(`rPr`)の異なるランが2つ以上あるかを `CellModel` の印に読む(現在は文字列を連結するだけ) | セルの文字を組み立てるとき |
-| NumberFormat | 表示文字列を作るときに、表示形式を解釈できず標準にした印を `CellModel` に載せる(`NumberFormatter`。`SetValue` の書き込み(`NumberFormatting.Format`)も同じ) | セルの文字を組み立てるとき |
-| CellFillPattern・CellFillGradient | `StyleTable` で、単色以外の網かけ・グラデーションの塗りつぶしを `CellStyle` の印に読む(現在は近似した色・塗りつぶしなしに置き換えるだけ) | 塗りつぶしを描くセル(セルが無い位置を行・列の書式で塗る場合を含む。範囲ごとにまとめる) |
-| ShapeFillStyle | 図形のスタイルの塗りつぶしを単色で近似した印を `ShapeModel` に載せる(2035行付近) | 図形を組み立てるとき |
-| ImageFlip・ImageRotation | 画像の反転・回転(読み済み) | 画像を組み立てるとき |
-| MultiLineHeaderFooter | ヘッダー/フッターの文字列(読み済み) | `HeaderFooterParser` が改行を取り除くとき |
+| TextRotation | セルは `alignment/@textRotation` を `CellStyle.TextRotation` に読む。図形の文字は `bodyPr/@vert`・`@rot` を読む(いずれも現在は読んでいない) | セルの文字・図形の文字を組み立てるとき、横書き以外なら |
+| Horizontal/VerticalAlignment | `CellStyle` の配置(読み済み。`StyleTable.MapHorizontal`・`MapVertical`。`Fill`・`Justify`・`CenterContinuous`・`Distributed`) | セルの文字を組み立てるとき、近似する配置なら。両端揃え・均等割り付けは、Excelでは折り返すがUtsushiは折り返さない旨を説明の文に入れる |
+| Indent | `CellStyle` のインデント(読み済み) | 右揃え・中央揃えのセルでインデントが0でないとき(Utsushi は常に左に足す) |
+| ConditionalFormatting | `conditionalFormatting/@sqref` と、Excel 2010 以降の拡張(`extLst` の `x14:conditionalFormatting` の `xm:sqref`)の範囲を `SheetModel.ConditionalFormattingRanges` に読む(現在は読んでいない)。ブロックの数と、1つの `sqref` の範囲の数に上限を設ける | 印刷範囲と重なる範囲を、重なる部分の範囲で記録する |
+| RichText | 共有文字列・インライン文字列で、`rPr` を持つランの書式がセルの書式と異なるかを `CellModel` の印に読む(現在はランを連結するだけ。2802行・371行) | セルの文字を組み立てるとき |
+| NumberFormat | 表示文字列を作るときに、(1)表示形式を解釈できず標準にした、(2)表示形式で表せない値(負の経過時間・明治より前の和暦)のため標準にした、のいずれかの印を `CellModel` に載せる(`NumberFormatter`)。`@` だけの書式で標準にするのはExcelと同じ表示のため印を付けない。`SetValue` の書き込みでは、公開の `NumberFormatting.Format` は変えず、印も返す internal のオーバーロードを使う | セルの文字を組み立てるとき |
+| CellFillPattern・CellFillGradient | `StyleTable.ReadFills` で、単色以外の網かけ・グラデーションの塗りつぶしを `CellStyle` の印に読む(現在は背景色・塗りつぶしなしに置き換えるだけ) | 印の付いた書式を持つ、印刷されるセル位置を組み立てるとき(`PageCommandBuilder.EmitCell`。塗りつぶしを描かない場合も含む。セルが無い位置を行・列の書式で描く場合も含む) |
+| ShapeFill | 図形の塗りつぶし(`ReadShapeFill`)で、次の場合の印を `ShapeModel` に載せる。(1)スタイル(`fillRef`)が指すテーマの `fillStyleLst` の項目が単色でない(テーマの `fillStyleLst` を新たに読む。現在は `fillRef` の idx が0より大きければ単色にしている。既定のテーマの idx=1 は単色なので印を付けない)、(2)直接指定の模様・画像・グループの塗りつぶし(`pattFill`・`blipFill`・`grpFill`。現在は塗りつぶしなし)、(3)`a:path` が rect・shape のグラデーション(放射状で近似)、(4)読めないグラデーションのストップ・解決できない色の指定(塗りつぶしなし) | 図形を組み立てるとき |
+| ShapeFont | 図形の文字のフォントが `fontRef` の書体を指すかを読む(現在は使っていない) | 図形の文字を組み立てるとき |
+| ImageFlip・ImageRotation | 回転は読み済み。反転(`a:xfrm/@flipH`・`@flipV`)は `ImageModel`・`GroupChildImage` に新たに読む(現在は図形・接続線・グループだけが読んでいる)。反転したグループの中の画像も対象にする | 画像を組み立てるとき。回転は角度を180度で折り返して45〜135度なら(225〜315度を含む。Excelの判定と一致するかは実機で未確認) |
+| MultiLineHeaderFooter | ヘッダー/フッターの文字列(読み済み) | `HeaderFooterCommandBuilder.ScaleRuns` が改行を取り除くとき。ヘッダー/フッターと左・中央・右の別を `Detail` に入れる |
 | MergedCellAcrossPageBreak・DrawingAcrossPageBreak | (不要) | ページの分割で、結合範囲・要素の矩形がページの境界をまたぐとき |
 | MergedCellHiddenEdge | (不要) | 結合範囲の外周の罫線を組み立てるとき |
 
-- 収集器 `FormatApproximationCollector`(internal)は `FitIssueCollector` と同じ形にする。(種類, 位置)の組で重複を除き、上限 10,000 件で打ち切る(要件7.4)。
-  印刷タイトルのように複数のページに現れるものは、重複の除去で1件になる。
+- `SetText`・`SetValue` で上書きしたセルは、リッチテキストの印を消す(上書きした文字はリッチテキストではない)。表示形式の印は、書き込んだ値で求め直す。
+- 収集器 `FormatApproximationCollector`(internal)は `FitIssueCollector` と同じ形にする。重複の判定のキーは(種類, 位置, 要素の識別)とする。
+  - 要素の識別は、図形・画像では描画オブジェクトのID(`cNvPr/@id`)、ヘッダー/フッターでは `Detail` の位置とする。
+  - 同じ位置にある別の要素は別の件として数える(要件7.4)。印刷タイトルのように複数のページに現れるものは、重複の除去で1件になる。
+- 件数の上限は、種類ごとに 1,000 件とする(要件7.4)。行全体・列全体の網かけのように件数が多くなりやすい種類で、ほかの種類が記録されなくなるのを防ぐためである。
+  打ち切りの印は全体で1つとし、どれかの種類が上限に達したら立てる。
 - 集めるのは `checkFit` のとき(診断)だけにする。保存では集めず、描画の結果も変えない(要件7.5)。
 - 結果は `PagedLayout.FormatApproximations`・`FormatApproximationsTruncated` に載せる。
-- Parsing の新しい読み取り(`textRotation`・`conditionalFormatting`・ランの書式)は、信頼できない入力として扱う。
+- Parsing の新しい読み取り(`textRotation`・`conditionalFormatting`・ランの書式・テーマの `fillStyleLst`・図形の文字の向き)は、信頼できない入力として扱う。
   件数・長さには、既存の安全弁と同じ考え方で上限を設ける(security-reviewer の対象)。
 
-### ゴールデンへの影響
+### テストとゴールデンへの影響
 
-スナップショットに `FitIssue` の行を出しているのと同じく、書式の近似の行も出す。サンプル帳票・エッジケースのサンプルで近似の行が増える。
-特に、工程表の90度回転した日付見出しや注文書の縦書き・均等割り付けなどである。描画命令の行は変わらないことを確かめる。
+- ゴールデンのスナップショット(`tests/Utsushi.Golden.Tests/Fixtures/` の請求書・領収書・納品書)には、`FitIssue` の行と同じく書式の近似の行も出す。
+  ただし、サンプル帳票には近似の対象がほとんど無いため、スナップショットはほぼ変わらない見込みである。描画命令の行が変わらないことを確かめる。
+- 近似の検知は、対象を多く含むエッジケースのサンプルで確かめる(`EdgeCaseSampleTests`。6.3)。
+  例として、工程表の90度回転した日付見出し、注文書の縦書き・均等割り付け・選択範囲内で中央・条件付き書式・網かけ・グラデーションがある。
 
 ## 4. 変換設定と帳票定義の廃止(要件1.3, 1.5, 1.6)
 
@@ -362,7 +378,7 @@ public sealed record FormatApproximation(
 | どちらも無い | はみ出し表示(数値は切り取り) |
 
 帳票定義の `overflow: "clip"` に相当するExcelの書式は無い。`clip` のセルは、はみ出し表示になる。
-例として、請求書の `InvoiceNo`・`TotalAmount`、エッジケースの送付状の `Department` がある。
+対象は、請求書の `InvoiceNo`・`TotalAmount`、領収書の `Amount`・`CopyAmount`、納品書の `DeliveryNo`・`DeliveryDate`、エッジケースの送付状の `Department` である。
 `overflow: "overflow"` と `overflow` の省略は、もともとセルの書式に従うため変わらない。ゴールデンへの影響は 6.1 で扱う。
 
 ### 4.4 「帳票コード」から「文書名」への改名(要件1.6)
@@ -421,7 +437,6 @@ utsushi --help
 ```
 
 - 書式の近似は「(参考)」として最後に出し、終了コードには影響させない(要件5.2)。
-
 - 打ち切った種類には「(上限で打ち切り)」を見出しに付ける。
 - 文字の収まらない箇所の行には、`FitIssue.Message`(セルの文字列を含まない)だけを出す。描画する文字列(`FitIssue.Text`)は出さない。
 
@@ -450,7 +465,8 @@ utsushi --help
    - エッジケースのサンプルは定義の値が8で、標準フォント(游ゴシック 11pt)からの見積もりと同じだが、同じく明示する。
 3. フィクスチャのディレクトリ名(`invoice` など)は変えない。この段階(帳票定義の削除より前)のスナップショットの差分は、次の2種類だけになるはずである。
    - `FitIssue` の行の `key=<置換キー>` が `key=-` になること
-   - `clip` のセルの描画がはみ出し表示になること
+   - `clip` のセルの描画がはみ出し表示になること(これに伴い、そのセルの `FitIssue` の行の種類が変わるか、行が無くなる。
+     現在は請求書の F3・納品書の E4 が `fit Clipped`)
 
    これ以外の差分が出たら原因を調べる。差分は layout-fidelity-reviewer のレビューを経てから更新する。
    帳票定義の削除(4.4の改名・`SubstitutionKey` の削除)で、1行目が `document=` になり、`key=` の列が無くなる。
@@ -468,16 +484,19 @@ utsushi --help
   - `Check()` は例外にせずに一覧を返す。
   - `Ignore` を指定すれば変換できる。
 - 既存の `Excel2PdfTests` のうち、未対応要素を含むサンプル(`edge-order-form`)を既定の設定で開いているテストには、既定をエラーにする段階で `Ignore` を明示する。
+- 注文書(`edge-order-form`)の帳票定義は `unsupportedElements: "ignore"` である。ignore/error 以外の注文書のテストを書き換えるときは、
+  `MaxDigitWidthPx`・`DocumentName` に加えて `UnsupportedElements = Ignore` も渡す。
+- 書式の近似(3.5)は、エッジケースのサンプルで、要件7.2の種類ごとに記録されることを確かめる。
 
 ### 6.3 追加するテスト
 
 | 対象 | 観点 |
 |---|---|
 | Parsing | 2.2 の各経路で、要素が読み飛ばされ、かつ正しい種類・シート・アンカー・`Detail` で記録される。枚数の上限の超過は1件だけ、1つの要素の上限の超過は要素ごとに記録される。グラフは `Chart` の1件だけになる。収集の件数の上限(小さい上限を渡すオーバーロード)。読まないシートの要素を含まない。図形のテキストを持つ要素で、`Message`・`Detail` に文字列が入らない。長いcontent-typeが切り詰められる |
-| Parsing(書式の近似) | `textRotation`・`conditionalFormatting`・ランの書式・網かけ/グラデーションの印・表示形式の解釈の失敗の印を読む。`conditionalFormatting` の件数の上限 |
-| Layout(書式の近似) | 要件7.2の各種類が、印刷される範囲のものだけ記録される(印刷範囲の外・非表示の行・列のものは記録されない)。印刷タイトルは1件。件数の上限。保存(`checkFit` なし)では集めず、描画命令が変わらない |
+| Parsing(書式の近似) | `textRotation`・図形の文字の向き・`conditionalFormatting`(拡張を含む)・ランの書式・網かけ/グラデーションの印・表示形式の印・テーマの `fillStyleLst`・画像の反転を読む。既定のテーマの `fillRef idx=1` の図形には印を付けない。`conditionalFormatting` のブロック数・範囲の数の上限 |
+| Layout(書式の近似) | 要件7.2の各種類が、印刷される範囲のものだけ記録される(印刷範囲の外・非表示の行・列のものは記録されない)。印刷タイトルは1件。同じ位置の別の要素は別の件。種類ごとの件数の上限。上書きしたセルのリッチテキストの印が消える。保存(`checkFit` なし)では集めず、描画命令が変わらない |
 | Rendering | `GetSubstitution`: 厳格モードでは常に null(無いフォントは例外)。代替の後は書体名。外字の補いでは null のまま |
-| ファサード | 既定でエラー・一覧の全件・`Ignore` で変換できる・`Check()` は例外にしない。フォントの代替が2回目の変換でも返る・使わないフォントは返らない。エンジンを渡す場合の `Fonts`・`Render` の指定はエラー。`Excel2Pdf` を破棄してもエンジンは使い続けられる。1つのエンジンを複数のスレッドの `Excel2Pdf` で同時に使っても結果が変わらない |
+| ファサード | 既定でエラー・一覧の全件・`Ignore` で変換できる・`Check()` は例外にしない。フォントの代替が2回目の変換でも返る・使わないフォントは返らない。エンジンを渡す場合の `Fonts`・`Render` の指定はエラー。`HasIssues` と `HasFormatApproximations` を別々に判定でき、打ち切りの印が立つ(要件4.3)。`Check()` のエラーが、扱いを無視にした `Save` と同じになる(要件4.4)。`Excel2Pdf` を破棄してもエンジンは使い続けられる。1つのエンジンを複数のスレッドの `Excel2Pdf` で同時に使っても結果が変わらない |
 | CLI | `Run` の終了コード(0/1/2/3)と出力。書式の近似だけなら終了コード0。`--help`。重複したセルの指定。`--number` の不正な値。未対応要素での中止の出力 |
 
 ## 7. ドキュメントと steering
