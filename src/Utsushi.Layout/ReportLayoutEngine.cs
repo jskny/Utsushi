@@ -114,6 +114,11 @@ namespace Utsushi.Layout
             // 書式の近似(excel2pdf-consolidation 要件7)も、診断のときだけ集める(保存の描画は変えない。要件7.5)。
             var approximations = checkFit ? new FormatApproximationCollector() : null;
             var styledBlanks = new StyledBlankPositionCounter(definition.ReportCode, sheet.Name);
+            if (approximations is not null)
+            {
+                RecordConditionalFormatting(sheet, plans, approximations);
+            }
+
             var pages = new List<PageLayout>();
             foreach (var plan in plans)
             {
@@ -314,6 +319,41 @@ namespace Utsushi.Layout
         /// <summary>
         /// 確定したページ群にヘッダー/フッターの描画命令を付け足す(要件3.7〜3.9)。
         /// </summary>
+        /// <summary>
+        /// 条件付き書式の範囲のうち印刷範囲と重なる部分を、書式の近似として記録する(excel2pdf-consolidation 要件7.2(c)・7.3)。
+        /// </summary>
+        private static void RecordConditionalFormatting(
+            SheetModel sheet, IReadOnlyList<RangePlan> plans, FormatApproximationCollector approximations)
+        {
+            foreach (var range in sheet.ConditionalFormattingRanges)
+            {
+                foreach (var plan in plans)
+                {
+                    if (Intersect(range, plan.PrintRange) is { } overlap)
+                    {
+                        approximations.Add(
+                            FormatApproximationKind.ConditionalFormatting,
+                            sheet.Name,
+                            overlap,
+                            null,
+                            null,
+                            "条件付き書式は反映しません(条件によらず元の書式で描きます)。");
+                    }
+                }
+            }
+        }
+
+        private static CellRange? Intersect(CellRange a, CellRange b)
+        {
+            var firstRow = Math.Max(a.FirstRow, b.FirstRow);
+            var lastRow = Math.Min(a.LastRow, b.LastRow);
+            var firstColumn = Math.Max(a.FirstColumn, b.FirstColumn);
+            var lastColumn = Math.Min(a.LastColumn, b.LastColumn);
+            return firstRow <= lastRow && firstColumn <= lastColumn
+                ? new CellRange(firstRow, firstColumn, lastRow, lastColumn)
+                : null;
+        }
+
         private List<PageLayout> AppendHeadersAndFooters(
             ReportModel report, List<PageLayout> pages, FormatApproximationCollector? approximations)
         {

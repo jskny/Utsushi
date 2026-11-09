@@ -31,6 +31,8 @@ namespace Utsushi.Golden.Tests
                 && a.Location == CellRange.Parse("B25:B25") && a.Detail == "horizontal=CenterContinuous");
             Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.TextRotation
                 && a.Location == CellRange.Parse("A24:A28") && a.Detail == "textRotation=255");
+            Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.ConditionalFormatting
+                && a.Location == CellRange.Parse("G10:G20"));
             Assert.True(result.HasFormatApproximations);
             Assert.All(result.FormatApproximations, a => Assert.Equal("注文書", a.SheetName));
         }

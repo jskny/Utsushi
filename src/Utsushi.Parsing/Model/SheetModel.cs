@@ -57,6 +57,12 @@ namespace Utsushi.Parsing.Model
         public IReadOnlyList<ColumnStyleRange> ColumnStyles { get; init; } = Array.Empty<ColumnStyleRange>();
 
         /// <summary>
+        /// 条件付き書式を設定した範囲(<c>conditionalFormatting/@sqref</c> と、Excel 2010 以降の拡張の <c>xm:sqref</c>)。
+        /// Utsushi は条件付き書式を反映しない(書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(c))。
+        /// </summary>
+        public IReadOnlyList<CellRange> ConditionalFormattingRanges { get; init; } = Array.Empty<CellRange>();
+
+        /// <summary>
         /// 指定位置に適用される書式を返す。セルがあればセルの書式、無ければ行の書式、列の書式、
         /// ブックの標準の書式の順に最初に見つかったもの(Excel と同じ。要件1.10)。
         /// </summary>

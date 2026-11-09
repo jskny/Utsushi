@@ -55,6 +55,46 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 条件付き書式の範囲を拡張も含めて読み取る()
+        {
+            var worksheet = new DocumentFormat.OpenXml.Spreadsheet.Worksheet(
+                new DocumentFormat.OpenXml.Spreadsheet.SheetData(),
+                new DocumentFormat.OpenXml.Spreadsheet.ConditionalFormatting
+                {
+                    SequenceOfReferences = new DocumentFormat.OpenXml.ListValue<DocumentFormat.OpenXml.StringValue> { InnerText = "A1:B2 D4" },
+                },
+                new DocumentFormat.OpenXml.Spreadsheet.WorksheetExtensionList(
+                    new DocumentFormat.OpenXml.Spreadsheet.WorksheetExtension(
+                        new DocumentFormat.OpenXml.Office2010.Excel.ConditionalFormattings(
+                            new DocumentFormat.OpenXml.Office2010.Excel.ConditionalFormatting(
+                                new DocumentFormat.OpenXml.Office.Excel.ReferenceSequence("F1:F9"))))
+                    {
+                        Uri = "{78C0D931-6437-407d-A8EE-F0AAD7539E65}",
+                    }));
+
+            var ranges = OpenXmlWorkbookReader.ReadConditionalFormattingRanges(worksheet, maxRanges: 100);
+
+            Assert.Equal(new[] { "A1:B2", "D4:D4", "F1:F9" }, ranges.Select(r => r.ToString()).ToArray());
+        }
+
+        [Fact]
+        public void 条件付き書式の範囲は上限で打ち切る()
+        {
+            var worksheet = new DocumentFormat.OpenXml.Spreadsheet.Worksheet(
+                new DocumentFormat.OpenXml.Spreadsheet.SheetData(),
+                new DocumentFormat.OpenXml.Spreadsheet.ConditionalFormatting
+                {
+                    SequenceOfReferences = new DocumentFormat.OpenXml.ListValue<DocumentFormat.OpenXml.StringValue> { InnerText = "A1 A2 A3 A4 A5" },
+                },
+                new DocumentFormat.OpenXml.Spreadsheet.ConditionalFormatting
+                {
+                    SequenceOfReferences = new DocumentFormat.OpenXml.ListValue<DocumentFormat.OpenXml.StringValue> { InnerText = "B1" },
+                });
+
+            Assert.Equal(3, OpenXmlWorkbookReader.ReadConditionalFormattingRanges(worksheet, maxRanges: 3).Count);
+        }
+
+        [Fact]
         public void セルの文字の回転を読み取る()
         {
             using var stream = File.OpenRead(Path.Combine(TestPaths.EdgeCaseSamplesRoot, "edge-order-form", "template.xlsx"));

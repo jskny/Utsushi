@@ -232,6 +232,71 @@ namespace Utsushi.Parsing.OpenXml
             }
         }
 
+        /// <summary>
+        /// 1シートから読む条件付き書式の範囲の数の上限。条件付き書式は反映しないため、診断で知らせるための読み取りであり、
+        /// 細工した入力で範囲を際限なく読まされないよう打ち切る(design.md 3.5。security-reviewer の対象)。
+        /// </summary>
+        internal const int MaxConditionalFormattingRanges = 1_000;
+
+        /// <summary>
+        /// 条件付き書式を設定した範囲を読む(excel2pdf-consolidation 要件7.2(c))。<c>conditionalFormatting/@sqref</c> と、
+        /// Excel 2010 以降の拡張(<c>extLst</c> の <c>x14:conditionalFormatting</c> の <c>xm:sqref</c>)の両方を読む。
+        /// 解釈できない範囲は読み飛ばし、範囲の数は <see cref="MaxConditionalFormattingRanges"/> で打ち切る。
+        /// </summary>
+        private static IReadOnlyList<CellRange> ReadConditionalFormattingRanges(X.Worksheet worksheet) =>
+            ReadConditionalFormattingRanges(worksheet, MaxConditionalFormattingRanges);
+
+        internal static IReadOnlyList<CellRange> ReadConditionalFormattingRanges(X.Worksheet worksheet, int maxRanges)
+        {
+            var result = new List<CellRange>();
+
+            bool AddAll(string? references)
+            {
+                if (string.IsNullOrEmpty(references))
+                {
+                    return true;
+                }
+
+                // 範囲は空白で区切られる。1つの sqref に大量の範囲を並べた入力でも、上限に達したら読み進めない。
+                foreach (var token in references!.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (result.Count >= maxRanges)
+                    {
+                        return false;
+                    }
+
+                    if (CellRange.TryParse(token, out var range))
+                    {
+                        result.Add(range);
+                    }
+                }
+
+                return true;
+            }
+
+            foreach (var formatting in worksheet.Elements<X.ConditionalFormatting>())
+            {
+                if (!AddAll(formatting.SequenceOfReferences?.InnerText))
+                {
+                    return result;
+                }
+            }
+
+            var extensions = worksheet.GetFirstChild<X.WorksheetExtensionList>();
+            if (extensions is not null)
+            {
+                foreach (var formatting in extensions.Descendants<DocumentFormat.OpenXml.Office2010.Excel.ConditionalFormatting>())
+                {
+                    if (!AddAll(formatting.GetFirstChild<DocumentFormat.OpenXml.Office.Excel.ReferenceSequence>()?.Text))
+                    {
+                        return result;
+                    }
+                }
+            }
+
+            return result;
+        }
+
         /// <summary>Excel のシート名の最大の長さ。</summary>
         internal const int MaxSheetNameLength = 31;
 
@@ -374,6 +439,7 @@ namespace Utsushi.Parsing.OpenXml
                 DefaultCellStyle = styles.DefaultCellStyle,
                 RowStyles = rowStyles,
                 ColumnStyles = columnStyles,
+                ConditionalFormattingRanges = ReadConditionalFormattingRanges(worksheet),
             };
         }
 
