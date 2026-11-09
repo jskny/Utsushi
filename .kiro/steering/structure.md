@@ -4,6 +4,9 @@ inclusion: always
 
 # Utsushi プロジェクト構成方針
 
+> **移行中**: `.kiro/specs/excel2pdf-consolidation/` で帳票定義(`definition.json`)の仕組みを廃止し、入口を `Excel2Pdf` に一本化する変更を進めている。
+> 本ファイルは移行前の構成・帳票の追加手順を記す。移行後の方針は `product.md` と同specを参照し、食い違う場合はそちらを優先する。本ファイルはspecのタスク8で改める。
+
 > 中核機能(`.kiro/specs/excel-report-pdf-conversion/`)の実装は完了している。
 > 以降の変更も本方針に従うこと。実際の構成は下記「ソリューション構成」を参照。
 

@@ -40,6 +40,7 @@
 
 - **商用ライブラリ禁止・Office Interop禁止**(`.kiro/steering/tech.md`)。新規依存ライブラリを追加する前にライセンスを確認する。
 - 対象は登録済みの自社帳票が主。帳票定義なしモード(要件12)は社内のExcelをベストエフォートでPDF化する補助経路であり、これを足がかりに任意のExcelファイルを汎用的に扱うための機能(汎用レンダラ化)は追加しない。
+  (移行中: `.kiro/specs/excel2pdf-consolidation/` で帳票定義を廃止し、`Excel2Pdf`(帳票定義なし)を唯一の経路にする。移行後も汎用レンダラ化しない方針は変えない。`.kiro/steering/product.md` を参照)
 - レイヤー間の依存は一方向(`Parsing → ReportDefinition → Substitution → Layout → Rendering`)。上位レイヤーが下位レイヤーの実装詳細を直接参照しない。
 - 帳票固有の分岐は帳票定義データ側に置き、共通レイヤーのコードにハードコードしない。
 
