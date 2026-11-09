@@ -23,7 +23,7 @@ tools: Read, Grep, Glob, Bash
 ### 2. レイヤー責務の分離
 - 下位レイヤーの型(特に `DocumentFormat.OpenXml` の `SpreadsheetDocument` 等)が `Utsushi.Parsing` の外に漏れていないか。
 - `Utsushi.Rendering` が `Utsushi.Parsing` や `ReportDefinition` に直接依存していないか(必ず `Layout` の出力 `PagedLayout` のみを介すること)。
-- 帳票固有の分岐(`if (reportCode == "invoice")` 等)が共通レイヤーのコードに紛れ込んでいないか。帳票固有の情報は帳票定義(JSON)側に寄せるべき。
+- 帳票固有の分岐(`if (reportCode == "invoice")` 等)が共通レイヤーのコードに紛れ込んでいないか。帳票ごとの差異はテンプレート(Excelの書式・印刷設定)と呼び出し元が書き込む値で表すべき。
 
 ### 3. 技術制約への準拠
 - 新規パッケージ参照がある場合、ライセンスが商用・課金対象でないか(`.kiro/steering/tech.md` の対象表と突き合わせる)。

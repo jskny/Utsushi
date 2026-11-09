@@ -176,7 +176,7 @@
   - _Requirements: 5.1, 7.2_
 - [x] 9.5 `docs/エッジケース検証レポート.md`・`samples/edge-cases/README.md` を改め、`docs/帳票定義スキーマ.md` を削除する。`docs/実装設計失敗事例集.md` の廃止した機能の節に注記を加える
   - _Requirements: 1.5_
-- [ ] 9.6 `.claude/agents/` の帳票定義への言及を改める
+- [x] 9.6 `.claude/agents/` の帳票定義への言及を改める
   - _Requirements: 1.5_
 - [ ] 9.7 中核仕様の「廃止予定」の注記を、廃止済みに改める
 - [ ] 9.8 doc-reviewer・spec-compliance-reviewer(本仕様・中核仕様と実装の整合)
