@@ -54,12 +54,20 @@
 > |---|---|
 > | 置換キー(論理名 → セル番地) | セル番地を直接指定する(`SetText`・`SetValue`) |
 > | 必須キー(値が渡されなければエラー) | 呼び出し元が値の有無を確かめる |
-> | キーごとの `overflow`(`shrink`・`clip`・`wrap`・`overflow`。省略時はセルの書式に従う) | テンプレートのセルの書式(「縮小して全体を表示する」「折り返して全体を表示する」)に従う。`clip` に相当する書式は無い |
+> | キーごとの `overflow`(`shrink`・`clip`・`wrap`・`overflow`。省略時はセルの書式に従う) | テンプレートのセルの書式(「縮小して全体を表示する」「折り返して全体を表示する」)に従う。`clip` はExcelに無い指定のため、代わりを設けずに廃止する |
 > | `printArea` の上書き | テンプレートの印刷範囲の設定に従う |
 > | `sheetName` の照合 | `Excel2PdfOptions.SheetName`(指定したシートが無ければエラー) |
 > | `maxDigitWidthPx` | `Excel2PdfOptions.MaxDigitWidthPx`(省略時はブックの標準フォントから見積もる) |
 > | `unsupportedElements` | `Excel2PdfOptions.UnsupportedElements`(要件2) |
 > | `toleranceMm` | 固定の許容誤差(0.5mm。現在の既定値)。本番コードでは使われておらず、検証の基準としてだけ残す |
+>
+> 補足(要件1, 移行): 旧API(帳票定義・置換キー・`ReportPdfConverter` の変換メソッド・`CheckFit()`)は、`[Obsolete]` などで残す移行期間を設けず、一度に削除する。
+> NuGetで配布しておらず、呼び出し元は1つのプロダクトだけで、呼び出し元の書き換え(`CheckFit()` → `Check()`、`ReportCode` → `DocumentName`、
+> 未対応要素の既定がエラーになること)は合意済みのためである。
+>
+> 補足(要件1, `clip`): Utsushi はExcelの見た目を写すことを目的とするため、Excelに無い指定は持たない。
+> Excelでは、はみ出した文字は値のある隣のセルの手前で切れる。Utsushi はこれを再現せず隣に重ねて描く(中核仕様の要件4.9)。
+> 重なる箇所は診断の文字の収まらない箇所(`OverlapsNeighborValue`)で検知できる。
 >
 > 補足(要件1.6): `UtsushiException.ReportCode`・`PagedLayout.ReportCode` は公開のメンバーであり、名前の変更は互換性のない変更である。
 > 帳票定義なしの変換では、これらの欄には既に文書名が入っている。呼び出し元がこの値を処理ログに記録している場合は、参照を `DocumentName` に改める。
