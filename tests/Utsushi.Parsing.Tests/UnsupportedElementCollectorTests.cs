@@ -1,5 +1,6 @@
 using System.Linq;
 using Utsushi.Core;
+using Utsushi.Core.Exceptions;
 using Utsushi.Parsing.OpenXml;
 using Xunit;
 
@@ -119,6 +120,36 @@ namespace Utsushi.Parsing.Tests
 
             var workbookLevel = new UnsupportedElement(UnsupportedElementKind.ExternalReference, null, null, null, "外部参照");
             Assert.Equal("[ExternalReference] ブック: 外部参照", workbookLevel.ToString());
+        }
+
+        [Fact]
+        public void 例外のメッセージは先頭の20件を載せ残りは件数だけを示す()
+        {
+            var elements = Enumerable.Range(1, 25)
+                .Select(i => new UnsupportedElement(UnsupportedElementKind.Chart, "S", new CellAddress(i, 1), null, "グラフ" + i))
+                .ToList();
+
+            var ex = new UnsupportedWorkbookElementException(elements, isTruncated: false, reportCode: "doc");
+
+            Assert.StartsWith("未対応の要素が 25 件あるため中止します", ex.Message);
+            Assert.Contains("A20: グラフ20", ex.Message);
+            Assert.DoesNotContain("グラフ21", ex.Message);
+            Assert.Contains("ほか 5 件", ex.Message);
+            Assert.Equal(25, ex.Elements.Count);
+        }
+
+        [Fact]
+        public void 例外の診断用の文字列には全件と打ち切りの印を載せる()
+        {
+            var elements = Enumerable.Range(1, 25)
+                .Select(i => new UnsupportedElement(UnsupportedElementKind.Chart, "S", new CellAddress(i, 1), null, "グラフ" + i))
+                .ToList();
+
+            var diagnostic = new UnsupportedWorkbookElementException(elements, isTruncated: true).ToDiagnosticString();
+
+            Assert.Contains("A25: グラフ25", diagnostic);
+            Assert.Contains("件数の上限で打ち切り", diagnostic);
+            Assert.Contains("25 件以上", diagnostic);
         }
     }
 }

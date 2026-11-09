@@ -72,7 +72,16 @@ namespace Utsushi.Core.Exceptions
               .Append(" (")
               .Append(string.Join(", ", parts))
               .Append(')');
+            AppendDiagnosticDetails(sb);
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 派生クラスが <see cref="ToDiagnosticString"/> に詳細(未対応要素の一覧など)を加えるためのフック。
+        /// 既定では何もしない。加える場合は、改行で始めて1行ずつ書く。
+        /// </summary>
+        protected virtual void AppendDiagnosticDetails(StringBuilder builder)
+        {
         }
 
         public override string ToString() =>

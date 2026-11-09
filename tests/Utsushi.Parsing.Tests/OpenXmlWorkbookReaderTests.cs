@@ -117,11 +117,11 @@ namespace Utsushi.Parsing.Tests
                 OpenXmlWorkbookReader.MaxMergedRangesPerSheet + 5);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("TooManyMergedRanges", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.LimitExceeded, "TooManyMergedRanges");
                 Assert.Equal(ProcessingStage.Parsing, ex.Stage);
             }
             finally

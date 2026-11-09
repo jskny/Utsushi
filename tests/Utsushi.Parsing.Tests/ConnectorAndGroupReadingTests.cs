@@ -88,11 +88,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("UnsupportedShapePreset", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedShapePreset);
             }
             finally
             {
@@ -107,10 +107,10 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<ConnectorModel>());
             }
             finally
@@ -197,10 +197,10 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 var readConnector = Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<ConnectorModel>());
                 Assert.IsType<CellSpanAnchorExtent>(readConnector.Extent);
             }
@@ -356,11 +356,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("UnsupportedShapePreset", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedGroupChild, "UnsupportedShapePreset");
             }
             finally
             {
@@ -403,11 +403,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("UnsupportedShapePreset", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedGroupChild, "graphicFrame");
             }
             finally
             {
@@ -482,10 +482,10 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 var group = Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<GroupShapeModel>());
 
                 IReadOnlyList<GroupChildModel> current = group.Children;
@@ -540,11 +540,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("GroupNestingTooDeep", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedGroupChild, "GroupNestingTooDeep");
             }
             finally
             {
@@ -608,11 +608,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchors.ToArray());
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("TooManyShapes", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.LimitExceeded, "TooManyShapes");
             }
             finally
             {
@@ -681,11 +681,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchors.ToArray());
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("TooManyShapes", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.LimitExceeded, "TooManyShapes");
             }
             finally
             {
@@ -704,10 +704,10 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 var group2 = Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<GroupShapeModel>());
                 Assert.Single(group2.Children);
             }
@@ -730,10 +730,10 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 var group2 = Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<GroupShapeModel>());
                 Assert.IsType<CellSpanAnchorExtent>(group2.Extent);
             }

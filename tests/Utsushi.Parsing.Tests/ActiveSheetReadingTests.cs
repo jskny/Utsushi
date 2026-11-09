@@ -259,15 +259,15 @@ namespace Utsushi.Parsing.Tests
                 // 前提の確認: 非対応の図形があるシートを読めば error で失敗する入力であること。
                 using (var stream = File.OpenRead(path))
                 {
-                    var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(
-                        stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, SheetNameFilter: "作業用")));
-                    Assert.Equal("UnsupportedShapePreset", ex.ElementKind);
+                    var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(
+                        stream, new WorkbookReadOptions(SheetNameFilter: "作業用")));
+                    StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedShapePreset);
                 }
 
                 using (var stream = File.OpenRead(path))
                 {
-                    var workbook = _reader.Read(
-                        stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, ActiveSheetOnly: true));
+                    var workbook = _reader.ReadStrict(
+                        stream, new WorkbookReadOptions(ActiveSheetOnly: true));
                     Assert.Equal("帳票", Assert.Single(workbook.Sheets).Name);
                 }
             }
@@ -292,15 +292,15 @@ namespace Utsushi.Parsing.Tests
                 // 前提の確認: 図形数が上限を超えたシートを読めば error で失敗する入力であること。
                 using (var stream = File.OpenRead(path))
                 {
-                    var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(
-                        stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, SheetNameFilter: "作業用")));
-                    Assert.Equal("TooManyShapes", ex.ElementKind);
+                    var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(
+                        stream, new WorkbookReadOptions(SheetNameFilter: "作業用")));
+                    StrictReading.AssertContains(ex, UnsupportedElementKind.LimitExceeded, "TooManyShapes");
                 }
 
                 using (var stream = File.OpenRead(path))
                 {
-                    var workbook = _reader.Read(
-                        stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, ActiveSheetOnly: true));
+                    var workbook = _reader.ReadStrict(
+                        stream, new WorkbookReadOptions(ActiveSheetOnly: true));
                     Assert.Equal("帳票", Assert.Single(workbook.Sheets).Name);
                 }
             }

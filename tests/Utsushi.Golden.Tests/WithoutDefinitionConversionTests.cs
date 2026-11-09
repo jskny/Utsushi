@@ -181,7 +181,7 @@ namespace Utsushi.Golden.Tests
                             ["InvoiceNo"] = "y",
                             ["TotalAmount"] = "z",
                         }));
-                    Assert.Equal("UnsupportedShapePreset", ex.ElementKind);
+                    Assert.Contains(ex.Elements, e => e.Kind == UnsupportedElementKind.UnsupportedShapePreset);
                 }
 
                 int originalShapes;

@@ -20,7 +20,6 @@ namespace Utsushi.Parsing
     /// <summary>
     /// ワークブック読み取りのオプション。帳票定義由来の設定を Parsing レイヤーへ渡すために使う。
     /// </summary>
-    /// <param name="UnsupportedElementBehavior">サポート外要素(図形・グラフ・外部参照)を検出したときの挙動。要件1.5。</param>
     /// <param name="ReportCode">エラーに含める帳票コード(判明している場合)。要件6.4。</param>
     /// <param name="SheetNameFilter">読み取るシートを限定する場合のシート名。null ならすべてのシートを読む。</param>
     /// <param name="ActiveSheetOnly">
@@ -28,22 +27,15 @@ namespace Utsushi.Parsing
     /// 1枚だけを読む(帳票定義なしモード、要件12.2)。<see cref="SheetNameFilter"/> を指定した場合はそちらを優先する。
     /// 実装は、true のとき返す <see cref="WorkbookModel.Sheets"/> を1枚だけにしなければならない。
     /// </param>
+    /// <remarks>
+    /// 未対応要素(excel2pdf-consolidation 要件2)は、扱いの指定によらず常に出力せずに読み飛ばし、
+    /// <see cref="WorkbookModel.UnsupportedElements"/> に記録する。エラーにするかどうかは呼び出し元(ファサード)が決める。
+    /// </remarks>
     public sealed record WorkbookReadOptions(
-        UnsupportedElementBehavior UnsupportedElementBehavior = UnsupportedElementBehavior.Ignore,
         string? ReportCode = null,
         string? SheetNameFilter = null,
         bool ActiveSheetOnly = false)
     {
         public static WorkbookReadOptions Default { get; } = new();
-    }
-
-    /// <summary>サポート外要素を検出したときの挙動(要件1.5)。</summary>
-    public enum UnsupportedElementBehavior
-    {
-        /// <summary>無視して読み取りを続行する。</summary>
-        Ignore = 0,
-
-        /// <summary>エラーとして変換を中止する。</summary>
-        Error,
     }
 }

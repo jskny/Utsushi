@@ -451,7 +451,9 @@ namespace Utsushi.Golden.Tests
                 var ex = Assert.Throws<UnsupportedWorkbookElementException>(
                     () => converter.ComputeLayout(OrderForm, input, OrderFormValues));
 
-                Assert.Equal("Chart", ex.ElementKind);
+                // 最初の1件で止めず、グラフとコメント(レガシー図形)の両方を返す(excel2pdf-consolidation 要件2.2)。
+                Assert.Contains(ex.Elements, e => e.Kind == UnsupportedElementKind.Chart && e.Anchor is not null);
+                Assert.Contains(ex.Elements, e => e.Kind == UnsupportedElementKind.LegacyDrawing);
             }
             finally
             {

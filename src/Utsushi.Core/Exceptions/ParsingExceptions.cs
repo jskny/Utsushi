@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 
 namespace Utsushi.Core.Exceptions
 {
@@ -51,21 +54,67 @@ namespace Utsushi.Core.Exceptions
     }
 
     /// <summary>
-    /// 帳票定義が想定していない要素(サポート外の図形・グラフ・外部参照など)を検出した。要件1.5。
+    /// 未対応要素(excel2pdf-consolidation 要件2)があり、その扱いがエラーのため変換を中止した。
+    /// 見つかった未対応要素を、件数の上限まですべて持つ(最初の1件で止めない。要件2.2)。
     /// </summary>
     public sealed class UnsupportedWorkbookElementException : UtsushiException
     {
+        /// <summary>メッセージに1行ずつ載せる未対応要素の件数。それ以降は件数だけを示す(すべては <see cref="Elements"/> と <see cref="UtsushiException.ToDiagnosticString"/>)。</summary>
+        internal const int MaxElementsInMessage = 20;
+
         public UnsupportedWorkbookElementException(
-            string message,
-            string elementKind,
+            IReadOnlyList<UnsupportedElement> elements,
+            bool isTruncated,
             string? reportCode = null,
             string? sheetName = null)
-            : base(message, ProcessingStage.Parsing, reportCode, sheetName)
+            : base(BuildMessage(elements ?? throw new ArgumentNullException(nameof(elements)), isTruncated), ProcessingStage.Parsing, reportCode, sheetName)
         {
-            ElementKind = elementKind;
+            Elements = elements;
+            IsTruncated = isTruncated;
         }
 
-        /// <summary>検出したサポート外要素の種別(例: "Drawing", "Chart", "ExternalReference")。</summary>
-        public string ElementKind { get; }
+        /// <summary>見つかった未対応要素(件数の上限まで)。</summary>
+        public IReadOnlyList<UnsupportedElement> Elements { get; }
+
+        /// <summary>件数の上限に達し、含めなかった未対応要素があるかどうか。</summary>
+        public bool IsTruncated { get; }
+
+        /// <inheritdoc />
+        protected override void AppendDiagnosticDetails(StringBuilder builder)
+        {
+            foreach (var element in Elements)
+            {
+                builder.Append(Environment.NewLine).Append("  ").Append(element);
+            }
+
+            if (IsTruncated)
+            {
+                builder.Append(Environment.NewLine).Append("  (件数の上限で打ち切り)");
+            }
+        }
+
+        private static string BuildMessage(IReadOnlyList<UnsupportedElement> elements, bool isTruncated)
+        {
+            var builder = new StringBuilder();
+            builder.Append("未対応の要素が ")
+                .Append(elements.Count.ToString(CultureInfo.InvariantCulture))
+                .Append(isTruncated ? " 件以上" : " 件")
+                .Append("あるため中止します(UnsupportedElements を Ignore にすると、これらを出力せずに変換します)。");
+
+            for (var i = 0; i < elements.Count && i < MaxElementsInMessage; i++)
+            {
+                builder.Append(Environment.NewLine).Append("  ").Append(elements[i]);
+            }
+
+            if (elements.Count > MaxElementsInMessage)
+            {
+                builder.Append(Environment.NewLine)
+                    .Append("  ほか ")
+                    .Append((elements.Count - MaxElementsInMessage).ToString(CultureInfo.InvariantCulture))
+                    .Append(" 件");
+            }
+
+            return builder.ToString();
+        }
     }
 }

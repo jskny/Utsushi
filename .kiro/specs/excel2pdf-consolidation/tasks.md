@@ -48,7 +48,7 @@
   - _Requirements: 2.2, 2.5, 2.7_
 - [x] 2.7 黙って読み飛ばしている経路(design.md 2.2)を `MalformedDrawingObject` として記録する(`absoluteAnchor` と重ねない)。テストを含む
   - _Requirements: 2.7_
-- [ ] 2.8 `UnsupportedWorkbookElementException` に `Elements`・`IsTruncated` を持たせ、`ElementKind` を削除する(`ToDiagnosticString()` に一覧を含めるフックを `UtsushiException` に加える)。`WorkbookReadOptions.UnsupportedElementBehavior` を削除し、
+- [x] 2.8 `UnsupportedWorkbookElementException` に `Elements`・`IsTruncated` を持たせ、`ElementKind` を削除する(`ToDiagnosticString()` に一覧を含めるフックを `UtsushiException` に加える)。`WorkbookReadOptions.UnsupportedElementBehavior` を削除し、
       読み込みは常に記録だけにする。帳票定義ありの経路は `ReportPdfConverter.ReadWorkbook` で `unsupportedElements: "error"` のときに一覧から例外を作る(design.md 2.4)。
       既存の Parsing のテストの `Error`・`ElementKind` の検証を、一覧の検証に書き換える
   - _Requirements: 2.2, 2.3, 2.6_

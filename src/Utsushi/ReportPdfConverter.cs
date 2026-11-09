@@ -408,12 +408,7 @@ namespace Utsushi
 
             var definition = _definitions.Load(reportCode);
 
-            var readOptions = new WorkbookReadOptions(
-                definition.UnsupportedElements == UnsupportedElementPolicy.Error
-                    ? UnsupportedElementBehavior.Error
-                    : UnsupportedElementBehavior.Ignore,
-                definition.ReportCode,
-                definition.SheetName);
+            var readOptions = new WorkbookReadOptions(definition.ReportCode, definition.SheetName);
 
             var workbook = ReadWorkbook(xlsxStream, readOptions, definition);
             return BuildLayout(workbook, definition, values, cellOverrides, numericOverrides, checkFit);
@@ -447,7 +442,6 @@ namespace Utsushi
 
             var name = documentName ?? string.Empty;
             var readOptions = new WorkbookReadOptions(
-                UnsupportedElementBehavior.Ignore,
                 name,
                 SheetNameFilter: sheetName,
                 ActiveSheetOnly: sheetName is null);
@@ -552,9 +546,10 @@ namespace Utsushi
         /// </summary>
         private WorkbookModel ReadWorkbook(Stream xlsxStream, WorkbookReadOptions readOptions, ReportDefinition definition)
         {
+            WorkbookModel workbook;
             try
             {
-                return _workbookReader.Read(xlsxStream, readOptions);
+                workbook = _workbookReader.Read(xlsxStream, readOptions);
             }
             catch (InvalidExcelFileException ex) when (ex.Reason == InvalidExcelFileReason.NoWorksheet
                 && readOptions.SheetNameFilter is not null)
@@ -562,6 +557,18 @@ namespace Utsushi
                 throw new ReportStructureMismatchException(
                     ex.Message, definition.ReportCode, definition.SheetName, innerException: ex);
             }
+
+            // 帳票定義の unsupportedElements が error なら、見つかった未対応要素をすべて持つ例外にする
+            // (excel2pdf-consolidation design.md 2.4)。変換・レイアウト計算・文字の収まりの確認のすべてがここを通るため、
+            // 中核仕様の要件13.5(確認は変換と同じエラー)を保つ。帳票定義ありの経路は同仕様のタスク8で削除する。
+            if (definition.UnsupportedElements == Utsushi.ReportDefinitions.Model.UnsupportedElementPolicy.Error
+                && workbook.UnsupportedElements.Count > 0)
+            {
+                throw new UnsupportedWorkbookElementException(
+                    workbook.UnsupportedElements, workbook.UnsupportedElementsTruncated, definition.ReportCode, definition.SheetName);
+            }
+
+            return workbook;
         }
 
         /// <summary>

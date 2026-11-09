@@ -133,7 +133,7 @@ namespace Utsushi.Parsing.OpenXml
                         options.ReportCode);
 
                 var unsupported = new UnsupportedElementCollector();
-                DetectUnsupportedWorkbookElements(workbookPart, options, unsupported);
+                DetectUnsupportedWorkbookElements(workbookPart, unsupported);
 
                 var colors = ColorResolver.Create(workbookPart);
                 var styles = StyleTable.Create(workbookPart, colors);
@@ -243,7 +243,7 @@ namespace Utsushi.Parsing.OpenXml
         {
             var worksheet = worksheetPart.Worksheet;
 
-            DetectUnsupportedElements(name, worksheetPart, worksheet, options, unsupported);
+            RecordUnsupportedDrawingElements(name, worksheetPart, worksheet, unsupported);
 
             var cells = new Dictionary<CellAddress, CellModel>();
             var rowHeights = new List<double>();
@@ -558,17 +558,7 @@ namespace Utsushi.Parsing.OpenXml
 
                 if (result.Count >= MaxMergedRangesPerSheet)
                 {
-                    if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                    {
-                        throw new UnsupportedWorkbookElementException(
-                            $"シート '{sheetName}' の結合セル範囲の数が上限({MaxMergedRangesPerSheet}個)を超えています。"
-                            + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                            "TooManyMergedRanges",
-                            options.ReportCode,
-                            sheetName);
-                    }
-
-                    // ignore時は上限以降の結合範囲を無視する(以降のセルは通常セルとして扱われる)。
+                    // 上限以降の結合範囲は無視する(以降のセルは通常セルとして扱われる)。
                     unsupported.AddCountLimitExceeded(
                         sheetName,
                         range.TopLeft,
@@ -1110,11 +1100,10 @@ namespace Utsushi.Parsing.OpenXml
         /// <c>drawing.xml</c> のアンカーを出現順に1回だけ列挙し、これらが混在する場合の
         /// 重なり順(z-order。要件10.3)を保った1つのリストを返す。これら4種以外の描画
         /// オブジェクト(図表枠`xdr:graphicFrame`・グラフ等)は対象外とし、
-        /// <see cref="DetectUnsupportedElements"/>側で引き続き「サポート外要素」として扱う
-        /// (要件9.5, 10.7)。画像・対応済みプリセットの図形/接続線、グループは帳票定義の
-        /// <c>unsupportedElements</c> 設定によらず常に読み取り対象とするが、デコード不能な
-        /// 画像形式・非対応プリセット・上限を超える枚数/サイズ/文字数/ネスト段数だけは
-        /// 同じ設定に従う(要件9.4, 9.6, 10.7, 10.8)。
+        /// <see cref="RecordUnsupportedDrawingElements"/>が未対応要素として記録する
+        /// (要件9.5, 10.7)。読み取り対象のうち、デコード不能な画像形式・非対応プリセット・
+        /// 上限を超える枚数/サイズ/文字数/ネスト段数・位置の壊れたものは出力せず、未対応要素として記録する
+        /// (要件9.4, 9.6, 10.7, 10.8。excel2pdf-consolidation 要件2.7)。
         /// </remarks>
         private static List<DrawingObjectModel> ReadDrawingObjects(
             string sheetName,
@@ -1278,17 +1267,7 @@ namespace Utsushi.Parsing.OpenXml
             rejection = null;
             if (imageCount >= MaxImagesPerSheet)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の画像の数が上限({MaxImagesPerSheet}枚)を超えています。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "TooManyImages",
-                        options.ReportCode,
-                        sheetName);
-                }
-
-                // ignore時はこのアンカーだけを無視し、以降のアンカーの走査は続ける
+                // このアンカーだけを無視し、以降のアンカーの走査は続ける
                 // (画像・図形が混在するシートで、他方の走査を止めないため)。
                 rejection = TooManyImagesRejection;
                 return null;
@@ -1298,9 +1277,8 @@ namespace Utsushi.Parsing.OpenXml
             // 壊れたアンカーを大量に並べて、上限に達しないまま画像を何度も展開させられる(security-reviewer指摘)。
             imageCount++;
 
-            // ReadAnchorExtentより先に検証する。壊れたアンカー(ReadAnchorExtentの失敗)は
-            // モードによらず常に無言でスキップするため、先に判定すると不正な画像形式/
-            // サイズ超過/シグネチャ不一致がErrorモードでも例外化されずに握りつぶされてしまう
+            // ReadAnchorExtentより先に検証する。不正な画像形式・サイズ超過・シグネチャ不一致を、
+            // 壊れたアンカー(MalformedDrawingObject)より具体的な理由として記録するため
             // (code-reviewer指摘。リファクタ前の検証順序を維持する)。
             if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType, out rejection))
             {
@@ -1323,7 +1301,7 @@ namespace Utsushi.Parsing.OpenXml
         /// <summary>
         /// <c>xdr:pic</c>(トップレベル・グループ内共通)から画像バイナリを読み取り、
         /// content-type許可リスト・サイズ上限・シグネチャの検証を行う(要件9.4, 9.6)。
-        /// 検証に失敗した場合、Errorモードなら例外を送出し、Ignoreモードなら<c>false</c>と出力しない理由(<paramref name="rejection"/>)を返す。
+        /// 検証に失敗した場合は<c>false</c>と出力しない理由(<paramref name="rejection"/>)を返す。
         /// 記録は呼び出し元が行う(グループの中の画像は、グループの側でまとめて1件にするため)。
         /// </summary>
         private static bool TryReadValidatedImage(
@@ -1354,17 +1332,7 @@ namespace Utsushi.Parsing.OpenXml
             }
             catch (ArgumentOutOfRangeException)
             {
-                // 参照先のパートがファイル内に無い(要件6.10)。SDKの例外を漏らさず、サポート外要素として扱う。
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の画像の参照先('{embedId}')がファイル内にありません。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "MissingImagePart",
-                        options.ReportCode,
-                        sheetName);
-                }
-
+                // 参照先のパートがファイル内に無い(要件6.10)。SDKの例外を漏らさず、未対応要素として扱う。
                 rejection = new DrawingRejection(
                     UnsupportedElementKind.MissingImagePart, embedId, "画像の参照先がファイル内に無いため、出力されません。");
                 return false;
@@ -1379,16 +1347,6 @@ namespace Utsushi.Parsing.OpenXml
 
             if (!SupportedImageContentTypes.Contains(imagePart.ContentType))
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の画像形式 '{imagePart.ContentType}' には対応していません"
-                        + "(対応形式: PNG/JPEG/GIF/BMP)。帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "UnsupportedImageFormat",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = new DrawingRejection(
                     UnsupportedElementKind.UnsupportedImageFormat,
                     imagePart.ContentType,
@@ -1410,16 +1368,6 @@ namespace Utsushi.Parsing.OpenXml
             {
                 if (!TryReadBounded(stream, MaxImageDataBytes, out data))
                 {
-                    if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                    {
-                        throw new UnsupportedWorkbookElementException(
-                            $"シート '{sheetName}' の画像のサイズが上限({MaxImageDataBytes / (1024 * 1024)}MB)を"
-                            + "超えています。帳票定義の unsupportedElements が 'error' のため中止します。",
-                            "ImageTooLarge",
-                            options.ReportCode,
-                            sheetName);
-                    }
-
                     rejection = DrawingRejection.ElementLimit(
                         "ImageTooLarge", MaxImageDataBytes, "画像のデータの大きさが上限(バイト)を超えているため、出力されません。");
                     return false;
@@ -1431,17 +1379,6 @@ namespace Utsushi.Parsing.OpenXml
             // 最低限の裏取りを行う(security-reviewer指摘)。
             if (!MatchesContentTypeSignature(imagePart.ContentType, data))
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の画像データが '{imagePart.ContentType}' として不正です"
-                        + "(ファイル先頭のシグネチャが一致しません)。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "UnsupportedImageFormat",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = new DrawingRejection(
                     UnsupportedElementKind.UnsupportedImageFormat,
                     imagePart.ContentType,
@@ -1476,17 +1413,7 @@ namespace Utsushi.Parsing.OpenXml
             rejection = null;
             if (shapeCount >= MaxShapesPerSheet)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "TooManyShapes",
-                        options.ReportCode,
-                        sheetName);
-                }
-
-                // ignore時はこのアンカーだけを無視し、以降のアンカーの走査は続ける。
+                // このアンカーだけを無視し、以降のアンカーの走査は続ける。
                 rejection = TooManyShapesRejection;
                 return null;
             }
@@ -1497,17 +1424,6 @@ namespace Utsushi.Parsing.OpenXml
 
             if (presetValue is null || !SupportedShapePresets.TryGetValue(presetValue.Value, out var preset))
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    var presetDescription = presetValue is null ? "(prstGeomなし/custGeom)" : presetValue.Value.ToString();
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形のプリセットジオメトリ '{presetDescription}' には対応していません。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "UnsupportedShapePreset",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = UnsupportedPresetRejection(presetValue);
                 return null;
             }
@@ -1527,16 +1443,6 @@ namespace Utsushi.Parsing.OpenXml
 
             if (textTooLong)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形のテキストが上限({MaxShapeTextLength}文字)を超えています。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "ShapeTextTooLong",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = ShapeTextTooLongRejection;
                 return null;
             }
@@ -1565,16 +1471,6 @@ namespace Utsushi.Parsing.OpenXml
             rejection = null;
             if (shapeCount >= MaxShapesPerSheet)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "TooManyShapes",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = TooManyShapesRejection;
                 return null;
             }
@@ -1585,17 +1481,6 @@ namespace Utsushi.Parsing.OpenXml
 
             if (presetValue is null || !SupportedConnectorPresets.TryGetValue(presetValue.Value, out var preset))
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    var presetDescription = presetValue is null ? "(prstGeomなし/custGeom)" : presetValue.Value.ToString();
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の接続線のプリセットジオメトリ '{presetDescription}' には対応していません。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "UnsupportedShapePreset",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = UnsupportedPresetRejection(presetValue);
                 return null;
             }
@@ -1641,16 +1526,6 @@ namespace Utsushi.Parsing.OpenXml
             rejection = null;
             if (shapeCount >= MaxShapesPerSheet)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "TooManyShapes",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = TooManyShapesRejection;
                 return null;
             }
@@ -1677,7 +1552,7 @@ namespace Utsushi.Parsing.OpenXml
                 sheetName, drawingsPart, group, colors, options, ref shapeCount, ref imageCount, currentGroupDepth: 1, out rejection);
             if (children is null)
             {
-                // Ignoreモードで内部に非対応要素があった場合。グループの一部だけを描画すると
+                // 内部に出力できない要素があった場合。グループの一部だけを描画すると
                 // 意図しない見た目になるため、グループ全体を破棄する(要件10.10)。
                 return null;
             }
@@ -1687,16 +1562,6 @@ namespace Utsushi.Parsing.OpenXml
             // グループ自身の分の加算で上限をわずかに超過しうる)。
             if (shapeCount >= MaxShapesPerSheet)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "TooManyShapes",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = TooManyShapesRejection;
                 return null;
             }
@@ -1714,8 +1579,8 @@ namespace Utsushi.Parsing.OpenXml
         /// グループ(<see cref="Xdr.GroupShape"/>)直下の子要素(<c>xdr:sp</c>/<c>xdr:pic</c>/
         /// <c>xdr:cxnSp</c>/入れ子の<c>xdr:grpSp</c>)を出現順に<see cref="GroupChildModel"/>へ
         /// 変換する(要件10.10)。子孫のいずれか1つでも非対応(非対応プリセット・非対応の
-        /// 描画オブジェクト種別・上限超過・ネスト過多)であれば、Errorモードは即座に例外を送出し、
-        /// Ignoreモードは<c>null</c>を返してグループ全体を呼び出し元に破棄させる。
+        /// 描画オブジェクト種別・上限超過・ネスト過多・位置の破損)であれば、<c>null</c>と理由を返して
+        /// グループ全体を呼び出し元に破棄させる(記録は呼び出し元が行う)。
         /// </summary>
         private static IReadOnlyList<GroupChildModel>? ReadGroupChildren(
             string sheetName,
@@ -1754,18 +1619,7 @@ namespace Utsushi.Parsing.OpenXml
 
                 if (child is null)
                 {
-                    if (!isSupportedChildType && options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                    {
-                        throw new UnsupportedWorkbookElementException(
-                            $"シート '{sheetName}' のグループ内に非対応の描画オブジェクト(図表枠等)が含まれています。"
-                            + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                            "UnsupportedShapePreset",
-                            options.ReportCode,
-                            sheetName);
-                    }
-
-                    // 個別の子要素側でErrorモードならすでに例外を送出済み。ここに到達するのは
-                    // Ignoreモードでの非対応(非対応の型/プリセット/上限超過等)であり、グループ全体を破棄する。
+                    // 非対応(非対応の型/プリセット/上限超過/位置の破損等)の子要素があるため、グループ全体を破棄する。
                     rejection = GroupRejection(isSupportedChildType ? childRejection : null, element);
                     return null;
                 }
@@ -1783,16 +1637,6 @@ namespace Utsushi.Parsing.OpenXml
             rejection = null;
             if (shapeCount >= MaxShapesPerSheet)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "TooManyShapes",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = TooManyShapesRejection;
                 return null;
             }
@@ -1803,17 +1647,6 @@ namespace Utsushi.Parsing.OpenXml
 
             if (presetValue is null || !SupportedShapePresets.TryGetValue(presetValue.Value, out var preset))
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    var presetDescription = presetValue is null ? "(prstGeomなし/custGeom)" : presetValue.Value.ToString();
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' のグループ内図形のプリセットジオメトリ '{presetDescription}' には対応していません。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "UnsupportedShapePreset",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = UnsupportedPresetRejection(presetValue);
                 return null;
             }
@@ -1832,16 +1665,6 @@ namespace Utsushi.Parsing.OpenXml
 
             if (textTooLong)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' のグループ内図形のテキストが上限({MaxShapeTextLength}文字)を超えています。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "ShapeTextTooLong",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = ShapeTextTooLongRejection;
                 return null;
             }
@@ -1862,16 +1685,6 @@ namespace Utsushi.Parsing.OpenXml
             rejection = null;
             if (imageCount >= MaxImagesPerSheet)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の画像の数が上限({MaxImagesPerSheet}枚)を超えています。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "TooManyImages",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = TooManyImagesRejection;
                 return null;
             }
@@ -1903,16 +1716,6 @@ namespace Utsushi.Parsing.OpenXml
             rejection = null;
             if (shapeCount >= MaxShapesPerSheet)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "TooManyShapes",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = TooManyShapesRejection;
                 return null;
             }
@@ -1923,17 +1726,6 @@ namespace Utsushi.Parsing.OpenXml
 
             if (presetValue is null || !SupportedConnectorPresets.TryGetValue(presetValue.Value, out var preset))
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    var presetDescription = presetValue is null ? "(prstGeomなし/custGeom)" : presetValue.Value.ToString();
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' のグループ内接続線のプリセットジオメトリ '{presetDescription}' には対応していません。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "UnsupportedShapePreset",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = UnsupportedPresetRejection(presetValue);
                 return null;
             }
@@ -1980,32 +1772,12 @@ namespace Utsushi.Parsing.OpenXml
             rejection = null;
             if (depth > MaxShapeNestingDepth)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' のグループのネストが上限({MaxShapeNestingDepth}段)を超えています。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "GroupNestingTooDeep",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = GroupNestingTooDeepRejection;
                 return null;
             }
 
             if (shapeCount >= MaxShapesPerSheet)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を超えています。"
-                        + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "TooManyShapes",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = TooManyShapesRejection;
                 return null;
             }
@@ -2031,16 +1803,6 @@ namespace Utsushi.Parsing.OpenXml
             // 数える前に改めて上限を確認する(code-reviewer指摘)。
             if (shapeCount >= MaxShapesPerSheet)
             {
-                if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
-                {
-                    throw new UnsupportedWorkbookElementException(
-                        $"シート '{sheetName}' の図形・接続線・グループの数が上限({MaxShapesPerSheet}個)を"
-                        + "超えています。帳票定義の unsupportedElements が 'error' のため中止します。",
-                        "TooManyShapes",
-                        options.ReportCode,
-                        sheetName);
-                }
-
                 rejection = TooManyShapesRejection;
                 return null;
             }
@@ -2811,92 +2573,21 @@ namespace Utsushi.Parsing.OpenXml
         }
 
         /// <summary>
-        /// ブック全体に対するサポート外要素(外部参照)を検出する。要件1.5。
+        /// ブック全体に対する未対応要素(外部参照)を記録する(excel2pdf-consolidation 要件2.7(f))。
         /// </summary>
-        private static void DetectUnsupportedWorkbookElements(
-            WorkbookPart workbookPart, WorkbookReadOptions options, UnsupportedElementCollector unsupported)
+        private static void DetectUnsupportedWorkbookElements(WorkbookPart workbookPart, UnsupportedElementCollector unsupported)
         {
             if (!workbookPart.ExternalWorkbookParts.Any())
             {
                 return;
             }
 
-            if (options.UnsupportedElementBehavior != UnsupportedElementBehavior.Error)
-            {
-                unsupported.Add(
-                    UnsupportedElementKind.ExternalReference,
-                    null,
-                    null,
-                    null,
-                    "ブックに外部のブックへの参照が含まれています。表示する値は保存時の計算結果のままで、参照先の変更は反映されません。");
-                return;
-            }
-
-            throw new UnsupportedWorkbookElementException(
-                "ブックに外部ブックへの参照(external reference)が含まれています。"
-                + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                "ExternalReference",
-                options.ReportCode);
-        }
-
-        /// <summary>
-        /// シート単位のサポート外要素(図形・グラフ)を検出する。要件1.5。
-        /// </summary>
-        private static void DetectUnsupportedElements(
-            string sheetName,
-            WorksheetPart worksheetPart,
-            X.Worksheet worksheet,
-            WorkbookReadOptions options,
-            UnsupportedElementCollector unsupported)
-        {
-            if (options.UnsupportedElementBehavior != UnsupportedElementBehavior.Error)
-            {
-                // エラーの側の判定の順序・種類(ElementKind)は変えずに残し、無視の側だけアンカーごとに記録する
-                // (excel2pdf-consolidation design.md 9。扱いの指定はタスク2.8で外す)。
-                RecordUnsupportedDrawingElements(sheetName, worksheetPart, worksheet, unsupported);
-                return;
-            }
-
-            var drawingsPart = worksheetPart.DrawingsPart;
-            if (drawingsPart is not null && drawingsPart.ChartParts.Any())
-            {
-                throw new UnsupportedWorkbookElementException(
-                    $"シート '{sheetName}' にグラフ(chart)が含まれています。帳票定義の unsupportedElements が 'error' のため中止します。",
-                    "Chart",
-                    options.ReportCode,
-                    sheetName);
-            }
-
-            // 画像(xdr:pic)は要件9として、シェイプ(xdr:sp)・接続線(xdr:cxnSp)・グループ(xdr:grpSp)は
-            // 要件10として常に読み取り対象とするため、ここでは対象外とする(ReadDrawingObjectsが担う)。
-            // これら4種の判定は構造的なもの(要素の種類がこの4種かどうか)で、プリセットが
-            // 対応済みかどうかは問わない(非対応プリセットはReadShape/ReadConnectorが個別に
-            // UnsupportedShapePresetとして検出する。グループ内部の非対応要素はReadGroupShapeが
-            // 再帰的に検出しグループ全体を拒否する。要件10.10)。
-            // 上記4種のいずれでもない描画オブジェクト(図表枠xdr:graphicFrame等)が1つでもあれば
-            // 引き続きサポート外要素とする。drawingsPartが解決できないのに<drawing>参照だけが
-            // ある場合は中身を判定できないため、従来どおり保守的にサポート外として扱う。
-            var hasUnsupportedDrawingObject = drawingsPart is not null
-                ? HasUnsupportedDrawingObject(drawingsPart)
-                : worksheet.GetFirstChild<X.Drawing>() is not null;
-
-            if (hasUnsupportedDrawingObject)
-            {
-                throw new UnsupportedWorkbookElementException(
-                    $"シート '{sheetName}' に図形/画像(drawing)が含まれています。帳票定義の unsupportedElements が 'error' のため中止します。",
-                    "Drawing",
-                    options.ReportCode,
-                    sheetName);
-            }
-
-            if (worksheet.GetFirstChild<X.LegacyDrawing>() is not null)
-            {
-                throw new UnsupportedWorkbookElementException(
-                    $"シート '{sheetName}' にコメント等のレガシー図形が含まれています。帳票定義の unsupportedElements が 'error' のため中止します。",
-                    "LegacyDrawing",
-                    options.ReportCode,
-                    sheetName);
-            }
+            unsupported.Add(
+                UnsupportedElementKind.ExternalReference,
+                null,
+                null,
+                null,
+                "ブックに外部のブックへの参照が含まれています。表示する値は保存時の計算結果のままで、参照先の変更は反映されません。");
         }
 
         /// <summary>
@@ -3009,47 +2700,6 @@ namespace Utsushi.Parsing.OpenXml
                 anchorCell,
                 frame?.Graphic?.GraphicData?.Uri?.Value ?? element?.LocalName,
                 "対応していない描画オブジェクト(図表枠など)は出力されません。");
-        }
-
-        /// <summary>
-        /// <paramref name="drawingsPart"/> 内のアンカーに、画像(<c>xdr:pic</c>)・シェイプ
-        /// (<c>xdr:sp</c>)・接続線(<c>xdr:cxnSp</c>)・グループ(<c>xdr:grpSp</c>)以外の
-        /// 描画オブジェクト(図表枠・絶対座標アンカー等)が1つでも含まれるかどうかを判定する
-        /// (要件9.5, 10.7)。この4種の判定は構造的なもので、プリセットジオメトリが対応済みか
-        /// どうかは問わない(非対応プリセットは<see cref="ReadShape"/>/<see cref="ReadConnector"/>
-        /// が個別に検出し、グループ内部の非対応要素は<see cref="ReadGroupShape"/>が再帰的に検出する)。
-        /// </summary>
-        private static bool HasUnsupportedDrawingObject(DrawingsPart drawingsPart)
-        {
-            var drawing = drawingsPart.WorksheetDrawing;
-            if (drawing is null)
-            {
-                return false;
-            }
-
-            foreach (var anchor in drawing.ChildElements)
-            {
-                var isSupportedDrawingObjectType = anchor switch
-                {
-                    Xdr.TwoCellAnchor two => two.GetFirstChild<Xdr.Picture>() is not null
-                        || two.GetFirstChild<Xdr.Shape>() is not null
-                        || two.GetFirstChild<Xdr.ConnectionShape>() is not null
-                        || two.GetFirstChild<Xdr.GroupShape>() is not null,
-                    Xdr.OneCellAnchor one => one.GetFirstChild<Xdr.Picture>() is not null
-                        || one.GetFirstChild<Xdr.Shape>() is not null
-                        || one.GetFirstChild<Xdr.ConnectionShape>() is not null
-                        || one.GetFirstChild<Xdr.GroupShape>() is not null,
-                    // AbsoluteAnchor(絶対座標配置)は要件9.1/9.2/10.1の対象外のため、対応済み種別でもサポート外として扱う。
-                    _ => false,
-                };
-
-                if (!isSupportedDrawingObjectType)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private static List<string> ReadSharedStrings(WorkbookPart workbookPart, string? reportCode) =>

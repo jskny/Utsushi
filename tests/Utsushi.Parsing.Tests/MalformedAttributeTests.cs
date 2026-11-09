@@ -110,7 +110,7 @@ namespace Utsushi.Parsing.Tests
 
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, ReportCode: "report")));
+                    () => _reader.ReadStrict(stream, new WorkbookReadOptions(ReportCode: "report")));
                 Assert.Equal(InvalidExcelFileReason.Corrupted, ex.Reason);
             }
             finally

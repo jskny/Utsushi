@@ -139,11 +139,11 @@ namespace Utsushi.Parsing.Tests
             var path = ImageWorkbookFixtures.CreateWithPicture("image/x-emf", ImageWorkbookFixtures.TinyPng());
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("UnsupportedImageFormat", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedImageFormat);
                 Assert.Equal(ProcessingStage.Parsing, ex.Stage);
             }
             finally
@@ -160,10 +160,10 @@ namespace Utsushi.Parsing.Tests
             var path = ImageWorkbookFixtures.CreateWithPicture("image/png", ImageWorkbookFixtures.TinyPng());
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<ImageModel>().ToList());
             }
             finally
@@ -180,10 +180,10 @@ namespace Utsushi.Parsing.Tests
             var path = ImageWorkbookFixtures.CreateWithConnectionShape();
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 var connector = Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<ConnectorModel>().ToList());
                 Assert.Equal(ConnectorPresetType.Straight, connector.Preset);
             }
@@ -216,11 +216,11 @@ namespace Utsushi.Parsing.Tests
             var path = ImageWorkbookFixtures.CreateWithPicture("image/png", new byte[] { 0x00, 0x01, 0x02, 0x03 });
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("UnsupportedImageFormat", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedImageFormat);
             }
             finally
             {
@@ -249,11 +249,11 @@ namespace Utsushi.Parsing.Tests
             var path = ImageWorkbookFixtures.CreateWithManyPictures(OpenXmlWorkbookReader.MaxImagesPerSheet + 5);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("TooManyImages", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.LimitExceeded, "TooManyImages");
             }
             finally
             {
@@ -307,8 +307,8 @@ namespace Utsushi.Parsing.Tests
             {
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<UnsupportedWorkbookElementException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error)));
-                Assert.Equal("UnsupportedImageFormat", ex.ElementKind);
+                    () => _reader.ReadStrict(stream, WorkbookReadOptions.Default));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedImageFormat);
             }
             finally
             {

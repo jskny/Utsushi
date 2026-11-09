@@ -162,7 +162,7 @@ namespace Utsushi.Parsing.Tests
 
                 using var stream = File.OpenRead(path);
                 var errorEx = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, ReportCode: "report")));
+                    () => _reader.ReadStrict(stream, new WorkbookReadOptions(ReportCode: "report")));
                 Assert.Equal(InvalidExcelFileReason.TooLarge, errorEx.Reason);
                 Assert.Equal("report", errorEx.ReportCode);
             }
@@ -184,8 +184,8 @@ namespace Utsushi.Parsing.Tests
                 using (var stream = File.OpenRead(path))
                 {
                     var ex = Assert.Throws<UnsupportedWorkbookElementException>(
-                        () => _reader.Read(stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error)));
-                    Assert.Equal("GroupNestingTooDeep", ex.ElementKind);
+                        () => _reader.ReadStrict(stream, WorkbookReadOptions.Default));
+                    StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedGroupChild, "GroupNestingTooDeep");
                 }
 
                 // Ignore ならグループ全体が破棄され、読み取り自体は成功する。
@@ -536,12 +536,12 @@ namespace Utsushi.Parsing.Tests
             {
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<UnsupportedWorkbookElementException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, ReportCode: "report")));
+                    () => _reader.ReadStrict(stream, new WorkbookReadOptions(ReportCode: "report")));
 
-                Assert.Equal("MissingImagePart", ex.ElementKind);
+                var element = StrictReading.AssertContains(ex, UnsupportedElementKind.MissingImagePart);
                 Assert.Equal(ProcessingStage.Parsing, ex.Stage);
                 Assert.Equal("report", ex.ReportCode);
-                Assert.Equal("テストシート", ex.SheetName);
+                Assert.Equal("テストシート", element.SheetName);
             }
             finally
             {
