@@ -17,8 +17,7 @@ namespace Utsushi.SampleGenerator
 /// 開発とゴールデンテストの対象とする。
 /// </para>
 /// <para>
-/// 生成するのは <c>template.xlsx</c> のみで、<c>definition.json</c>(帳票定義)は
-/// 人が編集するデータとしてリポジトリに直接コミットしている。
+/// 生成するのは <c>template.xlsx</c> だけである。書き込むセルのはみ出しの扱いは、セルの書式(縮小・折り返し)で表す。
 /// </para>
 /// <para>
 /// 実行方法:

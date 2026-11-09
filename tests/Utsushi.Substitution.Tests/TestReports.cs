@@ -10,14 +10,7 @@ namespace Utsushi.Substitution.Tests
     internal static class TestReports
     {
         public static ReportDefinition Definition() =>
-            new(
-                ReportCode: "test-report",
-                SheetName: "テストシート",
-                SubstitutionFields: Array.Empty<SubstitutionFieldDefinition>(),
-                ToleranceMm: ReportDefinition.DefaultToleranceMm,
-                UnsupportedElements: UnsupportedElementPolicy.Ignore,
-                MaxDigitWidthPx: ReportDefinition.DefaultMaxDigitWidthPx,
-                PrintAreaOverride: null);
+            new(ReportCode: "test-report", SheetName: "テストシート", MaxDigitWidthPx: ReportDefinition.DefaultMaxDigitWidthPx);
 
         /// <summary>指定セルに値と書式を持つシートを作る。</summary>
         public static SheetModel Sheet(params (string Cell, string? Value, CellStyle? Style)[] cells)

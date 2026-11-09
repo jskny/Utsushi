@@ -151,7 +151,7 @@
 - [x] 8.4 Layout: `ValidateRequiredFieldsAreInPrintRanges`・`FindSubstitutionKey`・`OverflowByCell`・`PrintAreaOverride`・`FitIssue.SubstitutionKey`・`FitCheckResult` を削除する
       (`OverflowBehavior` は Layout の internal の列挙に移す。ゴールデンの `key=` の列が無くなる)。定義の `overflow` で確かめていた Layout のテストを、セルの書式に書き換えるか削除する
   - _Requirements: 1.3_
-- [ ] 8.5 ReportDefinition: JSONの読み込み・リポジトリ・置換キーの定義・`ReportDefinition.UnsupportedElements` と旧い `UnsupportedElementPolicy`・
+- [x] 8.5 ReportDefinition: JSONの読み込み・リポジトリ・置換キーの定義・`ReportDefinition.UnsupportedElements` と旧い `UnsupportedElementPolicy`・
       `ReportModelBuilder` の置換キー・印刷範囲の上書きの検証を削除する。`samples/**/definition.json` と、`tests/Utsushi.ReportDefinition.Tests` の JSON・リポジトリ・`FieldIndexCacheTests` を削除する
   - _Requirements: 1.5_
 - [ ] 8.6 Core: 帳票定義・置換キーの例外と `ProcessingStage.ReportDefinition` を削除する(`ReportModelBuilder` のシートの不在は `InvalidOperationException` にする)

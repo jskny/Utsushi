@@ -44,23 +44,22 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void 必須の置換フィールドが印刷タイトルの行を指す場合はエラーにならない()
+        public void 書き込んだセルが印刷タイトルの行にあればエラーにならない()
         {
             // 印刷タイトルの行/列は印刷範囲の外でも各ページに出力されるため(要件3.4)、
-            // 必須フィールドがタイトル行を指していても値は出力される。誤検知してはならない。
+            // 書き込んだセルがタイトル行にあっても値は出力される。誤検知してはならない。
             var sheet = UniformSheet(
                 rows: 20, columns: 1, rowHeightPt: 100.0,
                 pageSetup: NoMarginA4(
                     printAreas: new[] { CellRange.Parse("A5:A20") },
                     printTitles: new PrintTitles(1, 2, null, null)));
 
-            var definition = Definition(fields: new[]
+            var report = ReportModel.Create(Definition(), sheet) with
             {
-            new SubstitutionFieldDefinition("TitleField", new CellAddress(1, 1), Required: true, Overflow: null),
-        });
+                SubstitutedCells = new HashSet<CellAddress> { new(1, 1) },
+            };
 
-            // 例外にならないこと(以前は印刷タイトルを考慮せず誤って例外になっていた)
-            var layout = Compute(sheet, definition);
+            var layout = _engine.Compute(report);
             Assert.True(layout.PageCount > 0);
         }
 
