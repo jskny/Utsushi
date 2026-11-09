@@ -50,6 +50,25 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
+        public void 注文書の分数と指数の表示形式を返し書き込んだ数値で求め直す()
+        {
+            var result = Check("edge-order-form");
+            Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.NumberFormat
+                && a.Location == CellRange.Parse("F27:F27") && a.Detail == "# ?/?");
+            Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.NumberFormat
+                && a.Location == CellRange.Parse("G27:G27"));
+
+            using var pdf = new Excel2Pdf(Template("edge-order-form"), new Excel2PdfOptions { Fonts = FontResolverOptions.AllowFallback() });
+            pdf.SetText("F27", "文字列");
+            Assert.DoesNotContain(pdf.Check().FormatApproximations,
+                a => a.Kind == FormatApproximationKind.NumberFormat && a.Location == CellRange.Parse("F27:F27"));
+
+            pdf.SetValue("F27", 0.25);
+            Assert.Contains(pdf.Check().FormatApproximations,
+                a => a.Kind == FormatApproximationKind.NumberFormat && a.Location == CellRange.Parse("F27:F27"));
+        }
+
+        [Fact]
         public void 工程表の90度回転した日付見出しを返す()
         {
             var result = Check("edge-schedule");

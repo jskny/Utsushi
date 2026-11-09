@@ -533,10 +533,11 @@ namespace Utsushi.Parsing.OpenXml
             // 型指定なし = 数値
             if (double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
             {
-                var formatted = NumberFormatter.FormatNumber(number, style.NumberFormat);
+                var formatted = NumberFormatter.FormatNumber(number, style.NumberFormat, out var fellBack);
                 return new CellModel(rawValue, CellValueKind.Number, style, formatted, hasFormula)
                 {
                     FormatColor = NumberFormatter.ResolveColor(number, style.NumberFormat),
+                    NumberFormatFellBack = fellBack,
                 };
             }
 

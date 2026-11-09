@@ -1541,6 +1541,17 @@ namespace Utsushi.Layout
                     style.TextRotation == 255 ? "縦書きは横書きで描きます。" : "文字の回転は、回転せずに横書きで描きます。");
             }
 
+            if (cell.NumberFormatFellBack)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.NumberFormat,
+                    sheet,
+                    location,
+                    null,
+                    style.NumberFormat,
+                    "表示形式を解釈できない、または表示形式で表せない値のため、標準の表示形式で表示します。");
+            }
+
             if (cell.HasRichText)
             {
                 _approximations.Add(

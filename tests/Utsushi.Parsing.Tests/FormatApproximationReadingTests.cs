@@ -119,6 +119,21 @@ namespace Utsushi.Parsing.Tests
             }
         }
 
+        [Theory]
+        [InlineData("# ?/?", 0.5, true)]
+        [InlineData("0.00E+00", 12345678.0, true)]
+        [InlineData("[h]:mm", -0.5, true)]
+        [InlineData("@", 1.0, false)]
+        [InlineData("#,##0", 1234.0, false)]
+        [InlineData(null, 1.0, false)]
+        public void 表示形式で表示できず標準にした場合を区別する(string? format, double value, bool expected)
+        {
+            var result = NumberFormatting.FormatWithFallback(value, format);
+
+            Assert.Equal(expected, result.FellBackToGeneral);
+            Assert.Equal(NumberFormatting.Format(value, format), result.Text);
+        }
+
         [Fact]
         public void セルの文字の回転を読み取る()
         {

@@ -149,10 +149,8 @@ namespace Utsushi.Substitution
                 var address = CellAddress.Parse(addressText);
                 var cell = cells[address];
                 var format = cell.Style.NumberFormat;
-                cells[address] = cell.WithNumber(
-                    asText[addressText],
-                    Parsing.NumberFormatting.Format(value, format),
-                    Parsing.NumberFormatting.ResolveColor(value, format));
+                var formatted = Parsing.NumberFormatting.FormatWithFallback(value, format);
+                cells[address] = cell.WithNumber(asText[addressText], formatted.Text, formatted.Color, formatted.FellBackToGeneral);
             }
 
             return overridden with { Sheet = sheet with { Cells = cells } };

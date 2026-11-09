@@ -18,5 +18,23 @@ namespace Utsushi.Parsing
         /// <param name="value">数値。</param>
         /// <param name="formatCode">数値書式。</param>
         public static ArgbColor? ResolveColor(double value, string? formatCode) => NumberFormatter.ResolveColor(value, formatCode);
+
+        /// <summary>
+        /// 数値に書式を適用した表示文字列・色と、書式を解釈できない(または書式で表せない値の)ために標準の表示にしたかどうかを返す
+        /// (excel2pdf-consolidation 要件7.2(e))。<see cref="Format"/>・<see cref="ResolveColor"/> と同じ規則。
+        /// </summary>
+        /// <param name="value">数値。</param>
+        /// <param name="formatCode">数値書式。</param>
+        public static NumberFormatResult FormatWithFallback(double value, string? formatCode)
+        {
+            var text = NumberFormatter.FormatNumber(value, formatCode, out var fellBack);
+            return new NumberFormatResult(text, NumberFormatter.ResolveColor(value, formatCode), fellBack);
+        }
     }
+
+    /// <summary>数値に書式を適用した結果。</summary>
+    /// <param name="Text">表示文字列。</param>
+    /// <param name="Color">色の指定。無ければ null。</param>
+    /// <param name="FellBackToGeneral">書式を解釈できない、または書式で表せない値のため、標準の表示にしたかどうか。</param>
+    public sealed record NumberFormatResult(string Text, ArgbColor? Color, bool FellBackToGeneral);
 }

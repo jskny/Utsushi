@@ -24,6 +24,9 @@ namespace Utsushi.Parsing.OpenXml
         private readonly int _percentCount;
         private readonly double _scaleDivisor;
         private readonly bool _supported;
+
+        /// <summary>解釈できる書式かどうか(指数・分数は解釈せず、標準に近い表示にする)。</summary>
+        internal bool IsSupported => _supported;
         private readonly bool _literalOnly;
 
         private NumericSection(

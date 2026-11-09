@@ -130,8 +130,16 @@ namespace Utsushi.Parsing.OpenXml
         /// </summary>
         /// <param name="value">セルの生の数値。</param>
         /// <param name="formatCode">数値書式文字列。null / "General" の場合は既定表記。</param>
-        public static string FormatNumber(double value, string? formatCode)
+        public static string FormatNumber(double value, string? formatCode) => FormatNumber(value, formatCode, out _);
+
+        /// <summary>
+        /// <see cref="FormatNumber(double, string?)"/> と同じ。<paramref name="fellBackToGeneral"/> は、書式を解釈できない、または書式で表せない値
+        /// (負の経過時間・明治より前の和暦など)のために標準の表示にしたかどうか(excel2pdf-consolidation 要件7.2(e))。
+        /// 標準の書式と、<c>@</c> だけの書式(Excel と同じ表示になる)では false。
+        /// </summary>
+        public static string FormatNumber(double value, string? formatCode, out bool fellBackToGeneral)
         {
+            fellBackToGeneral = false;
             if (string.IsNullOrWhiteSpace(formatCode) || IsGeneral(formatCode!))
             {
                 return FormatGeneral(value);
@@ -146,7 +154,15 @@ namespace Utsushi.Parsing.OpenXml
             }
 
             // 解釈できない書式は General 相当にフォールバックする。
-            return TryFormatSection(value, parsed, section, out var text) ? text : FormatGeneral(value);
+            if (TryFormatSection(value, parsed, section, out var text))
+            {
+                // 指数・分数など解釈できない数値の書式は、例外にせず標準に近い表示を返すため、ここで区別する。
+                fellBackToGeneral = section.Numeric is { IsSupported: false };
+                return text;
+            }
+
+            fellBackToGeneral = true;
+            return FormatGeneral(value);
         }
 
         /// <summary>選んだセクションで書式を適用する。解釈できない書式・書式で表せない値なら false。</summary>
