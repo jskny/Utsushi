@@ -305,17 +305,32 @@ namespace Utsushi.Layout
             var location = new CellRange(anchor.Row, anchor.Column, anchor.Row, anchor.Column);
             switch (drawingObject)
             {
+                case ImageModel image:
+                    RecordImageApproximations(
+                        image.FlipHorizontal || image.FlipVertical,
+                        image.RotationDegrees,
+                        location,
+                        DrawingIdentity(image.Id, ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                    break;
                 case ShapeModel shape:
                     RecordShapeApproximations(
                         shape.Text, shape.FillApproximation, location, DrawingIdentity(shape.Id, ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture)));
                     break;
                 case GroupShapeModel group:
-                    RecordGroupChildApproximations(group.Children, location, ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    RecordGroupChildApproximations(
+                        group.Children,
+                        location,
+                        ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        group.RotationDegrees,
+                        group.FlipHorizontal || group.FlipVertical);
                     break;
             }
         }
 
-        private void RecordGroupChildApproximations(IReadOnlyList<GroupChildModel> children, CellRange location, string path)
+        /// <param name="rotationDegrees">外側のグループの回転の合計(グループの中の画像の実効の回転角の判定に使う)。</param>
+        /// <param name="flipped">外側のグループのいずれかが反転しているかどうか。</param>
+        private void RecordGroupChildApproximations(
+            IReadOnlyList<GroupChildModel> children, CellRange location, string path, double rotationDegrees, bool flipped)
         {
             for (var i = 0; i < children.Count; i++)
             {
@@ -325,10 +340,52 @@ namespace Utsushi.Layout
                     case GroupChildShape shape:
                         RecordShapeApproximations(shape.Text, shape.FillApproximation, location, DrawingIdentity(shape.Id, childPath));
                         break;
+                    case GroupChildImage image:
+                        RecordImageApproximations(
+                            flipped || image.FlipHorizontal || image.FlipVertical,
+                            rotationDegrees + image.RotationDegrees,
+                            location,
+                            DrawingIdentity(image.Id, childPath));
+                        break;
                     case GroupChildGroup nested:
-                        RecordGroupChildApproximations(nested.Children, location, childPath);
+                        RecordGroupChildApproximations(
+                            nested.Children,
+                            location,
+                            childPath,
+                            rotationDegrees + nested.RotationDegrees,
+                            flipped || nested.FlipHorizontal || nested.FlipVertical);
                         break;
                 }
+            }
+        }
+
+        /// <summary>
+        /// 画像の反転と、45〜135度・225〜315度の回転を記録する(要件7.2(h))。回転は180度で折り返して判定する
+        /// (Excel がこの範囲で幅と高さを入れ替えて配置するとされるため。実機では未確認)。
+        /// </summary>
+        private void RecordImageApproximations(bool flipped, double rotationDegrees, CellRange location, string identity)
+        {
+            if (flipped)
+            {
+                _approximations!.Add(
+                    FormatApproximationKind.ImageFlip, _sheet.Name, location, identity, null, "画像の反転は再現せず、反転せずに描きます。");
+            }
+
+            var folded = rotationDegrees % 180.0;
+            if (folded < 0)
+            {
+                folded += 180.0;
+            }
+
+            if (folded >= 45.0 && folded <= 135.0)
+            {
+                _approximations!.Add(
+                    FormatApproximationKind.ImageRotation,
+                    _sheet.Name,
+                    location,
+                    identity,
+                    "rot=" + rotationDegrees.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+                    "45〜135度(225〜315度)回転した画像は、位置・大きさがExcelとずれることがあります。");
             }
         }
 

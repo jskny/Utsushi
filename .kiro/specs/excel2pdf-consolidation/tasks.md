@@ -104,7 +104,7 @@
   - _Requirements: 7.2, 7.3, 7.4_
 - [x] 5.10 図形の塗りつぶし・書体: テーマの `fillStyleLst` を読み、`ShapeFill` の印(design.md 3.5 の4つの場合)と `fontRef` の印を載せて記録する。既定のテーマの `fillRef idx=1` には印を付けない
   - _Requirements: 7.2, 7.3_
-- [ ] 5.11 画像: 反転(`flipH`・`flipV`)を `ImageModel`・`GroupChildImage` に読み、`ImageFlip`・`ImageRotation` を記録する(反転したグループの中の画像を含む)
+- [x] 5.11 画像: 反転(`flipH`・`flipV`)を `ImageModel`・`GroupChildImage` に読み、`ImageFlip`・`ImageRotation` を記録する(反転したグループの中の画像を含む)
   - _Requirements: 7.2, 7.3_
 - [ ] 5.12 ヘッダー/フッター: `HeaderFooterCommandBuilder.ScaleRuns` で改行を取り除くときに `MultiLineHeaderFooter` を記録する
   - _Requirements: 7.2_

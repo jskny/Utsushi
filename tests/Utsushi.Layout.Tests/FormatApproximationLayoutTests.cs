@@ -114,6 +114,56 @@ namespace Utsushi.Layout.Tests
             Assert.All(fills, f => Assert.Equal("patternType=DarkTrellis", f.Detail));
         }
 
+        private static ImageModel Image(uint id, double rotation, bool flip = false) =>
+            new(id, new byte[] { 1 }, "image/png", rotation, CellAddress.Parse("B2"), new PointPt(0, 0), new FixedAnchorExtent(20.0, 10.0))
+            {
+                FlipHorizontal = flip,
+            };
+
+        [Theory]
+        [InlineData(90.0, true)]
+        [InlineData(45.0, true)]
+        [InlineData(270.0, true)]
+        [InlineData(-90.0, true)]
+        [InlineData(30.0, false)]
+        [InlineData(200.0, false)]
+        public void 回転角を180度で折り返して45度から135度の画像を記録する(double rotation, bool expected)
+        {
+            var sheet = Sheet() with { DrawingObjects = new DrawingObjectModel[] { Image(5, rotation) } };
+
+            var recorded = Compute(sheet).FormatApproximations.Any(a => a.Kind == FormatApproximationKind.ImageRotation);
+
+            Assert.Equal(expected, recorded);
+        }
+
+        [Fact]
+        public void 反転した画像と同じアンカーの別の画像をそれぞれ記録する()
+        {
+            var sheet = Sheet() with { DrawingObjects = new DrawingObjectModel[] { Image(5, 0, flip: true), Image(6, 0, flip: true) } };
+
+            var flips = Compute(sheet).FormatApproximations.Where(a => a.Kind == FormatApproximationKind.ImageFlip).ToList();
+
+            Assert.Equal(2, flips.Count);
+            Assert.All(flips, f => Assert.Equal(CellRange.Parse("B2:B2"), f.Location));
+        }
+
+        [Fact]
+        public void グループの中の画像はグループの回転を足した角度と反転で判定する()
+        {
+            var child = new GroupChildImage(9, new RectPt(0, 0, 10, 10), new byte[] { 1 }, "image/png", 30.0);
+            var group = new GroupShapeModel(
+                2, new PointPt(0, 0), new PointPt(10, 10), new GroupChildModel[] { child }, 60.0,
+                CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(20.0, 20.0),
+                FlipHorizontal: true);
+            var sheet = Sheet() with { DrawingObjects = new DrawingObjectModel[] { group } };
+
+            var layout = Compute(sheet);
+
+            Assert.Equal(CellRange.Parse("A1:A1"), Single(layout, FormatApproximationKind.ImageRotation).Location);
+            Assert.Equal("rot=90", Single(layout, FormatApproximationKind.ImageRotation).Detail);
+            Assert.NotNull(Single(layout, FormatApproximationKind.ImageFlip));
+        }
+
         [Fact]
         public void 印刷範囲の外のセルは記録しない()
         {

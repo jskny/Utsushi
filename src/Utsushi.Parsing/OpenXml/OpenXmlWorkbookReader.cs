@@ -1416,7 +1416,11 @@ namespace Utsushi.Parsing.OpenXml
             var id = ReadShapeId(picture.NonVisualPictureProperties?.NonVisualDrawingProperties);
             var rotationDegrees = (picture.ShapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
 
-            return new ImageModel(id, data, contentType, rotationDegrees, anchorCell, anchorOffset, extent);
+            return new ImageModel(id, data, contentType, rotationDegrees, anchorCell, anchorOffset, extent)
+            {
+                FlipHorizontal = picture.ShapeProperties?.Transform2D?.HorizontalFlip?.Value ?? false,
+                FlipVertical = picture.ShapeProperties?.Transform2D?.VerticalFlip?.Value ?? false,
+            };
         }
 
         /// <summary>
@@ -1833,7 +1837,11 @@ namespace Utsushi.Parsing.OpenXml
             var id = ReadShapeId(picture.NonVisualPictureProperties?.NonVisualDrawingProperties);
             var rotationDegrees = (picture.ShapeProperties?.Transform2D?.Rotation?.Value ?? 0) / 60000.0;
 
-            return new GroupChildImage(id, localRect.Value, data, contentType, rotationDegrees);
+            return new GroupChildImage(id, localRect.Value, data, contentType, rotationDegrees)
+            {
+                FlipHorizontal = picture.ShapeProperties?.Transform2D?.HorizontalFlip?.Value ?? false,
+                FlipVertical = picture.ShapeProperties?.Transform2D?.VerticalFlip?.Value ?? false,
+            };
         }
 
         /// <summary>グループ内の<c>xdr:cxnSp</c>子要素を<see cref="GroupChildConnector"/>として読み取る(要件10.10)。</summary>

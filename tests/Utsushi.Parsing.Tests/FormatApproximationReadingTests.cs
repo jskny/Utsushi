@@ -195,6 +195,28 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 画像の反転を読み取る()
+        {
+            var path = ImageWorkbookFixtures.CreateWithPicture("image/png", ImageWorkbookFixtures.TinyPng(), rotationEmu: 60000);
+            try
+            {
+                SafetyLimitWorkbookFixtures.ModifyEntry(
+                    path,
+                    SafetyLimitWorkbookFixtures.EntryNameEndingWith(path, "drawing1.xml"),
+                    xml => xml.Replace("<a:xfrm ", "<a:xfrm flipH=\"1\" ", System.StringComparison.Ordinal));
+
+                var image = Assert.Single(_reader.ReadFile(path).Sheets[0].DrawingObjects.OfType<ImageModel>());
+
+                Assert.True(image.FlipHorizontal);
+                Assert.False(image.FlipVertical);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void セルの文字の回転を読み取る()
         {
             using var stream = File.OpenRead(Path.Combine(TestPaths.EdgeCaseSamplesRoot, "edge-order-form", "template.xlsx"));
