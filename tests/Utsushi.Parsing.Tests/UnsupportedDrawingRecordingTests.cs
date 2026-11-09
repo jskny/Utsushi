@@ -159,6 +159,108 @@ namespace Utsushi.Parsing.Tests
             Assert.DoesNotContain(workbook.UnsupportedElements, e => e.Kind == UnsupportedElementKind.UnsupportedDrawingObject);
         }
 
+        [Fact]
+        public void 位置の壊れた描画オブジェクトを記録する()
+        {
+            var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.Rectangle);
+            anchor.FromMarker!.Remove();
+            var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
+            try
+            {
+                var element = Assert.Single(_reader.ReadFile(path).UnsupportedElements);
+
+                Assert.Equal(UnsupportedElementKind.MalformedDrawingObject, element.Kind);
+                Assert.Null(element.Anchor);
+                Assert.Equal("from", element.Detail);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 大きさの壊れた図形をアンカーとともに記録する()
+        {
+            var anchor = ShapeWorkbookFixtures.TwoCellShapeAnchor(A.ShapeTypeValues.Rectangle);
+            anchor.ToMarker!.Remove();
+            var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
+            try
+            {
+                var element = Assert.Single(_reader.ReadFile(path).UnsupportedElements);
+
+                Assert.Equal(UnsupportedElementKind.MalformedDrawingObject, element.Kind);
+                Assert.NotNull(element.Anchor);
+                Assert.Equal("extent", element.Detail);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 子の座標系の無いグループを記録する()
+        {
+            var group = ConnectorAndGroupWorkbookFixtures.GroupShapeElement(new DocumentFormat.OpenXml.OpenXmlElement[]
+            {
+                ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(A.ShapeTypeValues.Rectangle, 0, 0, 900000, 900000),
+            });
+            group.GroupShapeProperties!.TransformGroup!.ChildOffset!.Remove();
+            var path = ShapeWorkbookFixtures.CreateWorkbook(ConnectorAndGroupWorkbookFixtures.WrapInOneCellAnchor(group));
+            try
+            {
+                var element = Assert.Single(_reader.ReadFile(path).UnsupportedElements);
+
+                Assert.Equal(UnsupportedElementKind.MalformedDrawingObject, element.Kind);
+                Assert.Equal("chOff/chExt", element.Detail);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 位置の壊れた子要素を含むグループはグループの側で記録する()
+        {
+            var child = ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(A.ShapeTypeValues.Rectangle, 0, 0, 900000, 900000);
+            child.ShapeProperties!.Transform2D!.Remove();
+            var group = ConnectorAndGroupWorkbookFixtures.GroupShapeElement(new DocumentFormat.OpenXml.OpenXmlElement[] { child });
+            var path = ShapeWorkbookFixtures.CreateWorkbook(ConnectorAndGroupWorkbookFixtures.WrapInOneCellAnchor(group));
+            try
+            {
+                var element = Assert.Single(_reader.ReadFile(path).UnsupportedElements);
+
+                Assert.Equal(UnsupportedElementKind.UnsupportedGroupChild, element.Kind);
+                Assert.Equal("MalformedDrawingObject", element.Detail);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 絶対位置の配置は壊れた描画オブジェクトとして重ねて記録しない()
+        {
+            var shape = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.Rectangle).GetFirstChild<Xdr.Shape>()!.CloneNode(true);
+            var absolute = new Xdr.AbsoluteAnchor(
+                new Xdr.Position { X = 0L, Y = 0L },
+                new Xdr.Extent { Cx = 900000L, Cy = 900000L },
+                shape,
+                new Xdr.ClientData());
+            var path = ShapeWorkbookFixtures.CreateWorkbook(absolute);
+            try
+            {
+                Assert.DoesNotContain(_reader.ReadFile(path).UnsupportedElements, e => e.Kind == UnsupportedElementKind.MalformedDrawingObject);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         private static Xdr.GraphicFrame ChartFrame() =>
             new(
                 new Xdr.NonVisualGraphicFrameProperties(

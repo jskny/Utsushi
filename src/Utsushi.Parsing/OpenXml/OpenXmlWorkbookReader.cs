@@ -1050,6 +1050,10 @@ namespace Utsushi.Parsing.OpenXml
         /// </summary>
         private const int MaxGradientStopsPerFill = 64;
 
+        /// <summary>位置・大きさの情報が欠けている・壊れているために読み飛ばす描画オブジェクト(要件2.7(g))。</summary>
+        private static DrawingRejection MalformedRejection(string missing) =>
+            new(UnsupportedElementKind.MalformedDrawingObject, missing, "描画オブジェクトの位置・大きさの情報が壊れているため、出力されません。");
+
         private static readonly DrawingRejection TooManyShapesRejection = DrawingRejection.CountLimit(
             "TooManyShapes", MaxShapesPerSheet, "シートの図形・接続線・グループの数が上限を超えたため、超えた分は出力されません。");
 
@@ -1141,6 +1145,13 @@ namespace Utsushi.Parsing.OpenXml
 
                 if (fromMarker is null || !TryReadMarker(fromMarker, out var anchorCell, out var anchorOffset))
                 {
+                    // absoluteAnchor・mc:AlternateContent などは RecordUnsupportedDrawingElements が記録する。
+                    // ここで記録するのは、セルに固定する配置なのに位置(xdr:from)が壊れているものだけ(重ねて記録しない)。
+                    if (anchor is Xdr.TwoCellAnchor or Xdr.OneCellAnchor)
+                    {
+                        unsupported.Add(MalformedRejection("from"), sheetName, null);
+                    }
+
                     continue;
                 }
 
@@ -1299,6 +1310,7 @@ namespace Utsushi.Parsing.OpenXml
             var extent = ReadAnchorExtent(anchor);
             if (extent is null)
             {
+                rejection = MalformedRejection("extent");
                 return null;
             }
 
@@ -1503,6 +1515,7 @@ namespace Utsushi.Parsing.OpenXml
             var extent = ReadAnchorExtent(anchor);
             if (extent is null)
             {
+                rejection = MalformedRejection("extent");
                 return null;
             }
 
@@ -1590,6 +1603,7 @@ namespace Utsushi.Parsing.OpenXml
             var extent = ReadAnchorExtent(anchor);
             if (extent is null)
             {
+                rejection = MalformedRejection("extent");
                 return null;
             }
 
@@ -1644,6 +1658,7 @@ namespace Utsushi.Parsing.OpenXml
             var extent = ReadAnchorExtent(anchor);
             if (extent is null)
             {
+                rejection = MalformedRejection("extent");
                 return null;
             }
 
@@ -1652,6 +1667,7 @@ namespace Utsushi.Parsing.OpenXml
             var childExtent = ReadChildExtent(transformGroup?.ChildExtents);
             if (childOffset is null || childExtent is null)
             {
+                rejection = MalformedRejection("chOff/chExt");
                 return null;
             }
 

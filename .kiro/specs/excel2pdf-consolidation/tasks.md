@@ -46,7 +46,7 @@
 - [x] 2.6 描画オブジェクトの検知をアンカーごとにする(グラフ・図表枠・その他の非対応の要素・`absoluteAnchor`・解決できない描画パート)。
       `legacyDrawing`・`legacyDrawingHF`・外部参照・結合セル数の上限を記録する。検知を省く2か所(`!= Error`)の早期の戻りを外す。テストを含む
   - _Requirements: 2.2, 2.5, 2.7_
-- [ ] 2.7 黙って読み飛ばしている経路(design.md 2.2)を `MalformedDrawingObject` として記録する(`absoluteAnchor` と重ねない)。テストを含む
+- [x] 2.7 黙って読み飛ばしている経路(design.md 2.2)を `MalformedDrawingObject` として記録する(`absoluteAnchor` と重ねない)。テストを含む
   - _Requirements: 2.7_
 - [ ] 2.8 `UnsupportedWorkbookElementException` に `Elements`・`IsTruncated` を持たせ、`ElementKind` を削除する(`ToDiagnosticString()` に一覧を含めるフックを `UtsushiException` に加える)。`WorkbookReadOptions.UnsupportedElementBehavior` を削除し、
       読み込みは常に記録だけにする。帳票定義ありの経路は `ReportPdfConverter.ReadWorkbook` で `unsupportedElements: "error"` のときに一覧から例外を作る(design.md 2.4)。
