@@ -148,7 +148,7 @@
   - _Requirements: 1.4_
 - [x] 8.3 Substitution: 置換キー(`ICellSubstitutor.Apply`)・必須キー・未知のキーの検証と、そのテストを削除する
   - _Requirements: 1.3_
-- [ ] 8.4 Layout: `ValidateRequiredFieldsAreInPrintRanges`・`FindSubstitutionKey`・`OverflowByCell`・`PrintAreaOverride`・`FitIssue.SubstitutionKey`・`FitCheckResult` を削除する
+- [x] 8.4 Layout: `ValidateRequiredFieldsAreInPrintRanges`・`FindSubstitutionKey`・`OverflowByCell`・`PrintAreaOverride`・`FitIssue.SubstitutionKey`・`FitCheckResult` を削除する
       (`OverflowBehavior` は Layout の internal の列挙に移す。ゴールデンの `key=` の列が無くなる)。定義の `overflow` で確かめていた Layout のテストを、セルの書式に書き換えるか削除する
   - _Requirements: 1.3_
 - [ ] 8.5 ReportDefinition: JSONの読み込み・リポジトリ・置換キーの定義・`ReportDefinition.UnsupportedElements` と旧い `UnsupportedElementPolicy`・

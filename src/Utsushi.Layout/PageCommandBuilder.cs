@@ -1658,24 +1658,7 @@ namespace Utsushi.Layout
         private void AddFitIssue(FitIssueKind kind, CellAddress address, string text, string description)
         {
             var isSubstituted = _report.SubstitutedCells.Contains(address);
-
-            // 置換キーで差し込んだセルだけに置換キーを付ける(セル番地直接指定で上書きしたセルは除く。要件13.4)。
-            var key = isSubstituted && !_report.OverriddenCells.Contains(address) ? FindSubstitutionKey(address) : null;
-            var subject = key is not null ? $"セル {address}(置換キー '{key}')" : $"セル {address}";
-            _fitIssues!.Add(new FitIssue(kind, address, _pageNumber, text, isSubstituted, key, $"{subject}: {description}"));
-        }
-
-        private string? FindSubstitutionKey(CellAddress address)
-        {
-            foreach (var field in _report.Definition.SubstitutionFields)
-            {
-                if (field.Cell == address)
-                {
-                    return field.Key;
-                }
-            }
-
-            return null;
+            _fitIssues!.Add(new FitIssue(kind, address, _pageNumber, text, isSubstituted, $"セル {address}: {description}"));
         }
 
         /// <summary>文字の収まりの判定の許容誤差(pt)。幅の計算の浮動小数点誤差で、ちょうど収まる文字を検出しないようにする。</summary>
@@ -1901,11 +1884,9 @@ namespace Utsushi.Layout
         /// </remarks>
         private OverflowBehavior ResolveOverflow(CellAddress address, CellStyle style, CellValueKind kind)
         {
-            var behavior = _report.GetOverflowBehavior(address) is { } fromDefinition
-                ? fromDefinition
-                : style.WrapText
-                    ? OverflowBehavior.Wrap
-                    : style.ShrinkToFit ? OverflowBehavior.Shrink : OverflowBehavior.Overflow;
+            var behavior = style.WrapText
+                ? OverflowBehavior.Wrap
+                : style.ShrinkToFit ? OverflowBehavior.Shrink : OverflowBehavior.Overflow;
 
             return behavior == OverflowBehavior.Wrap && kind == CellValueKind.Number ? OverflowBehavior.Clip : behavior;
         }

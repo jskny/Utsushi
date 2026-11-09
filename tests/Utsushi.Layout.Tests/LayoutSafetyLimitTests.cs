@@ -186,12 +186,14 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void 帳票定義で指定した巨大な印刷範囲もLayoutComputationExceptionになる()
+        public void シート全体の巨大な印刷範囲はLayoutComputationExceptionになる()
         {
-            var sheet = SparseSheet(new[] { CellAddress.Parse("A1") }, defaultRowHeightPt: 20.0, pageSetup: NoMarginA4());
+            var sheet = SparseSheet(
+                new[] { CellAddress.Parse("A1") },
+                defaultRowHeightPt: 20.0,
+                pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("A1:XFD1048576") }));
 
-            var ex = Assert.Throws<LayoutComputationException>(
-                () => Compute(sheet, Definition(printAreaOverride: CellRange.Parse("A1:XFD1048576"))));
+            var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet, Definition()));
 
             Assert.Contains("印刷範囲", ex.Message, StringComparison.Ordinal);
         }

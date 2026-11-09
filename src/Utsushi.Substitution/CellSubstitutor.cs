@@ -134,7 +134,6 @@ namespace Utsushi.Substitution
             var parsed = ParseAndValidateAddresses(definition, sheet, cellOverrides);
 
             var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
-            var overflowByCell = new Dictionary<CellAddress, OverflowBehavior>(report.OverflowByCell);
             var substitutedCells = new HashSet<CellAddress>(report.SubstitutedCells);
             var overriddenCells = new HashSet<CellAddress>(report.OverriddenCells);
 
@@ -146,14 +145,10 @@ namespace Utsushi.Substitution
                     ? new CellModel(replacement, CellValueKind.Text, sheet.GetEffectiveStyle(address), replacement)
                     : existing.WithText(replacement);
                 MarkSubstituted(substitutedCells, address, replacement);
-
-                // この経路は帳票定義のoverflow指定を経由しないため、名前付きキー方式(Apply)が
-                // 同じセルに残した指定があれば取り除き、常にExcel側のセル書式に従わせる(design.md)。
-                overflowByCell.Remove(address);
             }
 
             var updatedSheet = sheet with { Cells = cells };
-            return report with { Sheet = updatedSheet, OverflowByCell = overflowByCell, SubstitutedCells = substitutedCells, OverriddenCells = overriddenCells };
+            return report with { Sheet = updatedSheet, SubstitutedCells = substitutedCells, OverriddenCells = overriddenCells };
         }
 
         /// <summary>

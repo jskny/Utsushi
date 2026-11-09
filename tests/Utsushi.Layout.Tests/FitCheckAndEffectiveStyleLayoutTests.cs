@@ -118,31 +118,24 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void 切り取り表示と結合セルの文字が切れれば検出する()
+        public void 結合セルの文字が切れれば検出し書き込んだセルかどうかを返す()
         {
-            var clip = Definition(fields: new[]
-            {
-                new SubstitutionFieldDefinition("Name", CellAddress.Parse("A1"), false, OverflowBehavior.Clip),
-            });
             var sheet = Sheet(null, ("A1", Text(LongText)), ("A3", Text(LongText)))
                 with
-            { MergedRanges = new[] { new MergedRange(CellRange.Parse("A3:B3")) } };
+            { MergedRanges = new[] { new MergedRange(CellRange.Parse("A1:B1")), new MergedRange(CellRange.Parse("A3:B3")) } };
 
-            var issues = _engine.Compute(ReportModel.Create(clip, sheet) with
+            var issues = _engine.Compute(ReportModel.Create(Definition(), sheet) with
             {
-                OverflowByCell = new Dictionary<CellAddress, OverflowBehavior> { [CellAddress.Parse("A1")] = OverflowBehavior.Clip },
                 SubstitutedCells = new HashSet<CellAddress> { CellAddress.Parse("A1") },
             }).FitIssues;
 
             Assert.Equal(2, issues.Count);
             Assert.All(issues, i => Assert.Equal(FitIssueKind.Clipped, i.Kind));
+            Assert.True(issues.Single(i => i.Cell == CellAddress.Parse("A1")).IsSubstituted);
 
-            var substituted = issues.Single(i => i.Cell == CellAddress.Parse("A1"));
-            Assert.True(substituted.IsSubstituted);
-            Assert.Equal("Name", substituted.SubstitutionKey);
-            Assert.Contains("置換キー 'Name'", substituted.Message, System.StringComparison.Ordinal);
-
-            Assert.Contains("A3:B3", issues.Single(i => i.Cell == CellAddress.Parse("A3")).Message, System.StringComparison.Ordinal);
+            var template = issues.Single(i => i.Cell == CellAddress.Parse("A3"));
+            Assert.False(template.IsSubstituted);
+            Assert.Contains("A3:B3", template.Message, System.StringComparison.Ordinal);
         }
 
         [Fact]
@@ -250,38 +243,12 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void セル番地直接指定で上書きしたセルには置換キーを付けない()
+        public void 書き込んでいないセルは書き込んだセルとしない()
         {
-            var definition = Definition(fields: new[]
-            {
-                new SubstitutionFieldDefinition("Name", CellAddress.Parse("A1"), false, null),
-            });
-            var a1 = CellAddress.Parse("A1");
-
-            var layout = _engine.Compute(ReportModel.Create(definition, Sheet(null, ("A1", Text(LongText)), ("B1", Text("値")))) with
-            {
-                SubstitutedCells = new HashSet<CellAddress> { a1 },
-                OverriddenCells = new HashSet<CellAddress> { a1 },
-            });
-
-            var issue = Assert.Single(layout.FitIssues);
-            Assert.True(issue.IsSubstituted);
-            Assert.Null(issue.SubstitutionKey);
-            Assert.DoesNotContain("置換キー", issue.Message, System.StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public void 置換していないセルの説明の文には置換キーを付けない()
-        {
-            var definition = Definition(fields: new[]
-            {
-                new SubstitutionFieldDefinition("Name", CellAddress.Parse("A1"), false, null),
-            });
-
-            var issue = Assert.Single(Compute(Sheet(null, ("A1", Text(LongText)), ("B1", Text("値"))), definition).FitIssues);
+            var issue = Assert.Single(Compute(Sheet(null, ("A1", Text(LongText)), ("B1", Text("値"))), Definition()).FitIssues);
 
             Assert.False(issue.IsSubstituted);
-            Assert.DoesNotContain("置換キー", issue.Message, System.StringComparison.Ordinal);
+            Assert.StartsWith("セル A1: ", issue.Message, System.StringComparison.Ordinal);
         }
 
         [Fact]
@@ -299,7 +266,7 @@ namespace Utsushi.Layout.Tests
             var collector = new FitIssueCollector();
             for (var i = 0; i < FitIssueCollector.MaxIssues; i++)
             {
-                collector.Add(new FitIssue(FitIssueKind.Clipped, new CellAddress(i + 1, 1), 1, "x", false, null, "m"));
+                collector.Add(new FitIssue(FitIssueKind.Clipped, new CellAddress(i + 1, 1), 1, "x", false, "m"));
             }
 
             Assert.False(collector.IsTruncated);

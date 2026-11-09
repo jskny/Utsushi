@@ -68,7 +68,6 @@ namespace Utsushi.Golden.Tests
                       .Append(" cell=").Append(issue.Cell)
                       .Append(" page=").Append(issue.PageNumber)
                       .Append(" substituted=").Append(issue.IsSubstituted ? "yes" : "no")
-                      .Append(" key=").Append(issue.SubstitutionKey ?? "-")
                       .Append(" text=").Append(Quote(issue.Text))
                       .AppendLine();
                 }

@@ -99,7 +99,6 @@ namespace Utsushi.Layout
                 plans.Add(plan);
             }
 
-            ValidateRequiredFieldsAreInPrintRanges(definition, sheet, plans);
             ValidateSubstitutedCellsAreInPrintRanges(report, plans);
 
             var printableArea = RectPt.FromBounds(
@@ -448,7 +447,7 @@ namespace Utsushi.Layout
 
         /// <summary>
         /// 印刷範囲を決定する(要件3.1, 3.6)。
-        /// 帳票定義の上書き &gt; Excelの印刷範囲設定 &gt; 使用範囲 の優先順とする。
+        /// Excelの印刷範囲設定 &gt; 使用範囲 の優先順とする。
         /// </summary>
         /// <remarks>
         /// Excel は1シートに複数の印刷範囲を設定でき、それぞれが独立したページ群として印刷される。
@@ -457,11 +456,6 @@ namespace Utsushi.Layout
         /// </remarks>
         private static IReadOnlyList<CellRange> ResolvePrintRanges(SheetModel sheet, ReportDefinition definition)
         {
-            if (definition.PrintAreaOverride is { } overridden)
-            {
-                return new[] { overridden };
-            }
-
             var printAreas = sheet.PageSetup.PrintAreas;
             if (printAreas.Count > 0)
             {
@@ -482,54 +476,8 @@ namespace Utsushi.Layout
         }
 
         /// <summary>
-        /// 必須の置換フィールドが、実際に出力される印刷範囲(印刷タイトルを含む)の内側にあることを
-        /// 確認する(要件2.4, 3.1, 3.4)。
+        /// 空でない値を書き込んだセルが、実際に出力される印刷範囲(印刷タイトルを含む)の内側にあることを確認する(要件2.13)。
         /// </summary>
-        /// <remarks>
-        /// <para>
-        /// <see cref="Substitution.ICellSubstitutor"/> は印刷範囲を考慮せず値をセルにセットするため、
-        /// 必須フィールドのセルが印刷範囲の外にあると、値は正しくセットされたのにPDFには出力されない
-        /// という静かなデータ欠落が起こり得る。ReportDefinitionレイヤーの検証(使用範囲内かどうか)では
-        /// 印刷範囲(Excel側の設定に従う場合はここで初めて解決される)まではわからないため、
-        /// 印刷範囲が確定するこのタイミングで検証する。
-        /// </para>
-        /// <para>
-        /// 印刷タイトルの行/列は印刷範囲の外でも各ページに出力される(<see cref="SheetGrid.Create"/>参照)ため、
-        /// 印刷範囲だけでなく、実際にタイトルを付けるページがある印刷タイトルの行/列も「実際に出力される」対象に含めて判定する。
-        /// </para>
-        /// </remarks>
-        private static void ValidateRequiredFieldsAreInPrintRanges(
-            ReportDefinition definition, SheetModel sheet, IReadOnlyList<RangePlan> plans)
-        {
-            foreach (var field in definition.SubstitutionFields)
-            {
-                if (!field.Required)
-                {
-                    continue;
-                }
-
-                if (plans.Any(plan => IsRenderedByPlan(field.Cell, plan, sheet.PageSetup.PrintTitles)))
-                {
-                    continue;
-                }
-
-                throw new LayoutComputationException(
-                    $"必須の置換キー '{field.Key}' の対象セル {field.Cell} が印刷範囲の外にあるため、"
-                    + "値を設定してもPDFに出力されません。帳票定義の印刷範囲またはセル番地を見直してください。",
-                    definition.ReportCode,
-                    sheet.Name,
-                    field.Cell);
-            }
-        }
-
-        /// <summary>
-        /// 空でない置換値が差し込まれたセル(任意の置換キー・セル番地直接指定を含む)が、
-        /// 実際に出力される印刷範囲(印刷タイトルを含む)の内側にあることを確認する(要件2.13)。
-        /// </summary>
-        /// <remarks>
-        /// 必須フィールドは値の有無によらず <see cref="ValidateRequiredFieldsAreInPrintRanges"/> で
-        /// 先に検証している。ここでは、値を渡したのに出力されない残りの経路を塞ぐ。
-        /// </remarks>
         private static void ValidateSubstitutedCellsAreInPrintRanges(ReportModel report, IReadOnlyList<RangePlan> plans)
         {
             var titles = report.Sheet.PageSetup.PrintTitles;
@@ -552,7 +500,7 @@ namespace Utsushi.Layout
 
                 throw new LayoutComputationException(
                     $"値を差し込んだセル {cell} が印刷範囲の外にあるため、PDFに出力されません。"
-                    + "帳票定義の印刷範囲またはセル番地を見直してください。",
+                    + "テンプレートの印刷範囲またはセル番地を見直してください。",
                     report.Definition.ReportCode,
                     report.Sheet.Name,
                     cell);

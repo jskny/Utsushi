@@ -44,40 +44,6 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void 帳票定義の印刷範囲はExcelの設定より優先される()
-        {
-            var sheet = UniformSheet(
-                rows: 10, columns: 6,
-                pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("A1:F10") }));
-
-            var layout = Compute(sheet, Definition(printAreaOverride: CellRange.Parse("A1:B1")));
-
-            var texts = Texts(Assert.Single(layout.Pages)).Select(t => t.Text).ToHashSet();
-            Assert.Equal(new[] { "A1", "B1" }.ToHashSet(), texts);
-        }
-
-        [Fact]
-        public void 必須の置換フィールドが印刷範囲外を指す場合はエラーになる()
-        {
-            // 置換値自体は正しくセットされても、印刷範囲外のためPDFには出力されず
-            // 静かにデータが欠落する。要件2.4(必須値)と要件3.1(印刷範囲)の組み合わせで
-            // 帳票定義の設定ミスを早期に検出できるようにする。
-            var sheet = UniformSheet(
-                rows: 10, columns: 6,
-                pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("B2:C4") }));
-
-            var definition = Definition(fields: new[]
-            {
-            new SubstitutionFieldDefinition("Foo", new CellAddress(1, 1), Required: true, Overflow: null),
-        });
-
-            var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet, definition));
-
-            Assert.Equal(ProcessingStage.Layout, ex.Stage);
-            Assert.Equal(new CellAddress(1, 1), ex.CellAddress);
-        }
-
-        [Fact]
         public void 必須の置換フィールドが印刷タイトルの行を指す場合はエラーにならない()
         {
             // 印刷タイトルの行/列は印刷範囲の外でも各ページに出力されるため(要件3.4)、
@@ -158,23 +124,6 @@ namespace Utsushi.Layout.Tests
 
             Assert.Equal(4, layout.PageCount);
             Assert.Equal(new[] { 1, 2, 3, 4 }, layout.Pages.Select(p => p.PageNumber));
-        }
-
-        [Fact]
-        public void 帳票定義の印刷範囲指定は複数指定より優先される()
-        {
-            var sheet = UniformSheet(
-                rows: 10, columns: 4,
-                pageSetup: NoMarginA4(printAreas: new[]
-                {
-                CellRange.Parse("A1:B2"),
-                CellRange.Parse("C8:D9"),
-                }));
-
-            var layout = Compute(sheet, Definition(printAreaOverride: CellRange.Parse("A1:A1")));
-
-            var page = Assert.Single(layout.Pages);
-            Assert.Equal("A1", Assert.Single(Texts(page)).Text);
         }
 
         [Fact]
@@ -648,12 +597,12 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void 縮小指定ならセル幅に収まるまでフォントを縮める()
+        public void 縮小して全体を表示するセルはセル幅に収まるまでフォントを縮める()
         {
             const string longText = "株式会社ながいなまえの取引先さま";
             var cells = new Dictionary<CellAddress, CellModel>
             {
-                [new CellAddress(1, 1)] = new(longText, CellValueKind.Text, CellStyle.Default, longText),
+                [new CellAddress(1, 1)] = new(longText, CellValueKind.Text, CellStyle.Default with { ShrinkToFit = true }, longText),
             };
 
             var sheet = UniformSheet(rows: 1, columns: 1, columnWidth: 4.0, pageSetup: NoMarginA4()) with
@@ -661,20 +610,7 @@ namespace Utsushi.Layout.Tests
                 Cells = cells,
             };
 
-            var definition = Definition(
-                fields: new[]
-                {
-                new SubstitutionFieldDefinition(
-                    "Long", CellAddress.Parse("A1"), false, OverflowBehavior.Shrink),
-                });
-
-            var report = ReportModel.Create(definition, sheet) with
-            {
-                OverflowByCell = new Dictionary<CellAddress, OverflowBehavior>
-                {
-                    [CellAddress.Parse("A1")] = OverflowBehavior.Shrink,
-                },
-            };
+            var report = ReportModel.Create(Definition(), sheet);
 
             var text = Assert.Single(Texts(Assert.Single(_engine.Compute(report).Pages)));
 

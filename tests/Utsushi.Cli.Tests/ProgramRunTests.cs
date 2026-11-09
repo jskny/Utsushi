@@ -185,7 +185,7 @@ namespace Utsushi.Cli.Tests
         [Fact]
         public void フォントの代替と打ち切りの印を出し問題として数える()
         {
-            var fit = new FitIssue(FitIssueKind.NumberTooWide, CellAddress.Parse("C8"), 1, "¥123", true, null, "C8 の数値が収まりません。");
+            var fit = new FitIssue(FitIssueKind.NumberTooWide, CellAddress.Parse("C8"), 1, "¥123", true, "C8 の数値が収まりません。");
             var diagnostics = Diagnostics(
                 fitIssues: new[] { fit },
                 fitIssuesTruncated: true,

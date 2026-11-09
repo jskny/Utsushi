@@ -267,7 +267,7 @@ group  center=(272.9,149.5) rotation=-8 children=2
   shape  rect=[252.4,141.5 41x16] preset=Rect rotation=0 fill=none outline=#FFC00000/1pt text=[]
 
 ## fit issues count=1
-fit NumberTooWide cell=F5 page=1 substituted=no key=- text="2026年4月30日"
+fit NumberTooWide cell=F5 page=1 substituted=no text="2026年4月30日"
 
 ## format approximations count=1
 approx ShapeFont at=A25:A25 detail=fontRef=minor

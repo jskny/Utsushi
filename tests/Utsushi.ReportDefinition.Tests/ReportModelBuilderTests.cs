@@ -69,7 +69,6 @@ namespace Utsushi.ReportDefinition.Tests
 
             Assert.Same(definition, report.Definition);
             Assert.Equal("請求書", report.Sheet.Name);
-            Assert.Empty(report.OverflowByCell);
         }
 
         [Fact]

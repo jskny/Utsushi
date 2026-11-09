@@ -444,31 +444,6 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void 帳票定義のprintAreaがあれば描画オブジェクトの範囲は使われない()
-        {
-            var sheet = SheetWithCells(3, 2, FixedShape("E10", 60.0, 30.0));
-
-            var page = Assert.Single(
-                _engine.Compute(ReportModel.Create(Definition(printAreaOverride: CellRange.Parse("A1:B2")), sheet)).Pages);
-
-            Assert.Equal((1, 2), page.RowRange);
-            Assert.Equal((1, 2), page.ColumnRange);
-        }
-
-        [Fact]
-        public void 帳票定義のprintAreaはExcelの印刷範囲より優先され描画オブジェクトの範囲も使われない()
-        {
-            var pageSetup = NoMarginA4(printAreas: new[] { CellRange.Parse("A1:B3") });
-            var sheet = SheetWithCells(3, 2, FixedShape("E10", 60.0, 30.0)) with { PageSetup = pageSetup };
-
-            var page = Assert.Single(
-                _engine.Compute(ReportModel.Create(Definition(printAreaOverride: CellRange.Parse("A1:A1")), sheet)).Pages);
-
-            Assert.Equal((1, 1), page.RowRange);
-            Assert.Equal((1, 1), page.ColumnRange);
-        }
-
-        [Fact]
         public void 二セルアンカーの終端は始点から4096セルまでに抑える()
         {
             // 回帰テスト(code-reviewer指摘): 描画時の走査の上限と揃え、XFD1048576 まで伸びる図形1つで

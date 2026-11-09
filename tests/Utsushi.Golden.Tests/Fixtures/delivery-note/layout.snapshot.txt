@@ -1271,4 +1271,4 @@ text   origin=(264.64,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=no
 text   origin=(499.56,817.87) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="サンプル"
 
 ## fit issues count=1
-fit OverlapsNeighborValue cell=D3 page=1 substituted=no key=- text="納品番号"
+fit OverlapsNeighborValue cell=D3 page=1 substituted=no text="納品番号"
