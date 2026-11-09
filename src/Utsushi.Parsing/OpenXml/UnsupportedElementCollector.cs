@@ -74,7 +74,55 @@ namespace Utsushi.Parsing.OpenXml
             Add(UnsupportedElementKind.LimitExceeded, sheetName, anchor, FormatLimit(limitName, limit), message);
         }
 
+        /// <summary>
+        /// 描画オブジェクトを出力しない理由(<see cref="DrawingRejection"/>)を、指定のアンカーで記録する。
+        /// 枚数・個数の上限はシートと上限の種類ごとに1件、それ以外は1件ずつ記録する。
+        /// </summary>
+        public void Add(DrawingRejection rejection, string? sheetName, CellAddress? anchor)
+        {
+            if (rejection.LimitName is { } limitName)
+            {
+                if (rejection.IsCountLimit)
+                {
+                    AddCountLimitExceeded(sheetName, anchor, limitName, rejection.Limit, rejection.Message);
+                }
+                else
+                {
+                    AddElementLimitExceeded(sheetName, anchor, limitName, rejection.Limit, rejection.Message);
+                }
+
+                return;
+            }
+
+            Add(rejection.Kind, sheetName, anchor, rejection.Detail, rejection.Message);
+        }
+
         private static string FormatLimit(string limitName, long limit) =>
             limitName + ": 上限 " + limit.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// 描画オブジェクト(画像・図形・接続線・グループの子要素)を出力しない理由。
+    /// 読み込みの関数はこれを返し、記録は呼び出し元が行う(グループの中の要素は、グループの側でまとめて1件にするため。design.md 9)。
+    /// </summary>
+    /// <param name="Kind">未対応要素の種類。</param>
+    /// <param name="Detail">補足の情報(上限の超過では使わない)。</param>
+    /// <param name="Message">説明の文。セル・図形の文字列を含めない。</param>
+    /// <param name="LimitName">上限の超過の場合、上限の種類(<c>TooManyShapes</c> など)。それ以外は <c>null</c>。</param>
+    /// <param name="Limit">上限の値。</param>
+    /// <param name="IsCountLimit">枚数・個数の上限(シートと上限の種類ごとに1件にまとめる)かどうか。</param>
+    internal sealed record DrawingRejection(
+        UnsupportedElementKind Kind,
+        string? Detail,
+        string Message,
+        string? LimitName = null,
+        long Limit = 0,
+        bool IsCountLimit = false)
+    {
+        public static DrawingRejection CountLimit(string limitName, long limit, string message) =>
+            new(UnsupportedElementKind.LimitExceeded, null, message, limitName, limit, IsCountLimit: true);
+
+        public static DrawingRejection ElementLimit(string limitName, long limit, string message) =>
+            new(UnsupportedElementKind.LimitExceeded, null, message, limitName, limit, IsCountLimit: false);
     }
 }

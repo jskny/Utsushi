@@ -190,7 +190,7 @@ namespace Utsushi.Parsing.OpenXml
                         continue;
                     }
 
-                    sheets.Add(ReadSheet(name!, worksheetPart, styles, sharedStrings, definedNames, drawingColors, options));
+                    sheets.Add(ReadSheet(name!, worksheetPart, styles, sharedStrings, definedNames, drawingColors, options, unsupported));
 
                     // 対象を1枚に絞っている場合は、見つけた時点で打ち切る。Excelはシート名の重複を許さないが、
                     // OpenXml SDK は検証しないため、同じ名前の <sheet> を大量に並べたファイルで同じシートを
@@ -238,7 +238,8 @@ namespace Utsushi.Parsing.OpenXml
             IReadOnlyList<string> sharedStrings,
             IReadOnlyDictionary<string, Dictionary<string, string>> definedNames,
             DrawingColorResolver drawingColors,
-            WorkbookReadOptions options)
+            WorkbookReadOptions options,
+            UnsupportedElementCollector unsupported)
         {
             var worksheet = worksheetPart.Worksheet;
 
@@ -320,7 +321,7 @@ namespace Utsushi.Parsing.OpenXml
                 worksheet, defaultColumnWidth, styles, name, options.ReportCode);
             var mergedRanges = ReadMergedRanges(name, worksheet, options);
             var pageSetup = ReadPageSetup(name, worksheet, definedNames, options.ReportCode);
-            var drawingObjects = ReadDrawingObjects(name, worksheetPart, drawingColors, options);
+            var drawingObjects = ReadDrawingObjects(name, worksheetPart, drawingColors, options, unsupported);
 
             return new SheetModel(
                 name,
@@ -1042,6 +1043,9 @@ namespace Utsushi.Parsing.OpenXml
         /// </summary>
         private const int MaxGradientStopsPerFill = 64;
 
+        private static readonly DrawingRejection TooManyImagesRejection = DrawingRejection.CountLimit(
+            "TooManyImages", MaxImagesPerSheet, "シートの画像の数が上限を超えたため、超えた分の画像は出力されません。");
+
         /// <summary>
         /// シートに埋め込まれた画像(<c>xdr:pic</c>)・図形(<c>xdr:sp</c>)・接続線(<c>xdr:cxnSp</c>)・
         /// グループ(<c>xdr:grpSp</c>)を読み取る(要件9, 10)。
@@ -1057,7 +1061,11 @@ namespace Utsushi.Parsing.OpenXml
         /// 同じ設定に従う(要件9.4, 9.6, 10.7, 10.8)。
         /// </remarks>
         private static List<DrawingObjectModel> ReadDrawingObjects(
-            string sheetName, WorksheetPart worksheetPart, DrawingColorResolver colors, WorkbookReadOptions options)
+            string sheetName,
+            WorksheetPart worksheetPart,
+            DrawingColorResolver colors,
+            WorkbookReadOptions options,
+            UnsupportedElementCollector unsupported)
         {
             var result = new List<DrawingObjectModel>();
             var drawing = worksheetPart.DrawingsPart?.WorksheetDrawing;
@@ -1094,7 +1102,11 @@ namespace Utsushi.Parsing.OpenXml
                 if (picture is not null)
                 {
                     var image = ReadImage(
-                        sheetName, drawingsPart, anchor, picture, anchorCell, anchorOffset, options, ref imageCount);
+                        sheetName, drawingsPart, anchor, picture, anchorCell, anchorOffset, options, ref imageCount, out var imageRejection);
+                    if (imageRejection is not null)
+                    {
+                        unsupported.Add(imageRejection, sheetName, anchorCell);
+                    }
                     if (image is not null)
                     {
                         result.Add(image);
@@ -1182,8 +1194,10 @@ namespace Utsushi.Parsing.OpenXml
             CellAddress anchorCell,
             PointPt anchorOffset,
             WorkbookReadOptions options,
-            ref int imageCount)
+            ref int imageCount,
+            out DrawingRejection? rejection)
         {
+            rejection = null;
             if (imageCount >= MaxImagesPerSheet)
             {
                 if (options.UnsupportedElementBehavior == UnsupportedElementBehavior.Error)
@@ -1198,6 +1212,7 @@ namespace Utsushi.Parsing.OpenXml
 
                 // ignore時はこのアンカーだけを無視し、以降のアンカーの走査は続ける
                 // (画像・図形が混在するシートで、他方の走査を止めないため)。
+                rejection = TooManyImagesRejection;
                 return null;
             }
 
@@ -1209,7 +1224,7 @@ namespace Utsushi.Parsing.OpenXml
             // モードによらず常に無言でスキップするため、先に判定すると不正な画像形式/
             // サイズ超過/シグネチャ不一致がErrorモードでも例外化されずに握りつぶされてしまう
             // (code-reviewer指摘。リファクタ前の検証順序を維持する)。
-            if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType))
+            if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType, out rejection))
             {
                 return null;
             }
@@ -1229,7 +1244,8 @@ namespace Utsushi.Parsing.OpenXml
         /// <summary>
         /// <c>xdr:pic</c>(トップレベル・グループ内共通)から画像バイナリを読み取り、
         /// content-type許可リスト・サイズ上限・シグネチャの検証を行う(要件9.4, 9.6)。
-        /// 検証に失敗した場合、Errorモードなら例外を送出し、Ignoreモードなら<c>false</c>を返す。
+        /// 検証に失敗した場合、Errorモードなら例外を送出し、Ignoreモードなら<c>false</c>と出力しない理由(<paramref name="rejection"/>)を返す。
+        /// 記録は呼び出し元が行う(グループの中の画像は、グループの側でまとめて1件にするため)。
         /// </summary>
         private static bool TryReadValidatedImage(
             string sheetName,
@@ -1237,14 +1253,18 @@ namespace Utsushi.Parsing.OpenXml
             Xdr.Picture picture,
             WorkbookReadOptions options,
             out byte[] data,
-            out string contentType)
+            out string contentType,
+            out DrawingRejection? rejection)
         {
             data = Array.Empty<byte>();
             contentType = string.Empty;
+            rejection = null;
 
             var embedId = picture.BlipFill?.Blip?.Embed?.Value;
             if (string.IsNullOrEmpty(embedId))
             {
+                rejection = new DrawingRejection(
+                    UnsupportedElementKind.MissingImagePart, null, "画像の参照先が指定されていないため、出力されません。");
                 return false;
             }
 
@@ -1266,11 +1286,15 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = new DrawingRejection(
+                    UnsupportedElementKind.MissingImagePart, embedId, "画像の参照先がファイル内に無いため、出力されません。");
                 return false;
             }
 
             if (embeddedPart is not ImagePart imagePart)
             {
+                rejection = new DrawingRejection(
+                    UnsupportedElementKind.MissingImagePart, embeddedPart.ContentType, "画像の参照先が画像ではないため、出力されません。");
                 return false;
             }
 
@@ -1286,6 +1310,10 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = new DrawingRejection(
+                    UnsupportedElementKind.UnsupportedImageFormat,
+                    imagePart.ContentType,
+                    "画像の形式に対応していないため、出力されません(対応形式: PNG/JPEG/GIF/BMP)。");
                 return false;
             }
 
@@ -1313,6 +1341,8 @@ namespace Utsushi.Parsing.OpenXml
                             sheetName);
                     }
 
+                    rejection = DrawingRejection.ElementLimit(
+                        "ImageTooLarge", MaxImageDataBytes, "画像のデータの大きさが上限(バイト)を超えているため、出力されません。");
                     return false;
                 }
             }
@@ -1333,6 +1363,10 @@ namespace Utsushi.Parsing.OpenXml
                         sheetName);
                 }
 
+                rejection = new DrawingRejection(
+                    UnsupportedElementKind.UnsupportedImageFormat,
+                    imagePart.ContentType,
+                    "画像のデータの内容が形式と一致しないため、出力されません。");
                 return false;
             }
 
@@ -1738,7 +1772,7 @@ namespace Utsushi.Parsing.OpenXml
             // トップレベルの画像と同じく、読み取りを試みた時点で数える。
             imageCount++;
 
-            if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType))
+            if (!TryReadValidatedImage(sheetName, drawingsPart, picture, options, out var data, out var contentType, out _))
             {
                 return null;
             }
