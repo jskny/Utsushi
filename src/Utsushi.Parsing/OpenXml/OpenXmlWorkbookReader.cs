@@ -132,6 +132,7 @@ namespace Utsushi.Parsing.OpenXml
                         InvalidExcelFileReason.Corrupted,
                         options.ReportCode);
 
+                var unsupported = new UnsupportedElementCollector();
                 DetectUnsupportedWorkbookElements(workbookPart, options);
 
                 var colors = ColorResolver.Create(workbookPart);
@@ -222,7 +223,11 @@ namespace Utsushi.Parsing.OpenXml
                         options.ReportCode);
                 }
 
-                return new WorkbookModel(sheets, styles.DefaultFont);
+                return new WorkbookModel(sheets, styles.DefaultFont)
+                {
+                    UnsupportedElements = unsupported.Elements,
+                    UnsupportedElementsTruncated = unsupported.IsTruncated,
+                };
             }
         }
 

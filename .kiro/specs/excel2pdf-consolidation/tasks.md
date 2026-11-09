@@ -15,28 +15,28 @@
 
 ## 1. 中核仕様の改訂
 
-- [ ] 1.1 中核の requirements.md の「はじめに」「用語」と要件1・2を、requirements.md「中核仕様への影響」のとおり改める。
+- [x] 1.1 中核の requirements.md の「はじめに」「用語」と要件1・2を、requirements.md「中核仕様への影響」のとおり改める。
       帳票定義を削除するまで(タスク8)残る機能の要件(1.4, 1.11, 2.1〜2.6, 2.12)には「廃止予定(excel2pdf-consolidation のタスク8で削除)」と注記する
   - _Requirements: 1.3, 1.5, 2.1_
-- [ ] 1.2 中核の requirements.md の要件3〜11(3.7・3.8の補足、3.10、4.5、4.12、6.3〜6.15、8、9.4〜9.6、10.7・10.8・10の補足)を改める
+- [x] 1.2 中核の requirements.md の要件3〜11(3.7・3.8の補足、3.10、4.5、4.12、6.3〜6.15、8、9.4〜9.6、10.7・10.8・10の補足)を改める
   - _Requirements: 2.6, 2.7, 7.2_
-- [ ] 1.3 中核の requirements.md の要件12〜14を改める
+- [x] 1.3 中核の requirements.md の要件12〜14を改める
   - _Requirements: 1.1, 1.2, 4.5, 5.8_
-- [ ] 1.4 中核の design.md を改める。「未決事項」の近似する書式には本仕様の要件7で検知する旨を加え、
+- [x] 1.4 中核の design.md を改める。「未決事項」の近似する書式には本仕様の要件7で検知する旨を加え、
       「帳票定義ありの経路では登録済みのシート名に合うファイルしか通らない」という入力の前提の記述を、任意の .xlsx を受け付ける唯一の経路になることに合わせて改める
   - _Requirements: 1.1, 7.2_
-- [ ] 1.5 中核の tasks.md に、本仕様で廃止・変更するタスクの注記を加える(完了済みのタスクは残す)
+- [x] 1.5 中核の tasks.md に、本仕様で廃止・変更するタスクの注記を加える(完了済みのタスクは残す)
 - [ ] 1.6 spec-compliance-reviewer・doc-reviewer
 
 ## 2. Parsing: 未対応要素の収集
 
 既存の扱いの指定(`UnsupportedElementBehavior`)を残したまま、無視の側で記録を始め(2.1〜2.7。エラーの側の判定の順序と `ElementKind` は変えない)、最後に指定を外す(2.8)。
 
-- [ ] 2.1 `Utsushi.Core` に `UnsupportedElementKind`・`UnsupportedElement` と、説明の文の正規化 `DiagnosticText.Normalize` を追加する(まだ使わない)
+- [x] 2.1 `Utsushi.Core` に `UnsupportedElementKind`・`UnsupportedElement` と、説明の文の正規化 `DiagnosticText.Normalize` を追加する(まだ使わない)
   - _Requirements: 2.4_
-- [ ] 2.2 `UnsupportedElementCollector` を追加する(記録の単位、件数の上限、`Message`/`Detail` の正規化。上限を渡せる internal のオーバーロード)。単体テストを含む
+- [x] 2.2 `UnsupportedElementCollector` を追加する(記録の単位、件数の上限、`Message`/`Detail` の正規化。上限を渡せる internal のオーバーロード)。単体テストを含む
   - _Requirements: 2.4, 2.5_
-- [ ] 2.3 `WorkbookModel` に `UnsupportedElements`・`UnsupportedElementsTruncated` を加え、`OpenXmlWorkbookReader` で収集器を1回の読み込みごとに作って載せる(この時点では常に空)
+- [x] 2.3 `WorkbookModel` に `UnsupportedElements`・`UnsupportedElementsTruncated` を加え、`OpenXmlWorkbookReader` で収集器を1回の読み込みごとに作って載せる(この時点では常に空)
   - _Requirements: 2.2_
 - [ ] 2.4 画像の未対応要素を記録する(非対応形式・内容の不一致・参照先が無い/空/画像でない・枚数の上限・大きさの上限)。無視の側で記録し、エラーの側の動作は変えない。テストを含む
   - _Requirements: 2.5, 2.7_
