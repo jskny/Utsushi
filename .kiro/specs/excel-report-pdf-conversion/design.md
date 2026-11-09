@@ -2,6 +2,17 @@
 
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 
+> **改訂中(2026-11)**: `.kiro/specs/excel2pdf-consolidation/`(以下「一本化の仕様」)で、変換の入口を `Excel2Pdf` に一本化し、
+> 帳票定義(`definition.json`)・置換キーの仕組みを廃止する。移行後の設計は一本化の仕様の design.md に書き、本書は次のように読み替える。
+> 各節の本文は、一本化の仕様の実装の各タスクで、対応する箇所を書き換える。
+>
+> - 「未対応要素」は「未対応要素」と呼ぶ(本書では呼び方を改めた)。その扱いは、帳票定義の `unsupportedElements` ではなく、
+>   一本化の仕様の要件2(`Excel2PdfOptions.UnsupportedElements`。既定はエラー。読み込みは常に記録し、一覧で返す)に従う。
+> - 「2. ReportDefinition レイヤー」の帳票定義(JSON)のロード・置換キー・`printArea` の上書き・キーごとの `overflow` は廃止予定。
+>   レイヤー自体は、変換設定(`ConversionSettings`。文書名・シート名・最大数字幅)と `ReportModel` の組み立てだけを持つ形で残る。
+> - ファサードの公開APIは `Excel2Pdf`・`Excel2PdfEngine` だけになり、`ReportPdfConverter` は internal の変換パイプラインになる。
+> - 診断(文字の収まり・未対応要素・フォントの代替・書式の近似)は `Excel2Pdf.Check()` で返す(一本化の仕様の要件4・7)。
+
 ## 概要
 
 自社帳票専用のExcel→PDF変換パイプラインを、責務ごとに5つのレイヤーへ分割して実装する。
@@ -192,7 +203,7 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   `xdr:oneCellAnchor` のうち `xdr:pic`(画像)のみを対象とする。`a:blip` の `r:embed` から
   `ImagePart` を解決し、バイナリ(`GetStream()`)と `ContentType` を読み取る。
   `ContentType` が `image/png` / `image/jpeg` / `image/gif` / `image/bmp` のいずれでもない場合
-  (EMF/WMF等のベクタ形式を含む)は「サポート外要素」として扱い、既存の
+  (EMF/WMF等のベクタ形式を含む)は「未対応要素」として扱い、既存の
   `DetectUnsupportedElements`(`OpenXmlWorkbookReader`)と同じ `unsupportedElements` ポリシーに
   従う(`ElementKind = "UnsupportedImageFormat"`)。対応形式かどうかは
   `ContentType` の静的な許可リストのみで判定し、SkiaSharpによる実デコード確認はしない
@@ -249,7 +260,7 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     (`ReadDrawingObjects` に統合)。
   - **プリセットの判定と非対応プリセットの扱い**: `@prst` の値を `ShapePresetType` へ
     マッピングする静的な辞書と突き合わせる。一致しない場合(星形・フローチャート記号・
-    自由曲線 `custGeom` 等)は要件10.7により「サポート外要素」として扱う
+    自由曲線 `custGeom` 等)は要件10.7により「未対応要素」として扱う
     (`ElementKind = "UnsupportedShapePreset"`)。
   - **既存の`DetectUnsupportedElements`/`HasUnsupportedDrawingObject`との整合(接続線・グループ対応で再拡張)**:
     シェイプ対応時に「`xdr:pic` および `xdr:sp`(シェイプ)以外が1つでもあれば `Drawing` として
@@ -390,7 +401,7 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   「Layout レイヤー」の節を参照)。
   - グループ内の要素のいずれか1つでも対応済みプリセット一覧に含まれない場合
     (非対応プリセットの図形・接続線・`xdr:graphicFrame`等)は、要件10.10により
-    グループ全体を`ElementKind = "UnsupportedShapePreset"`のサポート外要素として扱う
+    グループ全体を`ElementKind = "UnsupportedShapePreset"`の未対応要素として扱う
     (グループの一部だけを描画すると、Excel上の見た目・要素間の位置関係が意図せず崩れるため)。
   - 入れ子のグループは同じ規則を再帰的に適用し、`MaxShapeNestingDepth`(既定5)を
     超えた時点で全体を`ElementKind = "GroupNestingTooDeep"`として拒否する。
@@ -398,6 +409,8 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     全子孫)が`MaxShapesPerSheet`を超える場合も同様に拒否する(要件10.8)。
 
 ### 2. ReportDefinition レイヤー (`Utsushi.ReportDefinition`)
+
+> 帳票定義(JSON)のロードと置換キーは廃止予定(冒頭の「改訂中」を参照)。
 
 - **責務**: 帳票定義(JSON)をロードし、`WorkbookModel` と突合して `ReportModel` を構築する。帳票ごとの固有情報(置換キーとセル番地のマッピング、はみ出し時の挙動、許容誤差等)はすべてここに閉じ込める。
 - **帳票定義スキーマ(例)**: 全プロパティの一覧と制約は `docs/帳票定義スキーマ.md` を参照。
@@ -449,7 +462,7 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
     (このとき帳票コードを指定した変換は `ReportDefinitionNotFoundException` になる)。
   - 対象シートの決定(要件12.2)はParsingレイヤーの責務とし、`WorkbookReadOptions.ActiveSheetOnly = true` で
     指定する。`OpenXmlWorkbookReader` は `workbookView/@activeTab` のシート(非表示、またはグラフシート等の
-    ワークシートでない場合は、表示されている最初のワークシート)1枚だけを読み、サポート外要素の検出・シート単位の安全弁もそのシートにだけ適用する
+    ワークシートでない場合は、表示されている最初のワークシート)1枚だけを読み、未対応要素の検出・シート単位の安全弁もそのシートにだけ適用する
     (全シートを読んでから1枚を選ぶと、使わないシートの上限超過で失敗しうるため)。ただしXMLの入れ子の深さ・パートの
     大きさの検査(要件6.7)は、DOMを組み立てる前にパッケージ内の全XMLパートに対して行う。
   - 列幅換算の最大数字幅(要件12.3)は、呼び出し元の指定(API の `maxDigitWidthPx`、CLI の `--max-digit-width`)が
@@ -856,7 +869,7 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
       正方形のバウンディングボックスにするのが通常)。
     - 上記いずれのプリセットも「対応済み一覧に限定する」設計(要件10.1補足)のため、
       `custGeom`(自由曲線)や一覧外の`prst`値はParsingレイヤーの時点で
-      サポート外要素として弾かれ、ここには到達しない。
+      未対応要素として弾かれ、ここには到達しない。
     - 上記の既定調整値・`a:xfrm`/`a:lin`の角度単位(60,000分の1度・時計回り)はECMA-376の
       定義に基づく想定値であり、この設計時点では一次資料への当たり直しをしていない。
       実装(タスク14.13, 14.14)時にPDFをラスタライズして目視確認したところ、
@@ -1100,7 +1113,7 @@ public abstract record DrawingObjectModel(
     PointPt AnchorOffset,                 // アンカーセル左上からのオフセット(pt)
     AnchorExtent Extent);
 
-// 画像(要件9)。ContentTypeがラスター形式の許可リスト外の場合はサポート外要素として扱う。
+// 画像(要件9)。ContentTypeがラスター形式の許可リスト外の場合は未対応要素として扱う。
 // Id(NonVisualDrawingProperties/@id)は接続線の接続先解決(要件10.11)のために保持する。
 public sealed record ImageModel(
     uint Id,
@@ -1111,7 +1124,7 @@ public sealed record ImageModel(
     PointPt AnchorOffset,
     AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
 
-// 図形(要件10)。対応済みプリセット一覧に含まれないprstGeomはサポート外要素として扱う。
+// 図形(要件10)。対応済みプリセット一覧に含まれないprstGeomは未対応要素として扱う。
 // Idはimageと同じ理由(要件10.11)で保持する。
 public sealed record ShapeModel(
     uint Id,
@@ -1475,11 +1488,14 @@ public sealed record GroupCommand(
 
 ## 未決事項 / 今後の検討
 
+> 以下のうち「近似する」「再現しない」書式(文字の回転・一部の配置・条件付き書式・リッチテキストなど)は、再現の扱いを変えずに、
+> 一本化の仕様の要件7の「書式の近似」として `Excel2Pdf.Check()` で返す。
+
 - **差し込み文字列の配置で未対応のExcel書式**(要件4.4): 主用途(宛先・住所・氏名・担当者の差し込み)の
   品質確認(タスク21)で、以下が未対応であることを確認した。いずれもテンプレート側で避けられるため、
   対象帳票で必要になった時点で対応する。
   - 文字の方向・回転(`textRotation`。縦書き`255`を含む)は読み取っておらず、横書きで出力される。
-    サポート外要素としての検出対象にもなっていない。
+    未対応要素としての検出対象にもなっていない。
   - 横位置「均等割り付け」「両端揃え」「繰り返し」は左揃え、「選択範囲内で中央」は自セル内の中央揃え、
     縦位置「均等割り付け」「両端揃え」は中央揃えとして扱う。インデントは常に左側に加算される。
   - はみ出し表示(`overflow`)は、Excelと違い隣のセルに値があっても止まらず重なって描画される(描画は変えず、
@@ -1555,7 +1571,7 @@ public sealed record GroupCommand(
   フローチャート記号7種・吹き出し4種(雲形・引き出し線1〜3本)・接続線5種を追加し、
   その後、要件10.14で線吹き出しを12種(`callout`/`borderCallout`/`accentCallout`/`accentBorderCallout`の1〜3)に広げたが、
   フローチャート記号の残り(`flowChartOr`等)・自由曲線(`custGeom`)・より複雑な星形
-  (`star10`以上)は引き続き「サポート外要素」である。対象帳票で実際に必要になった時点で
+  (`star10`以上)は引き続き「未対応要素」である。対象帳票で実際に必要になった時点で
   一覧に追記する。
 - **接続線の接続点(コネクションサイト)解決の残存する限界**(要件10.11): 要件10.11で
   `stCxn`/`endCxn`の解決に対応したが、以下の点は引き続き限界として残る。
@@ -1619,6 +1635,7 @@ public sealed record GroupCommand(
   また、定義ありモードでは登録済みのシート名に一致するファイルしか事実上通らないのに対し、定義なしモードは
   任意の`.xlsx`を受け付けるため、社内の担当者が社外から受け取ったファイルをそのまま変換する経路が現実に生じる。
   このため「帳票定義の有無は入力の信頼性を変えない」とは言えず、リスクは定義なしモードで大きくなる。
+  一本化の仕様で定義なしの変換が唯一の経路になるため、以後は**すべての入力を任意の`.xlsx`として扱う**前提で安全弁を保つ。
   タスク25で、SDKのDOMに触れる前に、パッケージ内の全XMLパートを`XmlReader`で流し読みして要素の深さ
   (`MaxXmlElementDepth`)とパートの大きさ(`MaxXmlPartBytes`)を検査するようにした(要件6.7)。流し読みは
   再帰しないため、深いネストでもスタックを消費しない。この対策で上記のスタックオーバーフローは起きなくなった。

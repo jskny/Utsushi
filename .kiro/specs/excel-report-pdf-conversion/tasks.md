@@ -3,6 +3,11 @@
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
+> **改訂中(2026-11)**: `.kiro/specs/excel2pdf-consolidation/` で、入口を `Excel2Pdf` に一本化し、帳票定義・置換キーの仕組みを廃止する。
+> 以下の完了済みのタスクは記録として残す。帳票定義(タスク3・帳票定義の読み込み)、置換キー(タスク4の置換キーの部分)、
+> CLIの `--report`/`--set`/`--definitions`、`ReportPdfConverter` の公開API、`CheckFit`、`unsupportedElements` の設定に関するタスクで作ったものは、
+> 一本化の仕様のタスク7・8で削除・置き換える。
+
 > **状況**: タスク1〜15完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13〜14:
 > 2026-09-21、タスク15: 2026-09-21)。タスク15(接続線・グループ・追加プリセット・多段階/放射状
 > グラデーション)では、データモデル定義、Parsing/Layout/Renderingの3層すべてでの接続線・
