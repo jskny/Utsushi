@@ -133,7 +133,7 @@ namespace Utsushi.Parsing.OpenXml
                         options.ReportCode);
 
                 var unsupported = new UnsupportedElementCollector();
-                DetectUnsupportedWorkbookElements(workbookPart, options);
+                DetectUnsupportedWorkbookElements(workbookPart, options, unsupported);
 
                 var colors = ColorResolver.Create(workbookPart);
                 var styles = StyleTable.Create(workbookPart, colors);
@@ -243,7 +243,7 @@ namespace Utsushi.Parsing.OpenXml
         {
             var worksheet = worksheetPart.Worksheet;
 
-            DetectUnsupportedElements(name, worksheetPart, worksheet, options);
+            DetectUnsupportedElements(name, worksheetPart, worksheet, options, unsupported);
 
             var cells = new Dictionary<CellAddress, CellModel>();
             var rowHeights = new List<double>();
@@ -319,7 +319,7 @@ namespace Utsushi.Parsing.OpenXml
 
             var (columnWidths, hiddenColumns, columnStyles) = ReadColumns(
                 worksheet, defaultColumnWidth, styles, name, options.ReportCode);
-            var mergedRanges = ReadMergedRanges(name, worksheet, options);
+            var mergedRanges = ReadMergedRanges(name, worksheet, options, unsupported);
             var pageSetup = ReadPageSetup(name, worksheet, definedNames, options.ReportCode);
             var drawingObjects = ReadDrawingObjects(name, worksheetPart, drawingColors, options, unsupported);
 
@@ -539,7 +539,8 @@ namespace Utsushi.Parsing.OpenXml
         /// <see cref="MaxMergedRangesPerSheet"/>の上限を設ける(security-reviewer指摘。
         /// 画像・図形と同じ理由によるDoS対策)。
         /// </summary>
-        private static List<MergedRange> ReadMergedRanges(string sheetName, X.Worksheet worksheet, WorkbookReadOptions options)
+        private static List<MergedRange> ReadMergedRanges(
+            string sheetName, X.Worksheet worksheet, WorkbookReadOptions options, UnsupportedElementCollector unsupported)
         {
             var result = new List<MergedRange>();
             var mergeCells = worksheet.GetFirstChild<X.MergeCells>();
@@ -568,6 +569,12 @@ namespace Utsushi.Parsing.OpenXml
                     }
 
                     // ignore時は上限以降の結合範囲を無視する(以降のセルは通常セルとして扱われる)。
+                    unsupported.AddCountLimitExceeded(
+                        sheetName,
+                        range.TopLeft,
+                        "TooManyMergedRanges",
+                        MaxMergedRangesPerSheet,
+                        "シートの結合セル範囲の数が上限を超えたため、超えた分の範囲は結合せずに出力されます。");
                     break;
                 }
 
@@ -2790,31 +2797,47 @@ namespace Utsushi.Parsing.OpenXml
         /// <summary>
         /// ブック全体に対するサポート外要素(外部参照)を検出する。要件1.5。
         /// </summary>
-        private static void DetectUnsupportedWorkbookElements(WorkbookPart workbookPart, WorkbookReadOptions options)
+        private static void DetectUnsupportedWorkbookElements(
+            WorkbookPart workbookPart, WorkbookReadOptions options, UnsupportedElementCollector unsupported)
         {
-            if (options.UnsupportedElementBehavior != UnsupportedElementBehavior.Error)
+            if (!workbookPart.ExternalWorkbookParts.Any())
             {
                 return;
             }
 
-            if (workbookPart.ExternalWorkbookParts.Any())
+            if (options.UnsupportedElementBehavior != UnsupportedElementBehavior.Error)
             {
-                throw new UnsupportedWorkbookElementException(
-                    "ブックに外部ブックへの参照(external reference)が含まれています。"
-                    + "帳票定義の unsupportedElements が 'error' のため中止します。",
-                    "ExternalReference",
-                    options.ReportCode);
+                unsupported.Add(
+                    UnsupportedElementKind.ExternalReference,
+                    null,
+                    null,
+                    null,
+                    "ブックに外部のブックへの参照が含まれています。表示する値は保存時の計算結果のままで、参照先の変更は反映されません。");
+                return;
             }
+
+            throw new UnsupportedWorkbookElementException(
+                "ブックに外部ブックへの参照(external reference)が含まれています。"
+                + "帳票定義の unsupportedElements が 'error' のため中止します。",
+                "ExternalReference",
+                options.ReportCode);
         }
 
         /// <summary>
         /// シート単位のサポート外要素(図形・グラフ)を検出する。要件1.5。
         /// </summary>
         private static void DetectUnsupportedElements(
-            string sheetName, WorksheetPart worksheetPart, X.Worksheet worksheet, WorkbookReadOptions options)
+            string sheetName,
+            WorksheetPart worksheetPart,
+            X.Worksheet worksheet,
+            WorkbookReadOptions options,
+            UnsupportedElementCollector unsupported)
         {
             if (options.UnsupportedElementBehavior != UnsupportedElementBehavior.Error)
             {
+                // エラーの側の判定の順序・種類(ElementKind)は変えずに残し、無視の側だけアンカーごとに記録する
+                // (excel2pdf-consolidation design.md 9。扱いの指定はタスク2.8で外す)。
+                RecordUnsupportedDrawingElements(sheetName, worksheetPart, worksheet, unsupported);
                 return;
             }
 
@@ -2858,6 +2881,118 @@ namespace Utsushi.Parsing.OpenXml
                     options.ReportCode,
                     sheetName);
             }
+        }
+
+        /// <summary>
+        /// シートの描画オブジェクトのうち、読み込みの対象(画像・図形・接続線・グループ)でないものを、アンカーごとに記録する
+        /// (excel2pdf-consolidation 要件2.7(a)(f)(h)、design.md 2.2)。
+        /// </summary>
+        /// <remarks>
+        /// グラフは図表枠(<c>xdr:graphicFrame</c>)のアンカーに置かれるため、グラフを参照する図表枠を <see cref="UnsupportedElementKind.Chart"/>、
+        /// それ以外を <see cref="UnsupportedElementKind.UnsupportedDrawingObject"/> として1件ずつ記録する(同じアンカーを重ねて記録しない)。
+        /// アンカーから参照されていないグラフのパートは印刷されないため記録しない。
+        /// </remarks>
+        private static void RecordUnsupportedDrawingElements(
+            string sheetName, WorksheetPart worksheetPart, X.Worksheet worksheet, UnsupportedElementCollector unsupported)
+        {
+            var drawingsPart = worksheetPart.DrawingsPart;
+            if (drawingsPart is null)
+            {
+                if (worksheet.GetFirstChild<X.Drawing>() is not null)
+                {
+                    unsupported.Add(
+                        UnsupportedElementKind.UnsupportedDrawingObject,
+                        sheetName,
+                        null,
+                        "drawing",
+                        "シートが参照する描画のパートを解決できないため、描画オブジェクトは出力されません。");
+                }
+            }
+            else if (drawingsPart.WorksheetDrawing is { } drawing)
+            {
+                foreach (var anchor in drawing.ChildElements)
+                {
+                    RecordUnsupportedAnchor(sheetName, anchor, unsupported);
+                }
+            }
+
+            if (worksheet.GetFirstChild<X.LegacyDrawing>() is not null)
+            {
+                unsupported.Add(
+                    UnsupportedElementKind.LegacyDrawing,
+                    sheetName,
+                    null,
+                    null,
+                    "コメント・フォームコントロールなどのレガシー図形は出力されません。");
+            }
+
+            if (worksheet.GetFirstChild<X.LegacyDrawingHeaderFooter>() is not null)
+            {
+                unsupported.Add(
+                    UnsupportedElementKind.HeaderFooterImage,
+                    sheetName,
+                    null,
+                    null,
+                    "ヘッダー/フッターの画像は出力されません。");
+            }
+        }
+
+        /// <summary>1つのアンカーが読み込みの対象でなければ記録する(<see cref="RecordUnsupportedDrawingElements"/>)。</summary>
+        private static void RecordUnsupportedAnchor(string sheetName, OpenXmlElement anchor, UnsupportedElementCollector unsupported)
+        {
+            if (anchor is Xdr.AbsoluteAnchor)
+            {
+                unsupported.Add(
+                    UnsupportedElementKind.UnsupportedAnchor,
+                    sheetName,
+                    null,
+                    "absoluteAnchor",
+                    "セルに固定せず絶対位置で配置された描画オブジェクトは出力されません。");
+                return;
+            }
+
+            Xdr.MarkerType? fromMarker = anchor switch
+            {
+                Xdr.TwoCellAnchor two => two.FromMarker,
+                Xdr.OneCellAnchor one => one.FromMarker,
+                _ => null,
+            };
+
+            if (anchor is not (Xdr.TwoCellAnchor or Xdr.OneCellAnchor))
+            {
+                // mc:AlternateContent など。中身(mc:Choice)を解釈しないため、アンカーのセルは分からない。
+                unsupported.Add(
+                    UnsupportedElementKind.UnsupportedDrawingObject,
+                    sheetName,
+                    null,
+                    anchor.LocalName,
+                    "対応していない描画オブジェクトは出力されません。");
+                return;
+            }
+
+            if (anchor.GetFirstChild<Xdr.Picture>() is not null
+                || anchor.GetFirstChild<Xdr.Shape>() is not null
+                || anchor.GetFirstChild<Xdr.ConnectionShape>() is not null
+                || anchor.GetFirstChild<Xdr.GroupShape>() is not null)
+            {
+                return;
+            }
+
+            CellAddress? anchorCell = fromMarker is not null && TryReadMarker(fromMarker, out var cell, out _) ? cell : null;
+            var frame = anchor.GetFirstChild<Xdr.GraphicFrame>();
+            if (frame?.Graphic?.GraphicData?.GetFirstChild<DocumentFormat.OpenXml.Drawing.Charts.ChartReference>() is not null)
+            {
+                unsupported.Add(UnsupportedElementKind.Chart, sheetName, anchorCell, null, "グラフは出力されません。");
+                return;
+            }
+
+            var element = anchor.ChildElements.FirstOrDefault(e => e is not (Xdr.FromMarker or Xdr.ToMarker or Xdr.Extent or Xdr.ClientData));
+            unsupported.Add(
+                UnsupportedElementKind.UnsupportedDrawingObject,
+                sheetName,
+                anchorCell,
+                frame?.Graphic?.GraphicData?.Uri?.Value ?? element?.LocalName,
+                "対応していない描画オブジェクト(図表枠など)は出力されません。");
         }
 
         /// <summary>
