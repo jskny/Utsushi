@@ -4,12 +4,6 @@ inclusion: always
 
 # Utsushi 製品概要
 
-> **移行中**: 変換の入口を簡易API `Excel2Pdf` に一本化し、帳票定義(`definition.json`)の仕組みを廃止する変更を進めている
-> (`.kiro/specs/excel2pdf-consolidation/`)。本ファイルは移行後の方針を記す。実装が完了するまでは、次の点で実装と食い違う。
-> - コードには帳票定義の仕組みが残っている。
-> - 未対応の要素を既定でエラーにすること、診断(`Excel2Pdf.Check()`)、CLIの `check` は未実装である(現在の `Excel2Pdf` は未対応の要素を黙って無視する)。
-> - `structure.md`・`tech.md` は移行前の構成・規約を記している。
-
 ## 目的
 
 自社システムで使用している既存の帳票(Excelファイル)を、**レイアウトを一切崩さずにPDF化**する。

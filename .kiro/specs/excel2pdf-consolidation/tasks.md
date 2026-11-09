@@ -165,9 +165,9 @@
 
 ## 9. ドキュメントと steering
 
-- [ ] 9.1 `.kiro/steering/structure.md`(構成・帳票の追加手順)・`tech.md` を改め、design.md 7 のとおり方針を書き換える。product.md・structure.md・tech.md の「移行中」の注記を外す
+- [x] 9.1 `.kiro/steering/structure.md`(構成・帳票の追加手順)・`tech.md` を改め、design.md 7 のとおり方針を書き換える。product.md・structure.md・tech.md の「移行中」の注記を外す
   - _Requirements: 1.3_
-- [ ] 9.2 `CLAUDE.md`(現在の状態・開発コマンド・必ず守る制約。「移行中」の注記を外す)と `README.md` を改める
+- [x] 9.2 `CLAUDE.md`(現在の状態・開発コマンド・必ず守る制約。「移行中」の注記を外す)と `README.md` を改める
   - _Requirements: 1.3, 5.8_
 - [ ] 9.3 `docs/ライブラリの使い方.md` を改める(既定がエラーに変わったこと・`ReportCode` の改名・`Check()`・エンジン・移行前に `check` で確かめる手順)
   - _Requirements: 1.6, 2.1, 4.1_
