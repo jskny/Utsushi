@@ -430,7 +430,7 @@ utsushi --help
 文字の収まらない箇所: 1件
   [NumberTooWide] C8(1ページ目): 数値の表示文字列がセルの幅に収まりません
 フォントの代替: 1件
-  ＭＳ Ｐゴシック → BIZ UDPゴシック
+  ＭＳ Ｐゴシック → BIZ UDPGothic
 書式の近似(参考): 2件
   [TextRotation] シート '工程表' D3: 文字の回転(textRotation=90)は横書きで描きます
   [ConditionalFormatting] シート '注文書' F10:F30: 条件付き書式は反映しません
@@ -507,6 +507,66 @@ utsushi --help
   「帳票ごとの差異はテンプレート(Excelの書式・印刷設定)と呼び出し元が書き込む値で表し、共通レイヤーのコードに帳票固有の分岐を持ち込まない」に改める。
 - 移行が完了したら、product.md・structure.md・tech.md・CLAUDE.md の「移行中」の注記を外す。
 - `docs/実装設計失敗事例集.md` の過去の事例は、記録としてそのまま残す(廃止した機能に関する節には、廃止した旨の注記だけを加える)。
+
+## 9. 実装前の調査で決めたこと
+
+実装に着手する前に、各タスクの実現可能性を調査した(2026-11-09)。仕様の範囲で次のとおり決める。
+
+### 共通
+
+- 診断の説明の文・補足の情報の正規化(制御文字の除去・64文字で切り詰め)は、Parsing(未対応要素)と Layout(書式の近似)の両方で使う。
+  src のプロジェクト同士では internal が見えない(`Directory.Build.props` の `InternalsVisibleTo` はテストだけ)ため、`Utsushi.Core` に public の静的ヘルパー `DiagnosticText.Normalize` として置く。
+- `UtsushiException.ToDiagnosticString()` は virtual ではない。未対応要素の一覧を含めるため、派生クラスが詳細を足す protected virtual のフックを加える。
+
+### タスク2(未対応要素)
+
+- `WorkbookModel.UnsupportedElements`・`UnsupportedElementsTruncated` は、位置引数ではなく init のプロパティにする(既存の生成箇所を直さずに済む)。
+- 画像の検証(`TryReadValidatedImage`)は、グループ内の画像とトップレベルで共有している。そこで、記録は関数の中ではせず、失敗の理由を返して呼び出し元が記録する。
+  グループの子要素の読み込みも同じく理由を返し、グループの側でまとめて1件にする。
+- グループ全体を出力しない場合の種類は、次のとおりにする。
+  - 原因が数の上限(グループ自身の再確認、または子要素の読み込みで上限に達した場合)なら `LimitExceeded`(シートと上限の種類ごとに1件)。
+  - それ以外(非対応の子要素・非対応プリセット・文字数の上限・壊れた子要素)なら、グループのアンカーで `UnsupportedGroupChild`(`Detail` に原因)。
+- 2.4〜2.7 では、エラーの側の動作(判定の順序と `ElementKind`)を変えない。新しい検知(アンカーごとの判定など)は無視の側の記録にだけ使い、2.8 で一本化する。
+- アンカーから参照されていないグラフのパートは印刷されないため、記録しない。
+  `mc:AlternateContent` のアンカーは `UnsupportedDrawingObject`(アンカーのセルは無し)とする。Office 2016 以降の新しい形式のグラフ(`cx:chart`)も `UnsupportedDrawingObject` とする。
+  1077行の `continue` は、`absoluteAnchor`・`mc:AlternateContent`・壊れたマーカーを振り分けて、1件ずつ記録する。
+
+### タスク3・4(フォントの代替・ファサード)
+
+- `GetSubstitution` は、解決と辞書の参照を同じロックの下で行う(フォントの登録でキャッシュが消える競合を避けるため)。
+- 代替の書体名は、書体のデータが持つファミリ名(`SKTypeface.FamilyName`)をそのまま返す。同梱のフォントでは英語名(`BIZ UDPGothic` など)になりうる。
+- `Excel2Pdf` は、エンジンを渡されない場合も内部でエンジン(`Excel2PdfEngine`)を作って使う。これにより、診断でフォントの代替を問い合わせられる。
+  移行期間中に利用者が `ReportPdfConverter` を渡した場合は、`FontResolver` を取り出せないため、フォントの代替の一覧は空にする(タスク8で、この経路ごと無くなる)。
+- 未対応要素の判定は `Save`・`ToPdfBytes` だけで行う(内部の `ComputeLayout` では行わない)。
+  ファサードの内部の変換は、`PagedLayout` とともに `WorkbookModel.UnsupportedElements` を返すように変える。
+- **移行期間(タスク4〜7)の帳票定義ありの `Excel2Pdf`**: 未対応要素の扱いは帳票定義の `unsupportedElements` に従い、`Excel2PdfOptions.UnsupportedElements` は帳票定義なしの経路にだけ効く。
+  また、`unsupportedElements: "error"` の帳票定義では、`Check()` も例外になる(中核仕様の要件13.5を保つため。2.4)。いずれもタスク8で帳票定義ありの経路ごと無くなる。
+
+### タスク5(書式の近似)
+
+- `SetValue` の書き込みは Substitution のアセンブリ(`CellSubstitutor`)が、公開の `NumberFormatting.Format` で行っている。
+  Parsing の internal は Substitution から見えない。そこで、表示文字列・色と近似の印をまとめて返す public のメソッドを `NumberFormatting` に加える(既存の `Format` は変えない)。
+- `NumberFormatter` は、解釈できない書式と表せない値を、同じ例外の捕捉でまとめて標準の表示にしている。理由のコードを返す形に改めて区別する。
+- リッチテキストの比較は、ランの `rPr` から解決したフォント(名前・サイズ・太字・斜体・下線・取り消し線・色)とセルのフォントで行う。
+  それ以外の属性(上付き・下付きなど)を持つランは、異なるとみなす。
+- テーマが無いブックの図形の塗りつぶしは、既定のテーマの `fillStyleLst`(単色・グラデーション・グラデーション)で判定する。
+  `fillRef` の idx が1001以上(背景の塗りつぶしのスタイル `bgFillStyleLst`)も同じく判定する。
+  図形の塗りつぶし・`fontRef` の印は、グループ内の図形にも付ける。
+- 要素の識別に使う描画オブジェクトのID(`cNvPr/@id`)が無い要素(接続線など、またはIDが0)は、描画パートの中の順番を識別に使う。
+- グループ内の画像の回転は、グループの回転を足した実効の角度で判定し、位置にはトップレベルのグループのアンカーを使う。
+- ゴールデンは、近似の行が変わるサブタスクごとに更新する(5.14 は最後の確認だけにする)。サンプル帳票の図形の一部(`fontRef` を持つ楕円など)で `ShapeFont` の行が増える見込みである。
+
+### タスク6〜8
+
+- `ReportConversionGoldenTests` からは、internal の `Excel2Pdf.ComputeLayout` を呼ぶ(`InternalsVisibleTo` で Golden.Tests に許されている)。
+- CLI の `--help` は標準出力に出す。`Excel2Pdf` が送出する `ArgumentException`(引数の検証)は、これまでどおり終了コード2とする。
+  `tests/Utsushi.Cli.Tests` から `samples/` を使うため、`Utsushi.TestSupport` への参照を加える。
+- 帳票定義の削除は、Substitution → Layout → ReportDefinition の順に外す(置換キーの定義を参照しているものを先に外す)。
+  - はみ出しの扱いの列挙 `OverflowBehavior` は Layout がはみ出しの判定に使っているため削除しない。`ReportModel.OverflowByCell` を外すときに、Layout の internal の列挙に移す。
+  - `ReportModelBuilder` の置換キー・印刷範囲の上書きの検証(`ValidateSubstitutionCells`・`ValidatePrintArea`)と、`FieldIndexCacheTests`(`TryGetField` 専用)を ReportDefinition の削除で外す。
+  - `ReportModelBuilder` がシートの不在に使っている `ReportStructureMismatchException` は、`InvalidOperationException` に置き換える(読み込んだシートを渡すため通常は起きない)。
+    帳票定義の例外が無くなるため、`ProcessingStage.ReportDefinition` も削除する。
+  - 旧い `UnsupportedElementPolicy` の削除は、`ReportDefinition.UnsupportedElements` の削除と同じサブタスクで行う。
 
 ## 未決事項
 

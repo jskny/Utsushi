@@ -3,7 +3,7 @@
 対象要件: `.kiro/specs/excel2pdf-consolidation/requirements.md`
 対象設計: `.kiro/specs/excel2pdf-consolidation/design.md`
 
-> **状況**: 仕様の作成段階。要件・設計のレビューを経てから実装に着手する。
+> **状況**: 実装中。実装前の実現可能性の調査で決めたことは design.md 9 にまとめた。
 >
 > **順序の方針**:
 > - 中核仕様を最初に改訂する(CLAUDE.md「先に仕様側を更新する」)。
@@ -30,9 +30,9 @@
 
 ## 2. Parsing: 未対応要素の収集
 
-既存の扱いの指定(`UnsupportedElementBehavior`)を残したまま、無視の側で記録を始め(2.1〜2.7)、最後に指定を外す(2.8)。
+既存の扱いの指定(`UnsupportedElementBehavior`)を残したまま、無視の側で記録を始め(2.1〜2.7。エラーの側の判定の順序と `ElementKind` は変えない)、最後に指定を外す(2.8)。
 
-- [ ] 2.1 `Utsushi.Core` に `UnsupportedElementKind`・`UnsupportedElement` を追加する(まだ使わない)
+- [ ] 2.1 `Utsushi.Core` に `UnsupportedElementKind`・`UnsupportedElement` と、説明の文の正規化 `DiagnosticText.Normalize` を追加する(まだ使わない)
   - _Requirements: 2.4_
 - [ ] 2.2 `UnsupportedElementCollector` を追加する(記録の単位、件数の上限、`Message`/`Detail` の正規化。上限を渡せる internal のオーバーロード)。単体テストを含む
   - _Requirements: 2.4, 2.5_
@@ -48,7 +48,7 @@
   - _Requirements: 2.2, 2.5, 2.7_
 - [ ] 2.7 黙って読み飛ばしている経路(design.md 2.2)を `MalformedDrawingObject` として記録する(`absoluteAnchor` と重ねない)。テストを含む
   - _Requirements: 2.7_
-- [ ] 2.8 `UnsupportedWorkbookElementException` に `Elements`・`IsTruncated` を持たせ、`ElementKind` を削除する。`WorkbookReadOptions.UnsupportedElementBehavior` を削除し、
+- [ ] 2.8 `UnsupportedWorkbookElementException` に `Elements`・`IsTruncated` を持たせ、`ElementKind` を削除する(`ToDiagnosticString()` に一覧を含めるフックを `UtsushiException` に加える)。`WorkbookReadOptions.UnsupportedElementBehavior` を削除し、
       読み込みは常に記録だけにする。帳票定義ありの経路は `ReportPdfConverter.ReadWorkbook` で `unsupportedElements: "error"` のときに一覧から例外を作る(design.md 2.4)。
       既存の Parsing のテストの `Error`・`ElementKind` の検証を、一覧の検証に書き換える
   - _Requirements: 2.2, 2.3, 2.6_
@@ -82,7 +82,7 @@
 
 ## 5. 書式の近似の検知(design.md 3.5)
 
-骨組み(5.1〜5.3)を先に作り、種類ごとに検知を足す(5.4〜5.13)。各サブタスクは Parsing の読み取り・Layout の記録・テスト(エッジケースのサンプルを含む)をまとめて行う。
+骨組み(5.1〜5.3)を先に作り、種類ごとに検知を足す(5.4〜5.13)。各サブタスクは Parsing の読み取り・Layout の記録・テスト(エッジケースのサンプルを含む)と、近似の行が変わる場合のゴールデンの更新をまとめて行う。
 
 - [ ] 5.1 `Utsushi.Core` に `FormatApproximationKind`・`FormatApproximation` を追加する
   - _Requirements: 7.1_
@@ -110,7 +110,7 @@
   - _Requirements: 7.2_
 - [ ] 5.13 ページの分割: `MergedCellAcrossPageBreak`・`DrawingAcrossPageBreak`・`MergedCellHiddenEdge` を記録する
   - _Requirements: 7.2, 7.3, 7.4_
-- [ ] 5.14 ゴールデンの差分が近似の行の追加だけで、描画命令が変わらないことを確かめて更新する。保存(`checkFit` なし)では集めないことを確かめる
+- [ ] 5.14 タスク5の開始前と比べて、ゴールデンの描画命令の行が変わっていないことを確かめる。保存(`checkFit` なし)では集めないことを確かめる
   - _Requirements: 7.5_
 - [ ] 5.15 layout-fidelity-reviewer・security-reviewer(新しい読み取りの上限)・code-reviewer
   - _Requirements: 7.2, 7.3_
@@ -131,7 +131,7 @@
 
 ## 7. CLI の作り直し(帳票定義の削除より前。`Excel2Pdf` だけで作れる)
 
-- [ ] 7.1 `CommandLineOptions.Parse` を `check`・`convert` のコマンドと新しいオプションに作り直し、帳票定義のオプションを削除する。引数の解釈のテストを含む
+- [ ] 7.1 `tests/Utsushi.Cli.Tests` に `Utsushi.TestSupport` への参照を加える。`CommandLineOptions.Parse` を `check`・`convert` のコマンドと新しいオプションに作り直し、帳票定義のオプションを削除する。引数の解釈のテストを含む
   - _Requirements: 5.4, 5.5, 5.6, 5.8_
 - [ ] 7.2 `Program.Run` と `convert` を実装する(`Main` は `Run` を呼ぶだけにする。終了コード0/2/3)。テストを含む
   - _Requirements: 5.3, 5.6, 5.7_
@@ -140,19 +140,21 @@
 
 ## 8. 帳票定義の仕組みの削除
 
-外側(公開API)から内側(モデル)へ順に外す。
+外側(公開API)から内側(モデル)へ、置換キーの定義を参照しているもの(Substitution・Layout)を先に外す。
 
 - [ ] 8.1 `Excel2Pdf` の帳票コード付きのコンストラクタ・コンバータを受け取るコンストラクタ・`SetField`・`ClearField`・`ReportCode`・`CheckFit` を削除し、関係するテストを削除・書き換える
   - _Requirements: 1.3, 4.5_
 - [ ] 8.2 `ReportPdfConverter` を internal の `ConversionPipeline` にし、帳票定義ありの経路と公開の変換メソッドを削除する。公開コンストラクタを使っていたテストを、エンジンの internal のコンストラクタに移す
   - _Requirements: 1.4_
-- [ ] 8.3 ReportDefinition: JSONの読み込み・リポジトリ・置換キーの定義・旧い `UnsupportedElementPolicy` を削除する。`samples/**/definition.json` と、`tests/Utsushi.ReportDefinition.Tests` の JSON・リポジトリのテストを削除する
+- [ ] 8.3 Substitution: 置換キー(`ICellSubstitutor.Apply`)・必須キー・未知のキーの検証と、そのテストを削除する
+  - _Requirements: 1.3_
+- [ ] 8.4 Layout: `ValidateRequiredFieldsAreInPrintRanges`・`FindSubstitutionKey`・`OverflowByCell`・`PrintAreaOverride`・`FitIssue.SubstitutionKey`・`FitCheckResult` を削除する
+      (`OverflowBehavior` は Layout の internal の列挙に移す。ゴールデンの `key=` の列が無くなる)。定義の `overflow` で確かめていた Layout のテストを、セルの書式に書き換えるか削除する
+  - _Requirements: 1.3_
+- [ ] 8.5 ReportDefinition: JSONの読み込み・リポジトリ・置換キーの定義・`ReportDefinition.UnsupportedElements` と旧い `UnsupportedElementPolicy`・
+      `ReportModelBuilder` の置換キー・印刷範囲の上書きの検証を削除する。`samples/**/definition.json` と、`tests/Utsushi.ReportDefinition.Tests` の JSON・リポジトリ・`FieldIndexCacheTests` を削除する
   - _Requirements: 1.5_
-- [ ] 8.4 Substitution: 置換キー(`ICellSubstitutor.Apply`)・必須キー・未知のキーの検証と、そのテストを削除する
-  - _Requirements: 1.3_
-- [ ] 8.5 Layout: `ValidateRequiredFieldsAreInPrintRanges`・`FindSubstitutionKey`・`OverflowByCell`・`PrintAreaOverride`・`FitIssue.SubstitutionKey`・`FitCheckResult` を削除する(ゴールデンの `key=` の列が無くなる)
-  - _Requirements: 1.3_
-- [ ] 8.6 Core: 帳票定義・置換キーの例外を削除する
+- [ ] 8.6 Core: 帳票定義・置換キーの例外と `ProcessingStage.ReportDefinition` を削除する(`ReportModelBuilder` のシートの不在は `InvalidOperationException` にする)
   - _Requirements: 1.3_
 - [ ] 8.7 `ReportCode` を `DocumentName` に改める(`UtsushiException`・`PagedLayout`・`WorkbookReadOptions`。ゴールデンの1行目が `document=` になる)
   - _Requirements: 1.6_
