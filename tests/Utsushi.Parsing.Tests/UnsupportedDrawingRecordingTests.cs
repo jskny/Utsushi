@@ -180,6 +180,59 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 位置の壊れた図表枠は1件だけ記録する()
+        {
+            var anchor = ConnectorAndGroupWorkbookFixtures.WrapInTwoCellAnchor(ChartFrame());
+            anchor.FromMarker!.Remove();
+            var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
+            try
+            {
+                var element = Assert.Single(_reader.ReadFile(path).UnsupportedElements);
+
+                Assert.Equal(UnsupportedElementKind.Chart, element.Kind);
+                Assert.Null(element.Anchor);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 不正なシート名は破損したファイルとして扱う()
+        {
+            foreach (var name in new[] { new string('A', 32), "S\nX", "a:b", "a[b]" })
+            {
+                var path = SafetyLimitWorkbookFixtures.CreateWorkbook((workbook, _) => workbook.Sheets!.GetFirstChild<X.Sheet>()!.Name = name);
+                try
+                {
+                    var ex = Assert.Throws<Utsushi.Core.Exceptions.InvalidExcelFileException>(() => _reader.ReadFile(path));
+                    Assert.Equal(Utsushi.Core.Exceptions.InvalidExcelFileReason.Corrupted, ex.Reason);
+                    Assert.DoesNotContain(name, ex.Message, System.StringComparison.Ordinal);
+                }
+                finally
+                {
+                    File.Delete(path);
+                }
+            }
+        }
+
+        [Fact]
+        public void 三十一文字のシート名は読める()
+        {
+            var name = new string('あ', OpenXmlWorkbookReader.MaxSheetNameLength);
+            var path = SafetyLimitWorkbookFixtures.CreateWorkbook((workbook, _) => workbook.Sheets!.GetFirstChild<X.Sheet>()!.Name = name);
+            try
+            {
+                Assert.Equal(name, Assert.Single(_reader.ReadFile(path).Sheets).Name);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void 大きさの壊れた図形をアンカーとともに記録する()
         {
             var anchor = ShapeWorkbookFixtures.TwoCellShapeAnchor(A.ShapeTypeValues.Rectangle);

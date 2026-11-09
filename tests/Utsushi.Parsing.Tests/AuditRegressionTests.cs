@@ -371,7 +371,7 @@ namespace Utsushi.Parsing.Tests
         [Fact]
         public void 図形テキストの段落の区切りも文字数の上限に数える()
         {
-            // 文字の無い段落だけを大量に並べても上限(2000文字)を迂回できない(Ignore モードでは図形ごと読み飛ばす)。
+            // 文字の無い段落だけを大量に並べても上限(2000文字)を迂回できない(読み込みではは図形ごと読み飛ばす)。
             var textBody = "<xdr:txBody><a:bodyPr/><a:lstStyle/>"
                 + string.Concat(Enumerable.Repeat("<a:p/>", 2000))
                 + "<a:p><a:r><a:t>x</a:t></a:r></a:p></xdr:txBody>";

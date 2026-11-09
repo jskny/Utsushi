@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 
 namespace Utsushi.Core.Exceptions
@@ -46,8 +47,7 @@ namespace Utsushi.Core.Exceptions
         /// <summary>
         /// ファイルサイズ・展開後サイズ・シート内のセル数・共有文字列数のいずれかが
         /// 安全な処理を続けられる上限を超えている(要件6, 7)。信頼できない入力
-        /// (帳票定義への登録前のExcelファイル)に対する安全弁であり、`unsupportedElements`の
-        /// 設定によらず常に例外化する(パスワード保護・破損ファイルと同様、要素単位の
+        /// に対する安全弁であり、未対応要素の扱いによらず常に例外化する(パスワード保護・破損ファイルと同様、要素単位の
         /// スキップでは対処できない、ファイル全体の異常として扱う)。
         /// </summary>
         TooLarge,
@@ -67,7 +67,7 @@ namespace Utsushi.Core.Exceptions
             bool isTruncated,
             string? reportCode = null,
             string? sheetName = null)
-            : base(BuildMessage(elements ?? throw new ArgumentNullException(nameof(elements)), isTruncated), ProcessingStage.Parsing, reportCode, sheetName)
+            : base(BuildMessage(RequireElements(elements), isTruncated), ProcessingStage.Parsing, reportCode, sheetName)
         {
             Elements = elements;
             IsTruncated = isTruncated;
@@ -79,18 +79,51 @@ namespace Utsushi.Core.Exceptions
         /// <summary>件数の上限に達し、含めなかった未対応要素があるかどうか。</summary>
         public bool IsTruncated { get; }
 
+        /// <summary>
+        /// <see cref="UtsushiException.ToDiagnosticString"/> に1行ずつ載せる未対応要素の件数。それ以降は種類ごとの件数だけを載せる
+        /// (1件のログの記録が際限なく大きくならないようにするため。すべては <see cref="Elements"/>)。
+        /// </summary>
+        internal const int MaxElementsInDiagnostic = 100;
+
         /// <inheritdoc />
         protected override void AppendDiagnosticDetails(StringBuilder builder)
         {
-            foreach (var element in Elements)
+            for (var i = 0; i < Elements.Count && i < MaxElementsInDiagnostic; i++)
             {
-                builder.Append(Environment.NewLine).Append("  ").Append(element);
+                builder.Append(Environment.NewLine).Append("  ").Append(Elements[i]);
+            }
+
+            if (Elements.Count > MaxElementsInDiagnostic)
+            {
+                builder.Append(Environment.NewLine)
+                    .Append("  ほか ")
+                    .Append((Elements.Count - MaxElementsInDiagnostic).ToString(CultureInfo.InvariantCulture))
+                    .Append(" 件。種類ごとの件数(全件):");
+                foreach (var group in Elements.GroupBy(e => e.Kind).OrderBy(g => g.Key))
+                {
+                    builder.Append(' ').Append(group.Key).Append('=').Append(group.Count().ToString(CultureInfo.InvariantCulture));
+                }
             }
 
             if (IsTruncated)
             {
                 builder.Append(Environment.NewLine).Append("  (件数の上限で打ち切り)");
             }
+        }
+
+        private static IReadOnlyList<UnsupportedElement> RequireElements(IReadOnlyList<UnsupportedElement>? elements)
+        {
+            if (elements is null)
+            {
+                throw new ArgumentNullException(nameof(elements));
+            }
+
+            if (elements.Count == 0)
+            {
+                throw new ArgumentException("未対応要素が1件もありません。", nameof(elements));
+            }
+
+            return elements;
         }
 
         private static string BuildMessage(IReadOnlyList<UnsupportedElement> elements, bool isTruncated)

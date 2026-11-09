@@ -57,16 +57,17 @@ namespace Utsushi.Core
         string? Detail,
         string Message)
     {
-        /// <summary>1行の説明(種類・シート・位置・説明)。</summary>
+        /// <summary>1行の説明(種類・シート・位置・説明・補足の情報)。ファイル由来の値は正規化して入れる(改行を含めない)。</summary>
         public override string ToString()
         {
-            var location = SheetName is null ? "ブック" : $"シート '{SheetName}'";
+            var location = SheetName is null ? "ブック" : $"シート '{DiagnosticText.Normalize(SheetName)}'";
             if (Anchor is { } anchor)
             {
                 location += " " + anchor.ToString();
             }
 
-            return $"[{Kind}] {location}: {Message}";
+            var detail = Detail is null ? string.Empty : $" ({DiagnosticText.Normalize(Detail)})";
+            return $"[{Kind}] {location}: {DiagnosticText.Normalize(Message, int.MaxValue)}{detail}";
         }
     }
 }

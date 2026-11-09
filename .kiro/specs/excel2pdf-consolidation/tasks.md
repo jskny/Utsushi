@@ -52,7 +52,7 @@
       読み込みは常に記録だけにする。帳票定義ありの経路は `ReportPdfConverter.ReadWorkbook` で `unsupportedElements: "error"` のときに一覧から例外を作る(design.md 2.4)。
       既存の Parsing のテストの `Error`・`ElementKind` の検証を、一覧の検証に書き換える
   - _Requirements: 2.2, 2.3, 2.6_
-- [ ] 2.9 security-reviewer(収集の上限・`Message`/`Detail` の正規化・`src/Utsushi.Parsing/OpenXml/` 全体の、黙って読み飛ばす経路と未対応ループの横断確認)、code-reviewer
+- [x] 2.9 security-reviewer(収集の上限・`Message`/`Detail` の正規化・`src/Utsushi.Parsing/OpenXml/` 全体の、黙って読み飛ばす経路と未対応ループの横断確認)、code-reviewer
   - _Requirements: 2.4, 2.5, 2.6, 2.7_
 
 ## 3. Rendering: フォントの代替の問い合わせ
@@ -78,7 +78,7 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
 - [x] 4.7 `FontSubstitution` を追加し、`Check()` でレイアウトの結果のフォントを集めて問い合わせる。テスト(2回目の変換でも返る・使わないフォントは返らない)を含む
   - _Requirements: 3.1, 3.2, 4.1_
-- [ ] 4.8 code-reviewer
+- [x] 4.8 code-reviewer
 
 ## 5. 書式の近似の検知(design.md 3.5)
 

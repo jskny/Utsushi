@@ -5,7 +5,7 @@ namespace Utsushi.Parsing.Model
 {
     /// <summary>
     /// シートに配置された図形(要件10)。対応済みプリセット一覧に含まれない
-    /// プリセットジオメトリは読み取り対象にせず、サポート外要素として扱う。
+    /// プリセットジオメトリは読み取り対象にせず、未対応要素として記録する(excel2pdf-consolidation 要件2.7(b))。
     /// </summary>
     /// <param name="Id">
     /// <c>NonVisualDrawingProperties/@id</c>。接続線の接続先解決(要件10.11)のために保持する。

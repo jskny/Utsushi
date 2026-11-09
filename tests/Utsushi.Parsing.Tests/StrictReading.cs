@@ -28,14 +28,16 @@ namespace Utsushi.Parsing.Tests
             return workbook;
         }
 
-        /// <summary>例外に、指定の種類(と補足の情報の先頭)の未対応要素が含まれることを確かめる。</summary>
+        /// <summary>例外に、指定の種類(と補足の情報の先頭)の未対応要素がちょうど1件含まれることを確かめる。</summary>
         public static UnsupportedElement AssertContains(
             UnsupportedWorkbookElementException ex, UnsupportedElementKind kind, string? detailPrefix = null)
         {
-            var match = ex.Elements.FirstOrDefault(
-                e => e.Kind == kind && (detailPrefix is null || (e.Detail ?? string.Empty).StartsWith(detailPrefix, StringComparison.Ordinal)));
-            Assert.True(match is not null, $"未対応要素 {kind} {detailPrefix} が含まれていません: {string.Join(" / ", ex.Elements)}");
-            return match!;
+            // 1件だけであることも確かめる(同じ要素の二重の記録を見逃さないため)。
+            var matches = ex.Elements
+                .Where(e => e.Kind == kind && (detailPrefix is null || (e.Detail ?? string.Empty).StartsWith(detailPrefix, StringComparison.Ordinal)))
+                .ToList();
+            Assert.True(matches.Count == 1, $"未対応要素 {kind} {detailPrefix} が1件ではありません({matches.Count}件): {string.Join(" / ", ex.Elements)}");
+            return matches[0];
         }
     }
 }

@@ -28,6 +28,7 @@ namespace Utsushi.Golden.Tests
             Assert.False(ex.IsTruncated);
             Assert.Equal("template", ex.ReportCode);
             Assert.Equal("注文書", ex.SheetName);
+            Assert.Equal(ProcessingStage.Parsing, ex.Stage);
             Assert.Contains("Ignore", ex.Message);
         }
 
@@ -56,7 +57,7 @@ namespace Utsushi.Golden.Tests
         {
             // 制御文字を含む値のような書き込みのエラーより先に、未対応要素の例外を返す(要件2.2の補足)。
             using var pdf = new Excel2Pdf(OrderForm, new Excel2PdfOptions { Fonts = FontResolverOptions.AllowFallback() });
-            pdf.SetText("A1", "\u0001");
+            pdf.SetText("A3", "\u0001");
 
             Assert.Throws<UnsupportedWorkbookElementException>(() => pdf.ToPdfBytes());
         }
@@ -67,6 +68,15 @@ namespace Utsushi.Golden.Tests
             using var pdf = new Excel2Pdf(Invoice, new Excel2PdfOptions { Fonts = FontResolverOptions.AllowFallback() });
 
             Assert.True(pdf.ToPdfBytes().Length > 0);
+        }
+
+        [Fact]
+        public void 収まりの確認も保存と同じく未対応要素をエラーにする()
+        {
+            // CheckFit は移行期間だけの公開APIで、保存と同じエラーを返す(中核仕様の要件13.5)。診断の Check() だけが例外にしない。
+            using var pdf = new Excel2Pdf(OrderForm, new Excel2PdfOptions { Fonts = FontResolverOptions.AllowFallback() });
+
+            Assert.Throws<UnsupportedWorkbookElementException>(() => pdf.CheckFit());
         }
 
         [Fact]

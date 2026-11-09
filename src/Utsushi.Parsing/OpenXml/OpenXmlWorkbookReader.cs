@@ -133,7 +133,7 @@ namespace Utsushi.Parsing.OpenXml
                         options.ReportCode);
 
                 var unsupported = new UnsupportedElementCollector();
-                DetectUnsupportedWorkbookElements(workbookPart, unsupported);
+                RecordUnsupportedWorkbookElements(workbookPart, unsupported);
 
                 var colors = ColorResolver.Create(workbookPart);
                 var styles = StyleTable.Create(workbookPart, colors);
@@ -163,6 +163,7 @@ namespace Utsushi.Parsing.OpenXml
                         continue;
                     }
 
+                    ValidateSheetName(name!, options.ReportCode);
                     allSheetNames.Add(name!);
 
                     if (options.SheetNameFilter is { } filter && !string.Equals(name, filter, StringComparison.Ordinal))
@@ -225,9 +226,42 @@ namespace Utsushi.Parsing.OpenXml
 
                 return new WorkbookModel(sheets, styles.DefaultFont)
                 {
-                    UnsupportedElements = unsupported.Elements,
+                    UnsupportedElements = unsupported.Elements.ToArray(),
                     UnsupportedElementsTruncated = unsupported.IsTruncated,
                 };
+            }
+        }
+
+        /// <summary>Excel のシート名の最大の長さ。</summary>
+        internal const int MaxSheetNameLength = 31;
+
+        /// <summary>Excel がシート名に許さない文字。</summary>
+        private static readonly char[] InvalidSheetNameChars = { ':', '\\', '/', '?', '*', '[', ']' };
+
+        /// <summary>
+        /// シート名が Excel の制約(31文字以下、制御文字と <c>: \ / ? * [ ]</c> を含まない)を満たすかを確かめる。
+        /// 満たさなければ破損したファイルとして扱う(要件6.2)。
+        /// </summary>
+        /// <remarks>
+        /// シート名はエラーのメッセージ・未対応要素の一覧の各行・診断の結果に入り、処理ログに流れる。Excel が作らない長さ・文字の
+        /// シート名を受け付けると、細工したファイルで例外のメッセージを際限なく大きくしたり、改行で偽のログ行を差し込んだりできる
+        /// (security-reviewer指摘)。
+        /// </remarks>
+        internal static void ValidateSheetName(string name, string? reportCode)
+        {
+            var invalid = name.Length > MaxSheetNameLength || name.IndexOfAny(InvalidSheetNameChars) >= 0;
+            for (var i = 0; !invalid && i < name.Length; i++)
+            {
+                var category = CharUnicodeInfo.GetUnicodeCategory(name[i]);
+                invalid = category == UnicodeCategory.Control || category == UnicodeCategory.Format;
+            }
+
+            if (invalid)
+            {
+                throw new InvalidExcelFileException(
+                    "シート名が Excel のシート名として不正です(31文字を超える、または使えない文字を含む)。ファイルが破損している可能性があります。",
+                    InvalidExcelFileReason.Corrupted,
+                    reportCode);
             }
         }
 
@@ -753,7 +787,7 @@ namespace Utsushi.Parsing.OpenXml
         /// <summary>
         /// 1ブックに含める共有文字列(<c>sharedStrings.xml</c>の<c>si</c>要素)の数の上限。
         /// 上限を超えて読み取ると、以降の共有文字列を参照するセルは(既存の「範囲外索引は空欄」
-        /// 挙動と同じ経路で)空欄になる。画像・図形と異なり`unsupportedElements`の対象ではなく、
+        /// 挙動と同じ経路で)空欄になる。画像・図形と異なり未対応要素の対象ではなく、
         /// 常にこの挙動になる(要件6, 7。security-reviewer指摘)。
         /// </summary>
         private const int MaxSharedStringCount = 200_000;
@@ -1055,7 +1089,7 @@ namespace Utsushi.Parsing.OpenXml
 
         private static DrawingRejection UnsupportedPresetRejection(Dr.ShapeTypeValues? preset) =>
             new(UnsupportedElementKind.UnsupportedShapePreset,
-                preset is null ? "custGeom" : preset.Value.ToString(),
+                preset is null ? "prstGeomなし/custGeom" : preset.Value.ToString(),
                 "図形・接続線の形(プリセット)に対応していないため、出力されません。");
 
         private static DrawingRejection UnsupportedPresetRejection(Dr.ShapeTypeValues preset) =>
@@ -1136,7 +1170,12 @@ namespace Utsushi.Parsing.OpenXml
                 {
                     // absoluteAnchor・mc:AlternateContent などは RecordUnsupportedDrawingElements が記録する。
                     // ここで記録するのは、セルに固定する配置なのに位置(xdr:from)が壊れているものだけ(重ねて記録しない)。
-                    if (anchor is Xdr.TwoCellAnchor or Xdr.OneCellAnchor)
+                    // 中身が4種(画像・図形・接続線・グループ)以外なら RecordUnsupportedAnchor が記録済みのため、重ねない。
+                    if (anchor is Xdr.TwoCellAnchor or Xdr.OneCellAnchor
+                        && (anchor.GetFirstChild<Xdr.Picture>() is not null
+                            || anchor.GetFirstChild<Xdr.Shape>() is not null
+                            || anchor.GetFirstChild<Xdr.ConnectionShape>() is not null
+                            || anchor.GetFirstChild<Xdr.GroupShape>() is not null))
                     {
                         unsupported.Add(MalformedRejection("from"), sheetName, null);
                     }
@@ -2575,7 +2614,7 @@ namespace Utsushi.Parsing.OpenXml
         /// <summary>
         /// ブック全体に対する未対応要素(外部参照)を記録する(excel2pdf-consolidation 要件2.7(f))。
         /// </summary>
-        private static void DetectUnsupportedWorkbookElements(WorkbookPart workbookPart, UnsupportedElementCollector unsupported)
+        private static void RecordUnsupportedWorkbookElements(WorkbookPart workbookPart, UnsupportedElementCollector unsupported)
         {
             if (!workbookPart.ExternalWorkbookParts.Any())
             {

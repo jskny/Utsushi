@@ -21,14 +21,19 @@ namespace Utsushi.Core
         /// 制御文字・書式文字(Unicode の Cc・Cf)と対になっていないサロゲートを取り除き、<see cref="MaxLength"/> で切り詰める。
         /// 切り詰めた場合は末尾に「…」を付ける。<c>null</c> は <c>null</c> のまま返す。
         /// </summary>
-        public static string? Normalize(string? value)
+        public static string? Normalize(string? value) => Normalize(value, MaxLength);
+
+        /// <summary>
+        /// <see cref="Normalize(string)"/> と同じく制御文字・書式文字と孤立したサロゲートを取り除き、<paramref name="maxLength"/> で切り詰める。
+        /// </summary>
+        public static string? Normalize(string? value, int maxLength)
         {
             if (value is null)
             {
                 return null;
             }
 
-            var builder = new StringBuilder(Math.Min(value.Length, MaxLength + 1));
+            var builder = new StringBuilder(Math.Min(value.Length, Math.Min(maxLength, 4096) + 1));
             var truncated = false;
             for (var i = 0; i < value.Length; i++)
             {
@@ -37,7 +42,7 @@ namespace Utsushi.Core
                 {
                     if (i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
                     {
-                        if (builder.Length + 2 > MaxLength)
+                        if (builder.Length + 2 > maxLength)
                         {
                             truncated = true;
                             break;
@@ -61,7 +66,7 @@ namespace Utsushi.Core
                     continue;
                 }
 
-                if (builder.Length + 1 > MaxLength)
+                if (builder.Length + 1 > maxLength)
                 {
                     truncated = true;
                     break;

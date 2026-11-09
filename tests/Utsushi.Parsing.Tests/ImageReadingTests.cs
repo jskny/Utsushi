@@ -119,7 +119,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 対応形式以外の画像はunsupportedElementsがignoreなら無視される()
+        public void 対応形式以外の画像は読み込みでは無視される()
         {
             var path = ImageWorkbookFixtures.CreateWithPicture("image/x-emf", ImageWorkbookFixtures.TinyPng());
             try
@@ -134,7 +134,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 対応形式以外の画像はunsupportedElementsがerrorなら例外になる()
+        public void 対応形式以外の画像は未対応要素として記録する()
         {
             var path = ImageWorkbookFixtures.CreateWithPicture("image/x-emf", ImageWorkbookFixtures.TinyPng());
             try
@@ -153,9 +153,9 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 画像のみのシートはunsupportedElementsがerrorでも例外にならない()
+        public void 画像のみのシートは未対応要素として記録しない()
         {
-            // DetectUnsupportedElementsが画像(xdr:pic)を「サポート外のDrawing」として
+            // 以前の DetectUnsupportedElements が画像(xdr:pic)を「対応していない Drawing」として
             // 誤検出しないことを確認する(design.md「Parsing レイヤー」の必須修正点)。
             var path = ImageWorkbookFixtures.CreateWithPicture("image/png", ImageWorkbookFixtures.TinyPng());
             try
@@ -173,10 +173,10 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 対応済みプリセットの接続線はunsupportedElementsがerrorでも例外にならない()
+        public void 対応済みプリセットの接続線は未対応要素として記録しない()
         {
             // 要件10.9(接続線対応)により、straightConnector1等の対応済みプリセットは
-            // 構造的なサポート外(旧: ElementKind="Drawing")の対象から外れ、ConnectorModelとして読み取られる。
+            // 構造的な未対応要素(旧: ElementKind="Drawing")の対象から外れ、ConnectorModelとして読み取られる。
             var path = ImageWorkbookFixtures.CreateWithConnectionShape();
             try
             {
@@ -194,7 +194,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void ContentTypeを偽装した画像はunsupportedElementsがignoreなら無視される()
+        public void ContentTypeを偽装した画像は読み込みでは無視される()
         {
             // ContentTypeはOPCパッケージ側の申告値に過ぎないため、実際のバイト列が
             // シグネチャと一致しない場合はunsupportedElementsポリシーに従う(security-reviewer指摘)。
@@ -211,7 +211,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void ContentTypeを偽装した画像はunsupportedElementsがerrorなら例外になる()
+        public void ContentTypeを偽装した画像は未対応要素として記録する()
         {
             var path = ImageWorkbookFixtures.CreateWithPicture("image/png", new byte[] { 0x00, 0x01, 0x02, 0x03 });
             try
@@ -229,7 +229,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 画像の数が上限を超える場合はunsupportedElementsがignoreなら上限までしか読み取らない()
+        public void 画像の数が上限を超える場合は読み込みでは上限までしか読み取らない()
         {
             var path = ImageWorkbookFixtures.CreateWithManyPictures(OpenXmlWorkbookReader.MaxImagesPerSheet + 5);
             try
@@ -244,7 +244,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 画像の数が上限を超える場合はunsupportedElementsがerrorなら例外になる()
+        public void 画像の数が上限を超える場合は未対応要素として記録する()
         {
             var path = ImageWorkbookFixtures.CreateWithManyPictures(OpenXmlWorkbookReader.MaxImagesPerSheet + 5);
             try
@@ -285,7 +285,7 @@ namespace Utsushi.Parsing.Tests
         [Fact]
         public void 検証に失敗する画像が上限個並ぶと後ろの正しい画像は読み取られない()
         {
-            // 上限+1 枚目の読み取りは試みない(Ignore モード)。検証に失敗した画像も数えていることの確認。
+            // 上限+1 枚目の読み取りは試みない。検証に失敗した画像も数えていることの確認。
             var path = ImageWorkbookFixtures.CreateWithInvalidPicturesThenValid(OpenXmlWorkbookReader.MaxImagesPerSheet);
             try
             {
@@ -299,16 +299,19 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 検証に失敗する画像が上限個並ぶとunsupportedElementsがerrorなら最初の不正な画像で例外になる()
+        public void 検証に失敗する画像が上限個並ぶと要素ごとに記録し後ろの正しい画像は上限の超過として1件記録する()
         {
-            // Error モードでは上限に達する前に、最初の不正な画像の検証で止まる(上限の数え方の変更で順序が変わらないこと)。
+            // 検証に失敗した画像も枚数に数える(上限の数え方)。不正な画像は1枚ずつ記録し、上限を超えた後ろの正しい画像は
+            // 枚数の上限の超過として1件だけ記録する(excel2pdf-consolidation 要件2.5)。
             var path = ImageWorkbookFixtures.CreateWithInvalidPicturesThenValid(OpenXmlWorkbookReader.MaxImagesPerSheet);
             try
             {
-                using var stream = File.OpenRead(path);
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(
-                    () => _reader.ReadStrict(stream, WorkbookReadOptions.Default));
-                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedImageFormat);
+                var elements = _reader.ReadFile(path).UnsupportedElements;
+
+                Assert.Equal(OpenXmlWorkbookReader.MaxImagesPerSheet, elements.Count(e => e.Kind == UnsupportedElementKind.UnsupportedImageFormat));
+                var limit = Assert.Single(elements, e => e.Kind == UnsupportedElementKind.LimitExceeded);
+                Assert.StartsWith("TooManyImages", limit.Detail);
+                Assert.Equal(OpenXmlWorkbookReader.MaxImagesPerSheet + 1, elements.Count);
             }
             finally
             {
@@ -325,7 +328,7 @@ namespace Utsushi.Parsing.Tests
             {
                 var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
 
-                // 不正な画像を含むグループは Ignore モードでグループごと破棄される。
+                // 不正な画像を含むグループは 読み込みではグループごと破棄される。
                 Assert.Empty(sheet.DrawingObjects.OfType<GroupShapeModel>().ToList());
                 Assert.Single(sheet.DrawingObjects.OfType<ImageModel>().ToList());
             }

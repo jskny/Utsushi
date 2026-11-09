@@ -201,7 +201,7 @@ namespace Utsushi
         /// </summary>
         /// <remarks>
         /// ブックのアクティブシート(非表示なら表示されている最初のシート)1枚を、既定値の帳票定義
-        /// (置換キーなし・サポート外要素は無視・印刷範囲はExcelの設定)で変換する。
+        /// (置換キーなし・未対応要素は無視・印刷範囲はExcelの設定)で変換する。
         /// 見た目の一致を保証しないベストエフォートの変換である(<c>.kiro/steering/product.md</c>)。
         /// </remarks>
         /// <param name="xlsxStream">入力となるExcelファイルのストリーム。</param>

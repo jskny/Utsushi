@@ -245,7 +245,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 選ばれなかったシートに非対応の図形があってもunsupportedElementsがerrorで失敗しない()
+        public void 選ばれなかったシートに非対応の図形があっても未対応要素として記録しない()
         {
             var unsupported = new OpenXmlElement[]
             {
@@ -278,7 +278,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 選ばれなかったシートの図形数が上限を超えていてもunsupportedElementsがerrorで失敗しない()
+        public void 選ばれなかったシートの図形数が上限を超えていても未対応要素として記録しない()
         {
             var tooMany = Enumerable.Range(0, OpenXmlWorkbookReader.MaxShapesPerSheet + 1)
                 .Select(i => (OpenXmlElement)ShapeWorkbookFixtures.ShapeAnchor(

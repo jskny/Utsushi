@@ -84,6 +84,15 @@ namespace Utsushi
             }
         }
 
+        /// <summary>破棄済みなら <see cref="ObjectDisposedException"/> を送出する(破棄したエンジンを渡した誤りを作成の時点で知らせる)。</summary>
+        internal void ThrowIfDisposed()
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(Excel2PdfEngine));
+            }
+        }
+
         /// <summary>フォント解決のリソースを解放する。</summary>
         public void Dispose()
         {

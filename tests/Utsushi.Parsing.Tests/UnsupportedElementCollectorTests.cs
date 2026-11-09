@@ -123,6 +123,13 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
+        public void 未対応要素の無い例外は作れない()
+        {
+            Assert.Throws<System.ArgumentException>(
+                () => new UnsupportedWorkbookElementException(System.Array.Empty<UnsupportedElement>(), isTruncated: false));
+        }
+
+        [Fact]
         public void 例外のメッセージは先頭の20件を載せ残りは件数だけを示す()
         {
             var elements = Enumerable.Range(1, 25)
@@ -136,6 +143,37 @@ namespace Utsushi.Parsing.Tests
             Assert.DoesNotContain("グラフ21", ex.Message);
             Assert.Contains("ほか 5 件", ex.Message);
             Assert.Equal(25, ex.Elements.Count);
+        }
+
+        [Fact]
+        public void 例外の診断用の文字列は先頭の100件と種類ごとの件数を載せる()
+        {
+            var elements = Enumerable.Range(1, 150)
+                .Select(i => new UnsupportedElement(
+                    i % 2 == 0 ? UnsupportedElementKind.Chart : UnsupportedElementKind.LegacyDrawing, "S", new CellAddress(i, 1), null, "要素" + i))
+                .ToList();
+
+            var diagnostic = new UnsupportedWorkbookElementException(elements, isTruncated: false).ToDiagnosticString();
+
+            Assert.Contains("A100: 要素100", diagnostic);
+            Assert.DoesNotContain("要素101", diagnostic);
+            Assert.Contains("ほか 50 件", diagnostic);
+            Assert.Contains("Chart=75", diagnostic);
+            Assert.Contains("LegacyDrawing=75", diagnostic);
+        }
+
+        [Fact]
+        public void 一行の説明はファイル由来の値を正規化し補足の情報も載せる()
+        {
+            var element = new UnsupportedElement(
+                UnsupportedElementKind.UnsupportedImageFormat, "S\nX\r" + new string('A', 200), null, "image/x-emf", "画像");
+
+            var text = element.ToString();
+
+            Assert.DoesNotContain("\n", text);
+            Assert.DoesNotContain("\r", text);
+            Assert.True(text.Length < 200);
+            Assert.EndsWith("(image/x-emf)", text);
         }
 
         [Fact]

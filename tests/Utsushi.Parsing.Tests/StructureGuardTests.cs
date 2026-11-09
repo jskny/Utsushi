@@ -188,7 +188,7 @@ namespace Utsushi.Parsing.Tests
                     StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedGroupChild, "GroupNestingTooDeep");
                 }
 
-                // Ignore ならグループ全体が破棄され、読み取り自体は成功する。
+                // 読み込みではグループ全体が破棄され、読み取り自体は成功する。
                 var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
                 Assert.Empty(sheet.DrawingObjects);
             }
@@ -529,7 +529,7 @@ namespace Utsushi.Parsing.Tests
         // --- 要件6.10: 参照先パートの無い画像 ----------------------------------------
 
         [Fact]
-        public void 画像の参照先パートが無い場合unsupportedElementsがerrorならMissingImagePartになる()
+        public void 画像の参照先パートが無い場合MissingImagePartとして記録する()
         {
             var path = ShapeWorkbookFixtures.CreateWorkbook(SafetyLimitWorkbookFixtures.PictureAnchorWithMissingEmbed());
             try
@@ -539,8 +539,6 @@ namespace Utsushi.Parsing.Tests
                     () => _reader.ReadStrict(stream, new WorkbookReadOptions(ReportCode: "report")));
 
                 var element = StrictReading.AssertContains(ex, UnsupportedElementKind.MissingImagePart);
-                Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-                Assert.Equal("report", ex.ReportCode);
                 Assert.Equal("テストシート", element.SheetName);
             }
             finally
@@ -550,7 +548,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 画像の参照先パートが無い場合unsupportedElementsがignoreなら画像なしで読める()
+        public void 画像の参照先パートが無い場合読み込みでは画像なしで読める()
         {
             // 同じ drawing 内の図形は読み取られ、壊れた画像だけが読み飛ばされる。
             var path = ShapeWorkbookFixtures.CreateWorkbook(

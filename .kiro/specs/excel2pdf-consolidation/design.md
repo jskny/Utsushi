@@ -160,10 +160,13 @@ public sealed record UnsupportedElement(
 - 記録の単位(要件2.5)は次のとおりにする。
   - 枚数・個数の上限(`TooManyImages`・`TooManyShapes`・`TooManyMergedRanges`)は、シートと上限の種類ごとに1件だけ記録する。
     超えた後の要素を1つずつ記録すると、上限が意味をなさなくなるためである。
-  - 1つの要素の上限(`ImageTooLarge`・`ShapeTextTooLong`・`GroupNestingTooDeep`)は、要素ごとにアンカーとともに記録する。
+  - 1つの要素の上限(`ImageTooLarge`・`ShapeTextTooLong`)は、要素ごとにアンカーとともに記録する。
+    グループの中で起きる上限の超過(`GroupNestingTooDeep` は必ずグループの中で起きる)は、9 の規則によりグループのアンカーの
+    `UnsupportedGroupChild`(補足の情報に上限の種類)として記録する。
     要素の数は枚数・個数の上限で抑えられているため、件数は増えすぎない。
-- `Message`・`Detail` には、セル・図形の文字列を入れない(要件2.4)。ファイルから読んだ値(content-type・プリセット名など)は任意の文字列になりうる。
-  そこで、制御文字を取り除き、64文字で切り詰めてから入れる(処理ログに流れる値の大きさを抑えるため)。
+- `Message`・`Detail` には、セル・図形の文字列を入れない(要件2.4)。`Message` は読み込みの処理が決めた固定の文字列だけとし、
+  ファイルから読んだ値(content-type・プリセット名など。任意の文字列になりうる)は `Detail` に入れる。`Detail` は制御文字を取り除き、
+  64文字で切り詰めてから入れる(処理ログに流れる値の大きさを抑えるため)。
 - 現在 1623 行で、グループ内の非対応の子要素の種類を `"UnsupportedShapePreset"` としているのは誤りである。これを `UnsupportedGroupChild` に直す。
 - グループは、子要素のどれか1つが読めないとグループ全体を出力しない(1616〜1630行)。原因は、非対応の種類の子要素・非対応プリセット・上限の超過・壊れた子要素である。
   そこで、グループ全体を出力しない場合は、グループのアンカーで `UnsupportedGroupChild` を1件だけ記録し、`Detail` に原因(子要素の種類・上限の種類など)を入れる。
@@ -230,8 +233,13 @@ public sealed class UnsupportedWorkbookElementException : UtsushiException
 
 - メッセージは「未対応の要素が N 件あるため中止します(UnsupportedElements を Ignore にすると、出力せずに変換します)」とし、
   先頭の20件を1行ずつ続ける。21件目以降は「ほか M 件」とする。
-- `ToDiagnosticString()` には、要素の一覧をすべて(最大10,000件)含める。処理ログに残し、テンプレートを一度で直せるようにするためである(要件2のユーザーストーリー)。
-  1件は1行で、セルの文字列を含まないため、1件あたりの大きさは抑えられている。
+- `ToDiagnosticString()` には、先頭の100件を1行ずつと、全件の種類ごとの件数を含める。すべての要素は `Elements` から取る。
+  1件のログの記録が際限なく大きくならないようにするためである(security-reviewer指摘。10,000件をすべて載せると数MBになる)。
+- 1行の説明(`UnsupportedElement.ToString()`)は、種類・シート名・位置・説明・補足の情報を載せる。ファイル由来の値(シート名・補足の情報)は、
+  `DiagnosticText.Normalize` を通して改行を含めない。
+- シート名は、読み込みの時点で Excel の制約(31文字以下、制御文字と `: \ / ? * [ ]` を含まない)を確かめ、満たさなければ破損したファイル
+  (`InvalidExcelFileException`、`Reason=Corrupted`)とする。シート名は未対応要素の各行・エラーのメッセージに入るため、細工した長いシート名や
+  改行を含むシート名で、例外のメッセージを際限なく大きくしたり偽のログ行を差し込んだりするのを防ぐ(security-reviewer指摘)。
 
 ### 2.4 帳票定義ありの経路の移行期間の扱い
 
@@ -537,10 +545,13 @@ utsushi --help
 - 代替の書体名は、書体のデータが持つファミリ名(`SKTypeface.FamilyName`)をそのまま返す。同梱のフォントでは英語名(`BIZ UDPGothic` など)になりうる。
 - `Excel2Pdf` は、エンジンを渡されない場合も内部でエンジン(`Excel2PdfEngine`)を作って使う。これにより、診断でフォントの代替を問い合わせられる。
   移行期間中に利用者が `ReportPdfConverter` を渡した場合は、`FontResolver` を取り出せないため、フォントの代替の一覧は空にする(タスク8で、この経路ごと無くなる)。
-- 未対応要素の判定は `Save`・`ToPdfBytes` だけで行う(内部の `ComputeLayout` では行わない)。
-  ファサードの内部の変換は、`PagedLayout` とともに `WorkbookModel.UnsupportedElements` を返すように変える。
+- 未対応要素の判定は `Save`・`ToPdfBytes`(と、移行期間だけ残る `CheckFit()`)で行い、`Check()` では行わない。
+  ファサードの内部の変換は、読み込みの直後に呼ぶコールバック(`onWorkbookRead`)を受け取り、保存では判定に、診断では一覧の受け取りに使う。
+- 破棄したエンジンを渡した場合は、`Excel2Pdf` の作成の時点で `ObjectDisposedException` にする。
+- フォントの代替の重複の除去は、`FontResolver` と同じくフォント名の大文字・小文字を区別しない。フォント名はファイル由来の値のため正規化して返す。
 - **移行期間(タスク4〜7)の帳票定義ありの `Excel2Pdf`**: 未対応要素の扱いは帳票定義の `unsupportedElements` に従い、`Excel2PdfOptions.UnsupportedElements` は帳票定義なしの経路にだけ効く。
-  また、`unsupportedElements: "error"` の帳票定義では、`Check()` も例外になる(中核仕様の要件13.5を保つため。2.4)。いずれもタスク8で帳票定義ありの経路ごと無くなる。
+  また、`unsupportedElements: "error"` の帳票定義では、`Check()` も例外になる(中核仕様の要件13.5を保つため。2.4)。
+  帳票定義ありの経路で `Excel2PdfOptions.UnsupportedElements` を指定しても効かない(既定値と区別できないため、エラーにはしない)。いずれもタスク8で帳票定義ありの経路ごと無くなる。
 
 ### タスク5(書式の近似)
 

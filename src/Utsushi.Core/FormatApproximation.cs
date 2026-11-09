@@ -75,13 +75,14 @@ namespace Utsushi.Core
         /// <summary>1行の説明(種類・シート・位置・説明)。</summary>
         public override string ToString()
         {
-            var location = $"シート '{SheetName}'";
+            var location = $"シート '{DiagnosticText.Normalize(SheetName)}'";
             if (Location is { } range)
             {
                 location += " " + (range.TopLeft == range.BottomRight ? range.TopLeft.ToString() : range.ToString());
             }
 
-            return $"[{Kind}] {location}: {Message}";
+            var detail = Detail is null ? string.Empty : $" ({DiagnosticText.Normalize(Detail)})";
+            return $"[{Kind}] {location}: {DiagnosticText.Normalize(Message, int.MaxValue)}{detail}";
         }
     }
 }

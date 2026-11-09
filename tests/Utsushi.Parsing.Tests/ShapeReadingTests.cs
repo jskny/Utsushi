@@ -178,7 +178,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 非対応プリセットの図形はunsupportedElementsがignoreなら無視される()
+        public void 非対応プリセットの図形は読み込みでは無視される()
         {
             var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.FlowChartPreparation);
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
@@ -194,7 +194,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 非対応プリセットの図形はunsupportedElementsがerrorなら例外になる()
+        public void 非対応プリセットの図形は未対応要素として記録する()
         {
             var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.FlowChartPreparation);
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
@@ -213,7 +213,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 図形のみのシートはunsupportedElementsがerrorでも例外にならない()
+        public void 図形のみのシートは未対応要素として記録しない()
         {
             var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.Rectangle);
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
@@ -366,7 +366,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 図形の数が上限を超える場合はunsupportedElementsがignoreなら上限までしか読み取らない()
+        public void 図形の数が上限を超える場合は読み込みでは上限までしか読み取らない()
         {
             var count = OpenXmlWorkbookReader.MaxShapesPerSheet + 5;
             var anchors = Enumerable.Range(0, count)
@@ -385,7 +385,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 図形の数が上限を超える場合はunsupportedElementsがerrorなら例外になる()
+        public void 図形の数が上限を超える場合は未対応要素として記録する()
         {
             var count = OpenXmlWorkbookReader.MaxShapesPerSheet + 5;
             var anchors = Enumerable.Range(0, count)
@@ -407,7 +407,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 図形内テキストの文字数が上限を超える場合はunsupportedElementsがignoreなら無視される()
+        public void 図形内テキストの文字数が上限を超える場合は読み込みでは無視される()
         {
             var longText = new string('あ', 2001);
             var anchor = ShapeWorkbookFixtures.ShapeAnchor(
@@ -426,7 +426,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 図形内テキストの文字数が上限を超える場合はunsupportedElementsがerrorなら例外になる()
+        public void 図形内テキストの文字数が上限を超える場合は未対応要素として記録する()
         {
             var longText = new string('あ', 2001);
             var anchor = ShapeWorkbookFixtures.ShapeAnchor(

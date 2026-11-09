@@ -275,6 +275,7 @@ namespace Utsushi
 
             if (engine is not null)
             {
+                engine.ThrowIfDisposed();
                 _engine = engine;
                 _converter = engine.Converter;
                 _ownsConverter = false;
@@ -533,7 +534,8 @@ namespace Utsushi
         public FitCheckResult CheckFit()
         {
             ThrowIfDisposed();
-            return ReportPdfConverter.ToFitCheckResult(ComputeLayout(checkFit: true));
+            // 移行期間中は Save と同じく未対応要素を判定する(中核仕様の要件13.5。診断の Check() だけが例外にしない)。
+            return ReportPdfConverter.ToFitCheckResult(ComputeLayout(checkFit: true, ThrowIfUnsupportedElements));
         }
 
         /// <summary>
@@ -574,11 +576,12 @@ namespace Utsushi
                 return Array.Empty<FontSubstitution>();
             }
 
+            // フォント名の大文字・小文字は区別しない(FontResolver と同じ)。
             var fonts = new HashSet<(string Name, bool Bold, bool Italic)>();
             var ordered = new List<Parsing.Model.FontStyle>();
             void Add(Parsing.Model.FontStyle font)
             {
-                if (fonts.Add((font.Name, font.Bold, font.Italic)))
+                if (fonts.Add((font.Name.ToUpperInvariant(), font.Bold, font.Italic)))
                 {
                     ordered.Add(font);
                 }
@@ -617,7 +620,9 @@ namespace Utsushi
             {
                 if (_engine.FontResolver.GetSubstitution(font) is { } actual)
                 {
-                    result.Add(new FontSubstitution(font.Name, font.Bold, font.Italic, actual));
+                    // フォント名はファイル由来の値のため、処理ログに流れても行を崩さないよう正規化する(security-reviewer指摘)。
+                    result.Add(new FontSubstitution(
+                        DiagnosticText.Normalize(font.Name) ?? string.Empty, font.Bold, font.Italic, DiagnosticText.Normalize(actual) ?? string.Empty));
                 }
             }
 

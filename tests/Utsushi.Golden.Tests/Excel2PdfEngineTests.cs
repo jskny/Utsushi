@@ -81,6 +81,15 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
+        public void 破棄したエンジンを渡すと作成の時点でエラーにする()
+        {
+            var engine = Excel2PdfEngine.Create(FontResolverOptions.AllowFallback());
+            engine.Dispose();
+
+            Assert.Throws<ObjectDisposedException>(() => new Excel2Pdf(Invoice, engine));
+        }
+
+        [Fact]
         public void 破棄したエンジンは二度破棄しても例外にならない()
         {
             var engine = Excel2PdfEngine.Create(FontResolverOptions.AllowFallback());
