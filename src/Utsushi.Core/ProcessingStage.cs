@@ -9,18 +9,18 @@ namespace Utsushi.Core
         Unknown = 0,
 
         /// <summary>Excel(OOXML)の読み取り。</summary>
-        Parsing,
+        Parsing = 1,
 
-        /// <summary>帳票定義のロードと <c>WorkbookModel</c> との突合。</summary>
-        ReportDefinition,
+        // 2 は帳票定義の段階(ReportDefinition)だった。帳票定義の廃止(excel2pdf-consolidation 要件1.3)で削除した。
+        // ログなどに整数で残った値の意味を変えないよう、後の段階の値は変えない。
 
-        /// <summary>置換キーに基づくセル値の差し込み。</summary>
-        Substitution,
+        /// <summary>セル番地を指定した値の書き込み(<c>SetText</c>・<c>SetValue</c>)。</summary>
+        Substitution = 3,
 
         /// <summary>ページ分割・座標計算。</summary>
-        Layout,
+        Layout = 4,
 
         /// <summary>PDF描画・出力。</summary>
-        Rendering,
+        Rendering = 5,
     }
 }

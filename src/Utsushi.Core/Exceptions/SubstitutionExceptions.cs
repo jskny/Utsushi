@@ -1,41 +1,6 @@
 namespace Utsushi.Core.Exceptions
 {
     /// <summary>
-    /// 帳票定義に存在しない置換キーが指定された。要件2.3。
-    /// </summary>
-    public sealed class SubstitutionKeyNotFoundException : UtsushiException
-    {
-        public SubstitutionKeyNotFoundException(string key, string message, string? reportCode = null, string? sheetName = null)
-            : base(message, ProcessingStage.Substitution, reportCode, sheetName)
-        {
-            Key = key;
-        }
-
-        /// <summary>帳票定義に存在しなかった置換キー。</summary>
-        public string Key { get; }
-    }
-
-    /// <summary>
-    /// 帳票定義が必須とした置換キーに対応する値が渡されていない。要件2.4。
-    /// </summary>
-    public sealed class RequiredSubstitutionValueMissingException : UtsushiException
-    {
-        public RequiredSubstitutionValueMissingException(
-            string key,
-            string message,
-            string? reportCode = null,
-            string? sheetName = null,
-            CellAddress? cellAddress = null)
-            : base(message, ProcessingStage.Substitution, reportCode, sheetName, cellAddress)
-        {
-            Key = key;
-        }
-
-        /// <summary>値が渡されなかった必須の置換キー。</summary>
-        public string Key { get; }
-    }
-
-    /// <summary>
     /// 置換値そのものが不正(<c>null</c>、改行以外の制御文字、対になっていないサロゲートを含む)。要件2.10。
     /// </summary>
     /// <remarks>
@@ -60,7 +25,7 @@ namespace Utsushi.Core.Exceptions
     }
 
     /// <summary>
-    /// セル番地を直接指定した上書き(帳票定義の置換キーを経由しない経路)で、
+    /// セル番地を指定した書き込み(<c>SetText</c>・<c>SetValue</c>)で、
     /// 指定された文字列がA1形式のセル番地として解釈できない。要件2.8。
     /// </summary>
     public sealed class InvalidCellOverrideAddressException : UtsushiException
