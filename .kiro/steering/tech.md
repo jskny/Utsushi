@@ -5,7 +5,7 @@ inclusion: always
 # Utsushi 技術方針
 
 > **移行中**: `.kiro/specs/excel2pdf-consolidation/` で帳票定義(`definition.json`)の仕組みを廃止し、入口を `Excel2Pdf` に一本化する変更を進めている。
-> 本ファイルは移行前の規約を記す。移行後の方針は `product.md` と同specを参照し、食い違う場合はそちらを優先する。本ファイルはspecのタスク8で改める。
+> 本ファイルは移行前の規約を記す。移行後の方針は `product.md` と同specを参照し、食い違う場合はそちらを優先する。本ファイルはspecのタスク9で改める。
 
 ## 実行環境
 

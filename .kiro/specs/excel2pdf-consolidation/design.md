@@ -5,7 +5,7 @@
 
 ## 概要
 
-変換の流れ(Parsing → 変換設定の合成 → Substitution → Layout → Rendering)は変えない。主な変更は次の4つである。
+変換の流れ(Parsing → 変換設定の合成 → Substitution → Layout → Rendering)は変えない。主な変更は次の5つである。
 
 1. **入口**: 公開する入口を `Excel2Pdf` と `Excel2PdfEngine` に絞る。`ReportPdfConverter` は internal の
    変換パイプライン(`ConversionPipeline`)に縮める。
@@ -15,6 +15,8 @@
    扱いの判断はファサードが行う。
 4. **フォントの代替**: `FontResolver` が代替の結果を問い合わせられるようにする。ファサードはレイアウトの結果に
    現れたフォントについて問い合わせ、診断に載せる。
+5. **書式の近似**: Parsing は近似の判断に必要な書式を読み、Layout は印刷されるセル・要素を組み立てるときに近似を記録する。
+   保存の結果は変えない。
 
 ```
 Excel2Pdf ──(設定した値・Excel2PdfOptions)──▶ ConversionPipeline(internal。旧 ReportPdfConverter)
@@ -22,7 +24,7 @@ Excel2Pdf ──(設定した値・Excel2PdfOptions)──▶ ConversionPipeline
   2. [保存のみ] 扱いがエラーで UnsupportedElements が1件以上 → UnsupportedWorkbookElementException(ここで止める)
   3. ConversionSettings(合成) + IReportModelBuilder ──▶ ReportModel
   4. Substitution: ApplyCellOverrides / ApplyNumericCellOverrides
-  5. Layout: Compute(report, checkFit) ──▶ PagedLayout(+ FitIssues)
+  5. Layout: Compute(report, checkFit) ──▶ PagedLayout(+ FitIssues・FormatApproximations。checkFit のときだけ集める)
   6a. [保存] Rendering: SkiaPdfRenderer ──▶ PDF
   6b. [診断] PagedLayout のフォント → FontResolver.GetSubstitution ──▶ Excel2PdfDiagnostics
 ```
@@ -93,7 +95,7 @@ public enum UnsupportedElementPolicy
 ```
 
 - 既定値は `init` の初期値で `Error` にする。そのうえで列挙の0も `Error` にし、`default(UnsupportedElementPolicy)` が無視にならないようにする。
-- 現在 `Utsushi.ReportDefinitions` に同名の列挙(`Ignore = 0`)がある。帳票定義を削除するまで(tasks.md のタスク7)は両方が存在する。
+- 現在 `Utsushi.ReportDefinitions` に同名の列挙(`Ignore = 0`)がある。帳票定義を削除するまで(tasks.md のタスク8)は両方が存在する。
   `ReportPdfConverter`(名前空間 `Utsushi`)の中で旧い列挙を参照している箇所は、新しい列挙と取り違えないよう完全修飾名で書く。
 
 ### 1.4 `Excel2PdfDiagnostics`(要件4)
@@ -104,9 +106,13 @@ public sealed record Excel2PdfDiagnostics(
     bool FitIssuesTruncated,
     IReadOnlyList<UnsupportedElement> UnsupportedElements,
     bool UnsupportedElementsTruncated,
-    IReadOnlyList<FontSubstitution> FontSubstitutions)
+    IReadOnlyList<FontSubstitution> FontSubstitutions,
+    IReadOnlyList<FormatApproximation> FormatApproximations,
+    bool FormatApproximationsTruncated)
 {
+    // 問題(要件4.3)。書式の近似は含めない
     public bool HasIssues => FitIssues.Count > 0 || UnsupportedElements.Count > 0 || FontSubstitutions.Count > 0;
+    public bool HasFormatApproximations => FormatApproximations.Count > 0;
 }
 
 public sealed record FontSubstitution(string RequestedFamily, bool Bold, bool Italic, string ActualFamily);
@@ -138,6 +144,7 @@ public enum UnsupportedElementKind
     ExternalReference,        // 外部参照                                                                  (f)
     LegacyDrawing,            // コメント・フォームコントロールなどのVML                                    (f)
     MalformedDrawingObject,   // 位置・大きさが欠けている・壊れていて読み飛ばす描画オブジェクト            (g)
+    HeaderFooterImage,        // ヘッダー/フッターの画像(legacyDrawingHF)                                   (h)
 }
 
 public sealed record UnsupportedElement(
@@ -176,6 +183,8 @@ public sealed record UnsupportedElement(
   同じアンカーを `Chart` と `UnsupportedDrawingObject` の両方で記録しない(グラフは図表枠のアンカーに置かれるため)。
   シートから参照されているが解決できない描画パートは、アンカーの無い `UnsupportedDrawingObject` とする。
   `legacyDrawing` は、VML を解析しないため、シートごとにアンカーの無い1件とする。
+  ヘッダー/フッターの画像は、シートの `legacyDrawingHF`(画像の実体を持つVMLへの参照)があれば、シートごとにアンカーの無い `HeaderFooterImage` の1件とする。
+  ヘッダー/フッターの文字列の `&G` は、`legacyDrawingHF` が無ければ描く画像も無いため記録しない。
 - **黙って読み飛ばしている経路**(要件2.7(g))は、行番号で列挙せず、「描画オブジェクトを読む処理(`Read*`)が、例外も記録もせずに値を返さずに読み飛ばすすべての経路」と定める。
   現時点で分かっているものは次のとおりである。
   - アンカーの位置の破損(1077行)
@@ -223,7 +232,7 @@ public sealed class UnsupportedWorkbookElementException : UtsushiException
 
 ### 2.4 帳票定義ありの経路の移行期間の扱い
 
-帳票定義を削除するまで(tasks.md のタスク7)は、帳票定義ありの経路が残る。この間、`unsupportedElements: "error"` の帳票定義では、
+帳票定義を削除するまで(tasks.md のタスク8)は、帳票定義ありの経路が残る。この間、`unsupportedElements: "error"` の帳票定義では、
 ファサードの共通の経路(`ReportPdfConverter.ReadWorkbook`。`Convert*`・`ComputeLayout*`・`CheckFit*` のすべてが通る)で、
 `WorkbookModel.UnsupportedElements` が1件以上なら例外を送出する。これにより中核仕様の要件13.5(収まりの確認は変換と同じエラー)を保つ。
 移行期間には、同じ帳票定義でも次の2点が変わる。
@@ -253,6 +262,71 @@ public sealed class UnsupportedWorkbookElementException : UtsushiException
   要件3.2(前の変換で解決済みのフォントも漏らさない・使っていないフォントは返さない)を満たす。
 - 外字の補い(`ResolveGlyphFallbacks`)は別の経路で、上の辞書に入らない(要件3.4)。
 - 厳格モードでは代替が起きないため、一覧は常に空になる(要件3.3)。
+
+## 3.5 書式の近似(要件7)
+
+### モデル(`Utsushi.Core`)
+
+```csharp
+public enum FormatApproximationKind
+{
+    TextRotation,              // 文字の方向・回転・縦書き                              要件7.2(a)
+    HorizontalAlignment,       // 均等割り付け・両端揃え・繰り返し・選択範囲内で中央      (b)
+    VerticalAlignment,         // 縦位置の均等割り付け・両端揃え                         (b)
+    ConditionalFormatting,     // 条件付き書式(範囲ごと)                               (c)
+    RichText,                  // 一部の文字だけ書式が異なるセル                         (d)
+    NumberFormat,              // 解釈できず標準で表示した表示形式                       (e)
+    CellFillPattern,           // セルの網かけ                                           (f)
+    CellFillGradient,          // セルのグラデーション                                   (f)
+    ShapeFillStyle,            // 図形のスタイルが指すグラデーション・テクスチャ・模様     (g)
+    ImageFlip,                 // 反転した画像                                           (h)
+    ImageRotation,             // 45〜135度回転した画像                                  (h)
+    MultiLineHeaderFooter,     // 複数行のヘッダー/フッター                              (i)
+    MergedCellAcrossPageBreak, // 改ページをまたぐ結合セル                               (j)
+    DrawingAcrossPageBreak,    // 改ページをまたぐ画像・図形                             (j)
+    MergedCellHiddenEdge,      // 最後の行・列が非表示の結合セル                         (j)
+}
+
+public sealed record FormatApproximation(
+    FormatApproximationKind Kind,
+    string? SheetName,
+    CellRange? Location,       // セル(1×1の範囲)・セル範囲・要素のアンカー。ヘッダー/フッターは null
+    string? Detail,            // 書式の値(例: "textRotation=255"、"horizontal=distributed"、表示形式のコード)
+    string Message);
+```
+
+`Detail` には、ファイルから読んだ値(表示形式のコードなど)を、未対応要素と同じ規則で正規化して入れる(2.1)。
+
+### 検知の分担
+
+近似は「印刷される範囲にあるもの」だけを返す(要件7.3)。印刷範囲・非表示の行・列が確定するのは Layout であり、
+セル・要素を組み立てるのも Layout である。そこで、記録は Layout で行い、Parsing は判断に必要な情報をモデルに載せるだけにする。
+
+| 種類 | Parsing で読むもの(現状) | Layout で記録する時点 |
+|---|---|---|
+| TextRotation | `alignment/@textRotation` を `CellStyle.TextRotation` に読む(現在は読んでいない) | セルの文字を組み立てるとき、0以外なら |
+| Horizontal/VerticalAlignment | `CellStyle` の配置(読み済み。`Justify`・`Distributed`・`CenterContinuous`・`Fill`) | セルの文字を組み立てるとき、近似する配置なら |
+| ConditionalFormatting | `conditionalFormatting/@sqref` の範囲を `SheetModel.ConditionalFormattingRanges` に読む(現在は読んでいない。件数に上限を設ける) | 印刷範囲と重なる範囲を、重なる部分の範囲で記録する |
+| RichText | 共有文字列・インライン文字列で、書式(`rPr`)の異なるランが2つ以上あるかを `CellModel` の印に読む(現在は文字列を連結するだけ) | セルの文字を組み立てるとき |
+| NumberFormat | 表示文字列を作るときに、表示形式を解釈できず標準にした印を `CellModel` に載せる(`NumberFormatter`。`SetValue` の書き込み(`NumberFormatting.Format`)も同じ) | セルの文字を組み立てるとき |
+| CellFillPattern・CellFillGradient | `StyleTable` で、単色以外の網かけ・グラデーションの塗りつぶしを `CellStyle` の印に読む(現在は近似した色・塗りつぶしなしに置き換えるだけ) | 塗りつぶしを描くセル(セルが無い位置を行・列の書式で塗る場合を含む。範囲ごとにまとめる) |
+| ShapeFillStyle | 図形のスタイルの塗りつぶしを単色で近似した印を `ShapeModel` に載せる(2035行付近) | 図形を組み立てるとき |
+| ImageFlip・ImageRotation | 画像の反転・回転(読み済み) | 画像を組み立てるとき |
+| MultiLineHeaderFooter | ヘッダー/フッターの文字列(読み済み) | `HeaderFooterParser` が改行を取り除くとき |
+| MergedCellAcrossPageBreak・DrawingAcrossPageBreak | (不要) | ページの分割で、結合範囲・要素の矩形がページの境界をまたぐとき |
+| MergedCellHiddenEdge | (不要) | 結合範囲の外周の罫線を組み立てるとき |
+
+- 収集器 `FormatApproximationCollector`(internal)は `FitIssueCollector` と同じ形にする。(種類, 位置)の組で重複を除き、上限 10,000 件で打ち切る(要件7.4)。
+  印刷タイトルのように複数のページに現れるものは、重複の除去で1件になる。
+- 集めるのは `checkFit` のとき(診断)だけにする。保存では集めず、描画の結果も変えない(要件7.5)。
+- 結果は `PagedLayout.FormatApproximations`・`FormatApproximationsTruncated` に載せる。
+- Parsing の新しい読み取り(`textRotation`・`conditionalFormatting`・ランの書式)は、信頼できない入力として扱う。
+  件数・長さには、既存の安全弁と同じ考え方で上限を設ける(security-reviewer の対象)。
+
+### ゴールデンへの影響
+
+スナップショットに `FitIssue` の行を出しているのと同じく、書式の近似の行も出す。サンプル帳票・エッジケースのサンプルで近似の行が増える。
+特に、工程表の90度回転した日付見出しや注文書の縦書き・均等割り付けなどである。描画命令の行は変わらないことを確かめる。
 
 ## 4. 変換設定と帳票定義の廃止(要件1.3, 1.5, 1.6)
 
@@ -327,7 +401,7 @@ utsushi --help
 | 終了コード | 意味 |
 |---|---|
 | 0 | `check`: 問題なし。`convert`: 保存した。`--help`: 使い方を標準出力に出した |
-| 1 | `check`: 問題が1つ以上ある(`Excel2PdfDiagnostics.HasIssues`。`--ignore-unsupported`・`--allow-font-fallback` の指定によらない) |
+| 1 | `check`: 問題が1つ以上ある(`Excel2PdfDiagnostics.HasIssues`。`--ignore-unsupported`・`--allow-font-fallback` の指定によらない。書式の近似だけなら0) |
 | 2 | 使い方エラー(標準エラーに理由と使い方) |
 | 3 | 変換・診断のエラー。`UtsushiException` は `ToDiagnosticString()` を、`IOException`・`UnauthorizedAccessException` は例外のメッセージを標準エラーに出す |
 
@@ -341,7 +415,12 @@ utsushi --help
   [NumberTooWide] C8(1ページ目): 数値の表示文字列がセルの幅に収まりません
 フォントの代替: 1件
   ＭＳ Ｐゴシック → BIZ UDPゴシック
+書式の近似(参考): 2件
+  [TextRotation] シート '工程表' D3: 文字の回転(textRotation=90)は横書きで描きます
+  [ConditionalFormatting] シート '注文書' F10:F30: 条件付き書式は反映しません
 ```
+
+- 書式の近似は「(参考)」として最後に出し、終了コードには影響させない(要件5.2)。
 
 - 打ち切った種類には「(上限で打ち切り)」を見出しに付ける。
 - 文字の収まらない箇所の行には、`FitIssue.Message`(セルの文字列を含まない)だけを出す。描画する文字列(`FitIssue.Text`)は出さない。
@@ -395,9 +474,11 @@ utsushi --help
 | 対象 | 観点 |
 |---|---|
 | Parsing | 2.2 の各経路で、要素が読み飛ばされ、かつ正しい種類・シート・アンカー・`Detail` で記録される。枚数の上限の超過は1件だけ、1つの要素の上限の超過は要素ごとに記録される。グラフは `Chart` の1件だけになる。収集の件数の上限(小さい上限を渡すオーバーロード)。読まないシートの要素を含まない。図形のテキストを持つ要素で、`Message`・`Detail` に文字列が入らない。長いcontent-typeが切り詰められる |
+| Parsing(書式の近似) | `textRotation`・`conditionalFormatting`・ランの書式・網かけ/グラデーションの印・表示形式の解釈の失敗の印を読む。`conditionalFormatting` の件数の上限 |
+| Layout(書式の近似) | 要件7.2の各種類が、印刷される範囲のものだけ記録される(印刷範囲の外・非表示の行・列のものは記録されない)。印刷タイトルは1件。件数の上限。保存(`checkFit` なし)では集めず、描画命令が変わらない |
 | Rendering | `GetSubstitution`: 厳格モードでは常に null(無いフォントは例外)。代替の後は書体名。外字の補いでは null のまま |
 | ファサード | 既定でエラー・一覧の全件・`Ignore` で変換できる・`Check()` は例外にしない。フォントの代替が2回目の変換でも返る・使わないフォントは返らない。エンジンを渡す場合の `Fonts`・`Render` の指定はエラー。`Excel2Pdf` を破棄してもエンジンは使い続けられる。1つのエンジンを複数のスレッドの `Excel2Pdf` で同時に使っても結果が変わらない |
-| CLI | `Run` の終了コード(0/1/2/3)と出力。`--help`。重複したセルの指定。`--number` の不正な値。未対応要素での中止の出力 |
+| CLI | `Run` の終了コード(0/1/2/3)と出力。書式の近似だけなら終了コード0。`--help`。重複したセルの指定。`--number` の不正な値。未対応要素での中止の出力 |
 
 ## 7. ドキュメントと steering
 
@@ -412,4 +493,3 @@ utsushi --help
 
 - **プロジェクト `Utsushi.ReportDefinition` の改名**: 中身は変換設定とモデルの組み立てだけになるため、名前が実態に合わなくなる。
   機能を変えない別の変更として、本仕様の実装後に判断する。
-- **書式の近似の検知**: requirements.md「未決事項」を参照。

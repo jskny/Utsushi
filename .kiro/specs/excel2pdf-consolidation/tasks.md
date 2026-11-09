@@ -7,14 +7,14 @@
 >
 > **順序の方針**:
 > - 中核仕様を最初に改訂する(CLAUDE.md「先に仕様側を更新する」)。
-> - どの時点で止めても、今より欠落の検知が弱くならないようにする。そのため、新しい診断の仕組み(2〜4)、回帰テストの移行(5)、
->   CLIの作り直し(6)を先に行い、帳票定義の削除(7)はその後にする。
+> - どの時点で止めても、今より欠落の検知が弱くならないようにする。そのため、新しい診断の仕組み(2〜5)、回帰テストの移行(6)、
+>   CLIの作り直し(7)を先に行い、帳票定義の削除(8)はその後にする。
 > - 各タスクの終わりで `dotnet build`・`dotnet test` が緑であることを保つ(タスクの途中でビルドを壊したまま次へ進まない)。
 
 - [ ] 1. 中核仕様の改訂
   - [ ] 1.1 `.kiro/specs/excel-report-pdf-conversion/requirements.md` を、requirements.md「中核仕様への影響」のとおり改める。
-        帳票定義を削除するまで(タスク7)残る機能の要件(1.4, 2.1〜2.6 など)には、「廃止予定(excel2pdf-consolidation のタスク7で削除)」と注記する
-    - _Requirements: 1.3, 1.5, 2.1, 2.7_
+        帳票定義を削除するまで(タスク8)残る機能の要件(1.4, 2.1〜2.6 など)には、「廃止予定(excel2pdf-consolidation のタスク8で削除)」と注記する
+    - _Requirements: 1.3, 1.5, 2.1, 2.7, 7.2_
   - [ ] 1.2 同 design.md・tasks.md を改める(tasks.md は完了済みのタスクを残し、本仕様で廃止・変更する旨を注記する)
   - [ ] 1.3 spec-compliance-reviewer・doc-reviewer
 
@@ -25,7 +25,7 @@
     - _Requirements: 2.4, 2.5_
   - [ ] 2.3 `OpenXmlWorkbookReader` の扱いの指定を見ている全箇所(23+2)を収集に置き換え、描画オブジェクトの検知をアンカーごとにする。黙って読み飛ばす経路を記録する。
         グループの非対応の子要素の種類を直す。`WorkbookReadOptions.UnsupportedElementBehavior` を削除する。
-        帳票定義ありの経路では、`ReportPdfConverter.ReadWorkbook`(`Convert*`・`ComputeLayout*`・`CheckFit*` が共通に通る)で、`unsupportedElements: "error"` のときに一覧から例外を作る(design.md 2.4)
+        帳票定義ありの経路では、`ReportPdfConverter.ReadWorkbook`(`Convert*`・`ComputeLayout*`・`CheckFit*` が共通に通る)で、`unsupportedElements: "error"` のときに一覧から例外を作る(design.md 2.4)。ヘッダー/フッターの画像(`legacyDrawingHF`)を検知する
     - _Requirements: 2.2, 2.3, 2.6, 2.7_
   - [ ] 2.4 テスト(design.md 6.3 の Parsing の観点)。既存の Parsing のテストの `Error`・`ElementKind` の検証を、一覧の検証に書き換える
     - _Requirements: 2.4, 2.5, 2.6, 2.7_
@@ -49,44 +49,59 @@
   - [ ] 4.5 security-reviewer(収集の上限・`Message`/`Detail` に文字列を含めないことと正規化・`src/Utsushi.Parsing/OpenXml/` 全体の、黙って読み飛ばす経路と未対応ループの横断確認)、code-reviewer
     - _Requirements: 2.4, 2.5, 2.6, 2.7_
 
-- [ ] 5. ゴールデンテストの移行(帳票定義の削除より前)
-  - [ ] 5.1 `tools/Utsushi.SampleGenerator`・`tools/edge-case-samples/generate.py` で、書き込むセルに `shrinkToFit`・`wrapText` を付け、テンプレートを再生成する
+- [ ] 5. 書式の近似の検知(design.md 3.5)
+  - [ ] 5.1 `Utsushi.Core` に `FormatApproximationKind`・`FormatApproximation` を追加する
+    - _Requirements: 7.1_
+  - [ ] 5.2 Parsing: `textRotation`・`conditionalFormatting` の範囲・ランの書式の違い・網かけ/グラデーションの印・表示形式の解釈の失敗の印・図形のスタイルの塗りつぶしの近似の印をモデルに読む(件数・長さの上限を含む)
+    - _Requirements: 7.2_
+  - [ ] 5.3 Layout: `FormatApproximationCollector` を追加し、印刷されるセル・要素を組み立てるときに記録する(`checkFit` のときだけ)。`PagedLayout` に載せ、ゴールデンのスナップショットに近似の行を出す
+    - _Requirements: 7.2, 7.3, 7.4, 7.5_
+  - [ ] 5.4 ファサード: `Excel2PdfDiagnostics` に `FormatApproximations`・`FormatApproximationsTruncated`・`HasFormatApproximations` を加える
+    - _Requirements: 4.1, 4.3, 7.1, 7.5_
+  - [ ] 5.5 テスト(design.md 6.3 の書式の近似の観点)。ゴールデンの差分が近似の行の追加だけで、描画命令が変わらないことを確かめて更新する
+    - _Requirements: 7.2, 7.3, 7.4, 7.5_
+  - [ ] 5.6 layout-fidelity-reviewer・security-reviewer(新しい読み取りの上限)・code-reviewer
+    - _Requirements: 7.2, 7.3_
+
+- [ ] 6. ゴールデンテストの移行(帳票定義の削除より前)
+  - [ ] 6.1 `tools/Utsushi.SampleGenerator`・`tools/edge-case-samples/generate.py` で、書き込むセルに `shrinkToFit`・`wrapText` を付け、テンプレートを再生成する
     - _Requirements: 6.2_
-  - [ ] 5.2 `ReportConversionGoldenTests` を `Excel2Pdf` とセル番地の指定に書き換える(`MaxDigitWidthPx`・`DocumentName` を明示する)。
+  - [ ] 6.2 `ReportConversionGoldenTests` を `Excel2Pdf` とセル番地の指定に書き換える(`MaxDigitWidthPx`・`DocumentName` を明示する)。
         スナップショットの差分が design.md 6.1 の2種類だけであることを確かめ、layout-fidelity-reviewer のレビューを経て更新する。
         同じテンプレートを使う他のテストの結果も確かめる
     - _Requirements: 6.1, 6.2_
-  - [ ] 5.3 `EdgeCaseSampleTests` をセル番地の指定に書き換える(置換キーだけの観点は削除し、ignore/error のテストは 4.4 に置き換える)
+  - [ ] 6.3 `EdgeCaseSampleTests` をセル番地の指定に書き換える(置換キーだけの観点は削除し、ignore/error のテストは 4.4 に置き換える)
     - _Requirements: 6.3_
 
-- [ ] 6. CLI の作り直し(帳票定義の削除より前。`Excel2Pdf` だけで作れる)
-  - [ ] 6.1 `check`・`convert` コマンドと `CommandLineOptions.Parse`・`Program.Run` を実装し、帳票定義のオプションを削除する
+- [ ] 7. CLI の作り直し(帳票定義の削除より前。`Excel2Pdf` だけで作れる)
+  - [ ] 7.1 `check`・`convert` コマンドと `CommandLineOptions.Parse`・`Program.Run` を実装し、帳票定義のオプションを削除する
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8_
-  - [ ] 6.2 テスト(引数の解釈、`Run` の終了コードと出力)
+  - [ ] 7.2 テスト(引数の解釈、`Run` の終了コードと出力)
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7_
 
-- [ ] 7. 帳票定義の仕組みの削除(7.1〜7.5は1つの単位として、ビルドとテストを緑にしてから完了とする)
-  - [ ] 7.1 ファサード: `ReportPdfConverter` を internal の `ConversionPipeline` にし、帳票コード付きのコンストラクタ・`SetField`・`ClearField`・`ReportCode`・`CheckFit` を削除する
+- [ ] 8. 帳票定義の仕組みの削除(8.1〜8.5は1つの単位として、ビルドとテストを緑にしてから完了とする)
+  - [ ] 8.1 ファサード: `ReportPdfConverter` を internal の `ConversionPipeline` にし、帳票コード付きのコンストラクタ・`SetField`・`ClearField`・`ReportCode`・`CheckFit` を削除する
     - _Requirements: 1.1, 1.3, 1.4, 4.5_
-  - [ ] 7.2 ReportDefinition: JSONの読み込み・リポジトリ・置換キーの定義・旧い `UnsupportedElementPolicy` を削除し、`ReportDefinition` を `ConversionSettings` に縮める。`samples/**/definition.json` を削除する
+  - [ ] 8.2 ReportDefinition: JSONの読み込み・リポジトリ・置換キーの定義・旧い `UnsupportedElementPolicy` を削除し、`ReportDefinition` を `ConversionSettings` に縮める。`samples/**/definition.json` を削除する
     - _Requirements: 1.5_
-  - [ ] 7.3 Substitution・Layout: 置換キー・必須キー・`OverflowByCell`・`PrintAreaOverride`・`FitIssue.SubstitutionKey`・`FitCheckResult` を削除する
+  - [ ] 8.3 Substitution・Layout: 置換キー・必須キー・`OverflowByCell`・`PrintAreaOverride`・`FitIssue.SubstitutionKey`・`FitCheckResult` を削除する
     - _Requirements: 1.3_
-  - [ ] 7.4 Core・Layout・Parsing: 帳票定義・置換キーの例外を削除し、`ReportCode` を `DocumentName` に改める(`UtsushiException`・`PagedLayout`・`WorkbookReadOptions`。ゴールデンの1行目が変わる)
+  - [ ] 8.4 Core・Layout・Parsing: 帳票定義・置換キーの例外を削除し、`ReportCode` を `DocumentName` に改める(`UtsushiException`・`PagedLayout`・`WorkbookReadOptions`。ゴールデンの1行目が変わる)
     - _Requirements: 1.3, 1.6_
-  - [ ] 7.5 帳票定義に依存するテストを削除・書き換える(`tests/Utsushi.ReportDefinition.Tests` の JSON・リポジトリのテスト、Substitution の置換キーのテスト、`Excel2PdfTests` の帳票定義ありのテストなど)
+  - [ ] 8.5 帳票定義に依存するテストを削除・書き換える(`tests/Utsushi.ReportDefinition.Tests` の JSON・リポジトリのテスト、Substitution の置換キーのテスト、`Excel2PdfTests` の帳票定義ありのテストなど)
     - _Requirements: 1.3, 1.5_
-  - [ ] 7.6 code-reviewer・layout-fidelity-reviewer・security-reviewer。`dotnet build --no-incremental -p:UtsushiVs2019Compiler=true` でも確かめる
+  - [ ] 8.6 code-reviewer・layout-fidelity-reviewer・security-reviewer。`dotnet build --no-incremental -p:UtsushiVs2019Compiler=true` でも確かめる
     - _Requirements: 1.1_
 
-- [ ] 8. ドキュメントと steering
-  - [ ] 8.1 `.kiro/steering/structure.md`(構成・帳票の追加手順)・`tech.md`、`CLAUDE.md`(開発コマンド・現在の状態・必ず守る制約)、`README.md` を改め、design.md 7 のとおり方針を書き換える。
+- [ ] 9. ドキュメントと steering
+  - [ ] 9.1 `.kiro/steering/structure.md`(構成・帳票の追加手順)・`tech.md`、`CLAUDE.md`(開発コマンド・現在の状態・必ず守る制約)、`README.md` を改め、design.md 7 のとおり方針を書き換える。
         product.md・structure.md・tech.md・CLAUDE.md の「移行中」の注記を外す
     - _Requirements: 1.3, 5.8_
-  - [ ] 8.2 `docs/ライブラリの使い方.md`・`docs/テンプレート作成ガイド.md`・`docs/エッジケース検証レポート.md`・`samples/edge-cases/README.md` を改め、`docs/帳票定義スキーマ.md` を削除する。`docs/実装設計失敗事例集.md` の廃止した機能の節に注記を加える。
-        `docs/ライブラリの使い方.md` には、既定がエラーに変わったこと・`ReportCode` の改名と、移行前に `check` で確かめる手順を書く
-    - _Requirements: 1.6, 2.1, 4.1, 5.1_
-  - [ ] 8.3 `.claude/agents/` の帳票定義への言及を改める
+  - [ ] 9.2 `docs/ライブラリの使い方.md`・`docs/テンプレート作成ガイド.md`・`docs/エッジケース検証レポート.md`・`samples/edge-cases/README.md` を改め、`docs/帳票定義スキーマ.md` を削除する。`docs/実装設計失敗事例集.md` の廃止した機能の節に注記を加える。
+        `docs/ライブラリの使い方.md` には、既定がエラーに変わったこと・`ReportCode` の改名と、移行前に `check` で確かめる手順を書く。
+        `docs/テンプレート作成ガイド.md` の「再現しない」の表に、診断で検知できるもの(未対応要素・書式の近似)を示す
+    - _Requirements: 1.6, 2.1, 4.1, 5.1, 7.2_
+  - [ ] 9.3 `.claude/agents/` の帳票定義への言及を改める
     - _Requirements: 1.5_
-  - [ ] 8.4 中核仕様の「廃止予定」の注記を、廃止済みに改める
-  - [ ] 8.5 doc-reviewer・spec-compliance-reviewer(本仕様・中核仕様と実装の整合)
+  - [ ] 9.4 中核仕様の「廃止予定」の注記を、廃止済みに改める
+  - [ ] 9.5 doc-reviewer・spec-compliance-reviewer(本仕様・中核仕様と実装の整合)
