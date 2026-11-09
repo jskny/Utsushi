@@ -254,12 +254,16 @@ namespace Utsushi.Layout
         {
             var connectionTargets = BuildConnectionTargetTable(rowIndex, columnIndex, rowOffsets, columnOffsets);
 
+            var ordinal = 0;
             foreach (var drawingObject in _sheet.DrawingObjects)
             {
+                ordinal++;
                 if (!TryComputeDrawingObjectRect(drawingObject, rowIndex, columnIndex, rowOffsets, columnOffsets, out var rect))
                 {
                     continue;
                 }
+
+                RecordDrawingApproximations(drawingObject, ordinal);
 
                 switch (drawingObject)
                 {
@@ -284,6 +288,65 @@ namespace Utsushi.Layout
                         break;
                 }
             }
+        }
+
+        /// <summary>
+        /// 画像・図形・グループ(の中の要素)の書式の近似を記録する(excel2pdf-consolidation 要件7.2(a)(g)(h))。診断のときだけ。
+        /// 位置はトップレベルのアンカーのセル。要素の識別は描画オブジェクトのID(無ければ描画パートの中の順番)。
+        /// </summary>
+        private void RecordDrawingApproximations(DrawingObjectModel drawingObject, int ordinal)
+        {
+            if (_approximations is null)
+            {
+                return;
+            }
+
+            var anchor = drawingObject.AnchorCell;
+            var location = new CellRange(anchor.Row, anchor.Column, anchor.Row, anchor.Column);
+            switch (drawingObject)
+            {
+                case ShapeModel shape:
+                    RecordShapeTextApproximations(shape.Text, location, DrawingIdentity(shape.Id, ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                    break;
+                case GroupShapeModel group:
+                    RecordGroupChildApproximations(group.Children, location, ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    break;
+            }
+        }
+
+        private void RecordGroupChildApproximations(IReadOnlyList<GroupChildModel> children, CellRange location, string path)
+        {
+            for (var i = 0; i < children.Count; i++)
+            {
+                var childPath = path + "/" + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                switch (children[i])
+                {
+                    case GroupChildShape shape:
+                        RecordShapeTextApproximations(shape.Text, location, DrawingIdentity(shape.Id, childPath));
+                        break;
+                    case GroupChildGroup nested:
+                        RecordGroupChildApproximations(nested.Children, location, childPath);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>要素の識別。IDがあればID、無ければ(0なら)描画パートの中の順番(design.md 9)。</summary>
+        private static string DrawingIdentity(uint id, string ordinalPath) =>
+            id != 0 ? "id=" + id.ToString(System.Globalization.CultureInfo.InvariantCulture) : "#" + ordinalPath;
+
+        private void RecordShapeTextApproximations(ShapeTextBody? text, CellRange location, string identity)
+        {
+            if (text is null || (text.Vertical is null && text.RotationDegrees == 0))
+            {
+                return;
+            }
+
+            var detail = text.Vertical is { } vertical
+                ? "vert=" + vertical
+                : "rot=" + text.RotationDegrees.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+            _approximations!.Add(
+                FormatApproximationKind.TextRotation, _sheet.Name, location, identity, detail, "図形の文字の縦書き・回転は、横書きで描きます。");
         }
 
         /// <summary>
@@ -1466,6 +1529,17 @@ namespace Utsushi.Layout
 
             var location = mergedRange ?? new CellRange(address.Row, address.Column, address.Row, address.Column);
             var sheet = _sheet.Name;
+
+            if (style.TextRotation != 0)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.TextRotation,
+                    sheet,
+                    location,
+                    null,
+                    "textRotation=" + style.TextRotation.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    style.TextRotation == 255 ? "縦書きは横書きで描きます。" : "文字の回転は、回転せずに横書きで描きます。");
+            }
 
             var hMessage = style.HAlign switch
             {

@@ -167,8 +167,19 @@ namespace Utsushi.Parsing.Model
     /// 段落内の改行(<c>a:br</c>)は <see cref="ShapeTextRun.Text"/> 中の <c>"\n"</c> で表し、
     /// 空の段落(ランを持たない <c>a:p</c>)は <see cref="ShapeTextParagraph.Runs"/> が空の段落で表す。
     /// </remarks>
+    /// <remarks>
+    /// <see cref="Vertical"/>・<see cref="RotationDegrees"/> は読み取るだけで、Utsushi は横書き・回転なしで描く
+    /// (書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(a))。
+    /// </remarks>
     public sealed record ShapeTextBody(
-        IReadOnlyList<ShapeTextParagraph> Paragraphs, VerticalAlignment VAlign, ShapeTextInsets? Insets = null);
+        IReadOnlyList<ShapeTextParagraph> Paragraphs, VerticalAlignment VAlign, ShapeTextInsets? Insets = null)
+    {
+        /// <summary>文字の向き(<c>a:bodyPr/@vert</c>)。横書き(<c>horz</c>)・指定なしは <c>null</c>。</summary>
+        public string? Vertical { get; init; }
+
+        /// <summary>文字の回転(<c>a:bodyPr/@rot</c>。度)。</summary>
+        public double RotationDegrees { get; init; }
+    }
 
     /// <summary>図形内テキストの余白(ポイント、印刷倍率の適用前)。</summary>
     public sealed record ShapeTextInsets(double LeftPt, double TopPt, double RightPt, double BottomPt)

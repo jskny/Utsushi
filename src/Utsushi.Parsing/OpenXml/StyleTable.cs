@@ -114,7 +114,14 @@ namespace Utsushi.Parsing.OpenXml
             var shrink = alignment?.ShrinkToFit?.Value ?? false;
             var indent = (int)(alignment?.Indent?.Value ?? 0U);
 
-            return new CellStyle(font, border, hAlign, vAlign, numberFormat, fill, wrap, shrink, indent);
+            // Excel が許す値(0〜180、縦書きの255)以外は回転なしとして扱う(要件6.12と同じく不正な値は既定値にする)。
+            var rotation = (int)(alignment?.TextRotation?.Value ?? 0U);
+            if (rotation is < 0 or > 180 && rotation != 255)
+            {
+                rotation = 0;
+            }
+
+            return new CellStyle(font, border, hAlign, vAlign, numberFormat, fill, wrap, shrink, indent) { TextRotation = rotation };
         }
 
         private static T ResolveIndexed<T>(IReadOnlyList<T> list, uint? index, T fallback) =>

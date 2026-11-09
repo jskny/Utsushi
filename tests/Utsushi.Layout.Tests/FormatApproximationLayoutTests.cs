@@ -64,6 +64,39 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
+        public void セルの文字の回転と縦書きを記録する()
+        {
+            var layout = Compute(Sheet(
+                ("A1", Text("見出し", CellStyle.Default with { TextRotation = 90 })),
+                ("B1", Text("縦書き", CellStyle.Default with { TextRotation = 255 }))));
+
+            var rotations = layout.FormatApproximations.Where(a => a.Kind == FormatApproximationKind.TextRotation).ToList();
+            Assert.Equal(2, rotations.Count);
+            Assert.Contains(rotations, a => a.Location == CellRange.Parse("A1:A1") && a.Detail == "textRotation=90");
+            Assert.Contains(rotations, a => a.Location == CellRange.Parse("B1:B1") && a.Detail == "textRotation=255" && a.Message.Contains("縦書き"));
+        }
+
+        [Fact]
+        public void 図形の文字の縦書きを図形のアンカーと識別で記録する()
+        {
+            var text = new ShapeTextBody(
+                new[] { new ShapeTextParagraph(new[] { new ShapeTextRun("縦", FontStyle.Default) }, HorizontalAlignment.Left) },
+                VerticalAlignment.Top)
+            {
+                Vertical = "EastAsianVertical",
+            };
+            var shape = new ShapeModel(
+                7u, ShapePresetType.Rect, System.Array.Empty<double>(), 0, null, null, text,
+                CellAddress.Parse("B2"), new PointPt(0, 0), new FixedAnchorExtent(40.0, 30.0));
+            var sheet = Sheet() with { DrawingObjects = new DrawingObjectModel[] { shape } };
+
+            var rotation = Single(Compute(sheet), FormatApproximationKind.TextRotation);
+
+            Assert.Equal(CellRange.Parse("B2:B2"), rotation.Location);
+            Assert.Equal("vert=EastAsianVertical", rotation.Detail);
+        }
+
+        [Fact]
         public void 印刷範囲の外のセルは記録しない()
         {
             var layout = Compute(Sheet(("E1", Text("範囲外", CellStyle.Default with { HAlign = HorizontalAlignment.Distributed }))));

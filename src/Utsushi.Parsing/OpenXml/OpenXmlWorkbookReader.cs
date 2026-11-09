@@ -2239,7 +2239,13 @@ namespace Utsushi.Parsing.OpenXml
 
             var bodyProperties = textBody.BodyProperties;
             var vAlign = MapVerticalAlignment(bodyProperties?.Anchor?.Value);
-            return new ShapeTextBody(paragraphs, vAlign, ReadShapeTextInsets(bodyProperties));
+            var vertical = bodyProperties?.Vertical?.Value;
+            var rotation = (bodyProperties?.Rotation?.Value ?? 0) / 60000.0;
+            return new ShapeTextBody(paragraphs, vAlign, ReadShapeTextInsets(bodyProperties))
+            {
+                Vertical = vertical is null || vertical.Value == Dr.TextVerticalValues.Horizontal ? null : vertical.Value.ToString(),
+                RotationDegrees = double.IsFinite(rotation) ? rotation : 0,
+            };
         }
 
         /// <summary>

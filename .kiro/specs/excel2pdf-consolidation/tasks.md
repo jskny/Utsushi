@@ -92,7 +92,7 @@
   - _Requirements: 4.1, 4.3, 7.1_
 - [x] 5.4 セルの配置: `Horizontal/VerticalAlignment`(読み済み)と `Indent`(読み済み)を記録する
   - _Requirements: 7.2, 7.3_
-- [ ] 5.5 文字の回転: セルの `textRotation`・図形の文字の向き(`bodyPr/@vert`・`@rot`)を読み、`TextRotation` を記録する
+- [x] 5.5 文字の回転: セルの `textRotation`・図形の文字の向き(`bodyPr/@vert`・`@rot`)を読み、`TextRotation` を記録する
   - _Requirements: 7.2, 7.3_
 - [ ] 5.6 条件付き書式: `conditionalFormatting`(拡張の `x14` を含む)の範囲を読み(ブロックの数・1つの範囲指定に含む範囲の数の上限)、印刷範囲と重なる部分を記録する
   - _Requirements: 7.2, 7.3_
