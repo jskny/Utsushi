@@ -528,9 +528,9 @@ line   from=(412.65,770.13) to=(412.65,784.38) color=#FF000000 width=0.75 dash=S
 text   origin=(231.53,73.04) anchor=Center font=MS PGothic@18pt/#FF000000,bold clip=[50.4,54 362.25x28] value="納品書"
 text   origin=(51.9,105.48) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,95.5 252x13.5] value="株式会社テスト製作所 御中"
 text   origin=(337.65,105.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=[50.4,54 362.25x730] value="納品番号"
-text   origin=(340.65,105.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[339.15,95.5 73.5x13.5] value="DN-2026-0088"
+text   origin=(340.65,105.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[50.4,54 362.25x730] value="DN-2026-0088"
 text   origin=(337.65,118.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=[50.4,54 362.25x730] value="納品日"
-text   origin=(340.65,118.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[339.15,109 73.5x13.5] value="2026年4月15日"
+text   origin=(340.65,118.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[50.4,54 362.25x730] value="2026年4月15日"
 text   origin=(63.53,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=[50.4,54 362.25x730] value="No."
 text   origin=(165.9,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=[50.4,54 362.25x730] value="品名"
 text   origin=(278.77,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=[50.4,54 362.25x730] value="数量"
@@ -1121,9 +1121,9 @@ line   from=(412.65,608.13) to=(412.65,622.38) color=#FF000000 width=0.75 dash=S
 text   origin=(231.53,73.04) anchor=Center font=MS PGothic@18pt/#FF000000,bold clip=[50.4,54 362.25x28] value="納品書"
 text   origin=(51.9,105.48) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,95.5 252x13.5] value="株式会社テスト製作所 御中"
 text   origin=(337.65,105.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=[50.4,54 362.25x608.5] value="納品番号"
-text   origin=(340.65,105.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[339.15,95.5 73.5x13.5] value="DN-2026-0088"
+text   origin=(340.65,105.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[50.4,54 362.25x608.5] value="DN-2026-0088"
 text   origin=(337.65,118.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=[50.4,54 362.25x608.5] value="納品日"
-text   origin=(340.65,118.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[339.15,109 73.5x13.5] value="2026年4月15日"
+text   origin=(340.65,118.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[50.4,54 362.25x608.5] value="2026年4月15日"
 text   origin=(63.53,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=[50.4,54 362.25x608.5] value="No."
 text   origin=(165.9,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=[50.4,54 362.25x608.5] value="品名"
 text   origin=(278.77,159.33) anchor=Center font=MS PGothic@11pt/#FF000000,bold clip=[50.4,54 362.25x608.5] value="数量"
@@ -1270,6 +1270,5 @@ text   origin=(50.4,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none
 text   origin=(264.64,817.87) anchor=Left font=MS PGothic@11pt/#FF000000 clip=none value="2 / 2 ページ"
 text   origin=(499.56,817.87) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=none value="サンプル"
 
-## fit issues count=2
+## fit issues count=1
 fit OverlapsNeighborValue cell=D3 page=1 substituted=no key=- text="納品番号"
-fit Clipped cell=E4 page=1 substituted=yes key=DeliveryDate text="2026年4月15日"

@@ -121,12 +121,12 @@
   - _Requirements: 6.2_
 - [x] 6.2 `tools/edge-case-samples/generate.py` で、エッジケースのサンプルの書き込むセルに `shrinkToFit` を付けて再生成し、既存のテストが緑であることを確かめる
   - _Requirements: 6.2_
-- [ ] 6.3 `ReportConversionGoldenTests` を `Excel2Pdf` とセル番地の指定に書き換える(`MaxDigitWidthPx`・`DocumentName` を明示する)。
+- [x] 6.3 `ReportConversionGoldenTests` を `Excel2Pdf` とセル番地の指定に書き換える(`MaxDigitWidthPx`・`DocumentName` を明示する)。
       スナップショットの差分が design.md 6.1 の2種類だけであることを確かめる
   - _Requirements: 6.1, 6.2_
-- [ ] 6.4 layout-fidelity-reviewer のレビューを経て、ゴールデンを更新する
+- [x] 6.4 layout-fidelity-reviewer のレビューを経て、ゴールデンを更新する
   - _Requirements: 6.2_
-- [ ] 6.5 `EdgeCaseSampleTests` をセル番地の指定に書き換える(注文書は `UnsupportedElements = Ignore` も渡す)。置換キーだけの観点は削除し、ignore/error のテストは 4.4・4.5 に置き換える
+- [x] 6.5 `EdgeCaseSampleTests` をセル番地の指定に書き換える(注文書は `UnsupportedElements = Ignore` も渡す)。置換キーだけの観点は削除し、ignore/error のテストは 4.4・4.5 に置き換える
   - _Requirements: 6.3_
 
 ## 7. CLI の作り直し(帳票定義の削除より前。`Excel2Pdf` だけで作れる)
