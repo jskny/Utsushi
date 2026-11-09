@@ -110,11 +110,15 @@ namespace Utsushi.Layout
 
             // 文字の収まりの確認(要件13)は、印刷範囲をまたいで同じセルを1件にまとめる。
             var fitIssues = checkFit ? new FitIssueCollector() : null;
+
+            // 書式の近似(excel2pdf-consolidation 要件7)も、診断のときだけ集める(保存の描画は変えない。要件7.5)。
+            var approximations = checkFit ? new FormatApproximationCollector() : null;
             var styledBlanks = new StyledBlankPositionCounter(definition.ReportCode, sheet.Name);
             var pages = new List<PageLayout>();
             foreach (var plan in plans)
             {
-                pages.AddRange(BuildPages(report, plan, pageSetup, printableArea, firstPageNumber: pages.Count + 1, fitIssues, styledBlanks));
+                pages.AddRange(BuildPages(
+                    report, plan, pageSetup, printableArea, firstPageNumber: pages.Count + 1, fitIssues, styledBlanks, approximations));
             }
 
             if (pages.Count == 0)
@@ -127,12 +131,14 @@ namespace Utsushi.Layout
 
             // 総ページ数が確定してからでないと &N(総ページ数)を展開できないため、
             // ヘッダー/フッターは全ページを組み立てたあとに付け足す(要件3.8)。
-            pages = AppendHeadersAndFooters(report, pages);
+            pages = AppendHeadersAndFooters(report, pages, approximations);
 
             return new PagedLayout(pages, definition.ReportCode, sheet.Name)
             {
                 FitIssues = fitIssues?.Issues ?? Array.Empty<FitIssue>(),
                 FitIssuesTruncated = fitIssues?.IsTruncated ?? false,
+                FormatApproximations = approximations?.Items ?? Array.Empty<FormatApproximation>(),
+                FormatApproximationsTruncated = approximations?.IsTruncated ?? false,
             };
         }
 
@@ -308,7 +314,8 @@ namespace Utsushi.Layout
         /// <summary>
         /// 確定したページ群にヘッダー/フッターの描画命令を付け足す(要件3.7〜3.9)。
         /// </summary>
-        private List<PageLayout> AppendHeadersAndFooters(ReportModel report, List<PageLayout> pages)
+        private List<PageLayout> AppendHeadersAndFooters(
+            ReportModel report, List<PageLayout> pages, FormatApproximationCollector? approximations)
         {
             var headerFooter = report.Sheet.PageSetup.HeaderFooter;
             if (headerFooter.IsEmpty)
@@ -326,7 +333,7 @@ namespace Utsushi.Layout
             foreach (var page in pages)
             {
                 var builder = new HeaderFooterCommandBuilder(
-                    _fontMetrics, margins, page.WidthPt, page.HeightPt, page.ScaleFactor);
+                    _fontMetrics, margins, page.WidthPt, page.HeightPt, page.ScaleFactor, approximations, report.Sheet.Name);
 
                 var context = new HeaderFooterContext(
                     firstNumber + page.PageNumber - 1,
@@ -618,7 +625,8 @@ namespace Utsushi.Layout
             RectPt printableArea,
             int firstPageNumber,
             FitIssueCollector? fitIssues,
-            StyledBlankPositionCounter styledBlanks)
+            StyledBlankPositionCounter styledBlanks,
+            FormatApproximationCollector? approximations)
         {
             var pages = new List<PageLayout>();
             var (paperWidthPt, paperHeightPt) = pageSetup.PaperSizePt;
@@ -664,7 +672,7 @@ namespace Utsushi.Layout
 
                 var commands = new PageCommandBuilder(
                         report, grid, _fontMetrics, scale, pageSetup.Margins, new PointPt(offsetX, offsetY), printableArea,
-                        plan.MergedIndex, validatedSubstitutedCells, fitIssues, pageNumber, styledBlanks)
+                        plan.MergedIndex, validatedSubstitutedCells, fitIssues, pageNumber, styledBlanks, approximations)
                     .Build(pageRows, pageColumns);
 
                 pages.Add(new PageLayout(

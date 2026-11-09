@@ -32,6 +32,9 @@ namespace Utsushi.Layout
         private readonly MergedCellIndex? _mergedIndex;
         private readonly ISet<CellAddress>? _validatedSubstitutedCells;
         private readonly FitIssueCollector? _fitIssues;
+
+        /// <summary>書式の近似(excel2pdf-consolidation 要件7)の記録先。null の場合は集めない(保存)。</summary>
+        private readonly FormatApproximationCollector? _approximations;
         private readonly int _pageNumber;
         private readonly StyledBlankPositionCounter? _styledBlanks;
 
@@ -100,7 +103,8 @@ namespace Utsushi.Layout
             ISet<CellAddress>? validatedSubstitutedCells = null,
             FitIssueCollector? fitIssues = null,
             int pageNumber = 1,
-            StyledBlankPositionCounter? styledBlanks = null)
+            StyledBlankPositionCounter? styledBlanks = null,
+            FormatApproximationCollector? approximations = null)
         {
             _report = report;
             _sheet = report.Sheet;
@@ -115,6 +119,7 @@ namespace Utsushi.Layout
             _fitIssues = fitIssues;
             _pageNumber = pageNumber;
             _styledBlanks = styledBlanks;
+            _approximations = approximations;
         }
 
         /// <summary>はみ出し表示の文字を切り取る矩形(このページの本文の矩形)。<see cref="Build"/> で決まる。</summary>

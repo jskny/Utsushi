@@ -117,9 +117,17 @@ namespace Utsushi.Golden.Tests
         public void 問題が無ければ問題無しと判定できる()
         {
             var empty = new Excel2PdfDiagnostics(
-                Array.Empty<Layout.Model.FitIssue>(), false, Array.Empty<UnsupportedElement>(), false, Array.Empty<FontSubstitution>());
+                Array.Empty<Layout.Model.FitIssue>(), false, Array.Empty<UnsupportedElement>(), false, Array.Empty<FontSubstitution>(),
+                Array.Empty<FormatApproximation>(), false);
 
             Assert.False(empty.HasIssues);
+            Assert.False(empty.HasFormatApproximations);
+            var approximated = empty with
+            {
+                FormatApproximations = new[] { new FormatApproximation(FormatApproximationKind.TextRotation, "S", null, null, "回転") },
+            };
+            Assert.False(approximated.HasIssues);
+            Assert.True(approximated.HasFormatApproximations);
             Assert.True((empty with { FontSubstitutions = new[] { new FontSubstitution("A", true, false, "B") } }).HasIssues);
             Assert.Equal("A(太字) → B", new FontSubstitution("A", true, false, "B").ToString());
         }

@@ -28,14 +28,20 @@ namespace Utsushi.Layout.HeaderFooter
         private readonly double _pageWidthPt;
         private readonly double _pageHeightPt;
         private readonly double _scale;
+        private readonly FormatApproximationCollector? _approximations;
+        private readonly string _sheetName;
 
         public HeaderFooterCommandBuilder(
             IFontMetricsProvider fontMetrics,
             PageMargins margins,
             double pageWidthPt,
             double pageHeightPt,
-            double scale)
+            double scale,
+            FormatApproximationCollector? approximations = null,
+            string sheetName = "")
         {
+            _approximations = approximations;
+            _sheetName = sheetName;
             _fontMetrics = fontMetrics;
             _margins = margins;
             _pageWidthPt = pageWidthPt;

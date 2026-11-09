@@ -84,11 +84,11 @@
 
 骨組み(5.1〜5.3)を先に作り、種類ごとに検知を足す(5.4〜5.13)。各サブタスクは Parsing の読み取り・Layout の記録・テスト(エッジケースのサンプルを含む)と、近似の行が変わる場合のゴールデンの更新をまとめて行う。
 
-- [ ] 5.1 `Utsushi.Core` に `FormatApproximationKind`・`FormatApproximation` を追加する
+- [x] 5.1 `Utsushi.Core` に `FormatApproximationKind`・`FormatApproximation` を追加する
   - _Requirements: 7.1_
-- [ ] 5.2 Layout: `FormatApproximationCollector`(種類ごとの上限・要素の識別を含む重複の判定)を追加し、`checkFit` のときだけ作って `PagedLayout` に載せる(この時点では常に空)。単体テストを含む
+- [x] 5.2 Layout: `FormatApproximationCollector`(種類ごとの上限・要素の識別を含む重複の判定)を追加し、`checkFit` のときだけ作って `PagedLayout` に載せる(この時点では常に空)。単体テストを含む
   - _Requirements: 7.4, 7.5_
-- [ ] 5.3 ファサード: `Excel2PdfDiagnostics` に `FormatApproximations`・`FormatApproximationsTruncated`・`HasFormatApproximations` を加える。ゴールデンのスナップショットに近似の行を出す(この時点では差分なし)
+- [x] 5.3 ファサード: `Excel2PdfDiagnostics` に `FormatApproximations`・`FormatApproximationsTruncated`・`HasFormatApproximations` を加える。ゴールデンのスナップショットに近似の行を出す(この時点では差分なし)
   - _Requirements: 4.1, 4.3, 7.1_
 - [ ] 5.4 セルの配置: `Horizontal/VerticalAlignment`(読み済み)と `Indent`(読み済み)を記録する
   - _Requirements: 7.2, 7.3_

@@ -74,6 +74,20 @@ namespace Utsushi.Golden.Tests
                 }
             }
 
+            // 書式の近似(excel2pdf-consolidation 要件7)。1件も無いときは段落を出さない(既存のスナップショットを変えないため)。
+            if (layout.FormatApproximations.Count > 0)
+            {
+                sb.AppendLine();
+                sb.Append("## format approximations count=").Append(layout.FormatApproximations.Count).AppendLine();
+                foreach (var item in layout.FormatApproximations)
+                {
+                    sb.Append("approx ").Append(item.Kind)
+                      .Append(" at=").Append(item.Location?.ToString() ?? "-")
+                      .Append(" detail=").Append(item.Detail ?? "-")
+                      .AppendLine();
+                }
+            }
+
             return sb.ToString();
         }
 

@@ -186,5 +186,14 @@ namespace Utsushi.Layout.Model
 
         /// <summary><see cref="FitIssues"/> が件数の上限(10,000件)で打ち切られているかどうか。</summary>
         public bool FitIssuesTruncated { get; init; }
+
+        /// <summary>
+        /// 書式の近似(excel2pdf-consolidation 要件7)。描画には使わない。確認を省いた場合(保存)は空。
+        /// </summary>
+        public IReadOnlyList<Utsushi.Core.FormatApproximation> FormatApproximations { get; init; } =
+            System.Array.Empty<Utsushi.Core.FormatApproximation>();
+
+        /// <summary><see cref="FormatApproximations"/> がいずれかの種類の件数の上限で打ち切られているかどうか。</summary>
+        public bool FormatApproximationsTruncated { get; init; }
     }
 }

@@ -557,7 +557,9 @@ namespace Utsushi
                 layout.FitIssuesTruncated,
                 workbook?.UnsupportedElements ?? Array.Empty<UnsupportedElement>(),
                 workbook?.UnsupportedElementsTruncated ?? false,
-                CollectFontSubstitutions(layout));
+                CollectFontSubstitutions(layout),
+                layout.FormatApproximations,
+                layout.FormatApproximationsTruncated);
         }
 
         /// <summary>

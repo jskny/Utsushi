@@ -12,15 +12,22 @@ namespace Utsushi
     /// <param name="UnsupportedElements">PDFに出力されない要素(要件2)。未対応要素の扱いによらず、例外にせず返す。</param>
     /// <param name="UnsupportedElementsTruncated"><paramref name="UnsupportedElements"/> を件数の上限で打ち切ったかどうか。</param>
     /// <param name="FontSubstitutions">テンプレートのフォントが無く、別の書体で描いたフォント(要件3)。代替を許可した場合だけ起こる。</param>
+    /// <param name="FormatApproximations">描画は欠けないがExcelと見た目が異なる書式(要件7)。問題には数えない。</param>
+    /// <param name="FormatApproximationsTruncated"><paramref name="FormatApproximations"/> をいずれかの種類の件数の上限で打ち切ったかどうか。</param>
     public sealed record Excel2PdfDiagnostics(
         IReadOnlyList<FitIssue> FitIssues,
         bool FitIssuesTruncated,
         IReadOnlyList<UnsupportedElement> UnsupportedElements,
         bool UnsupportedElementsTruncated,
-        IReadOnlyList<FontSubstitution> FontSubstitutions)
+        IReadOnlyList<FontSubstitution> FontSubstitutions,
+        IReadOnlyList<FormatApproximation> FormatApproximations,
+        bool FormatApproximationsTruncated)
     {
-        /// <summary>問題(文字の収まらない箇所・未対応要素・フォントの代替)が1つ以上あるかどうか(要件4.3)。</summary>
+        /// <summary>問題(文字の収まらない箇所・未対応要素・フォントの代替)が1つ以上あるかどうか(要件4.3)。書式の近似は含めない。</summary>
         public bool HasIssues => FitIssues.Count > 0 || UnsupportedElements.Count > 0 || FontSubstitutions.Count > 0;
+
+        /// <summary>書式の近似が1つ以上あるかどうか(要件4.3)。</summary>
+        public bool HasFormatApproximations => FormatApproximations.Count > 0;
     }
 
     /// <summary>フォントの代替1件(要件3.1)。</summary>
