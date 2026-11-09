@@ -97,6 +97,24 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
+        public void 行の書式の網かけはセルが無い位置も印刷される範囲だけ記録する()
+        {
+            var patterned = CellStyle.Default with
+            {
+                BackgroundColor = new ArgbColor(0xFF, 0xEE, 0xEE, 0xEE),
+                FillApproximation = FormatApproximationKind.CellFillPattern,
+                FillApproximationDetail = "patternType=DarkTrellis",
+            };
+            var sheet = Sheet() with { RowStyles = new Dictionary<int, CellStyle> { [1] = patterned } };
+
+            var fills = Compute(sheet).FormatApproximations.Where(a => a.Kind == FormatApproximationKind.CellFillPattern).ToList();
+
+            // 印刷範囲 A1:C3 の1行目だけ(D1・E1 は印刷範囲の外)。
+            Assert.Equal(new[] { "A1:A1", "B1:B1", "C1:C1" }, fills.Select(f => f.Location!.Value.ToString()).OrderBy(x => x).ToArray());
+            Assert.All(fills, f => Assert.Equal("patternType=DarkTrellis", f.Detail));
+        }
+
+        [Fact]
         public void 印刷範囲の外のセルは記録しない()
         {
             var layout = Compute(Sheet(("E1", Text("範囲外", CellStyle.Default with { HAlign = HorizontalAlignment.Distributed }))));

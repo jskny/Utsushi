@@ -849,6 +849,20 @@ namespace Utsushi.Layout
                 return;
             }
 
+            if (_approximations is not null && style.FillApproximation is { } fillApproximation)
+            {
+                // 塗りつぶしを描かないグラデーションも含めて、印刷されるセルの位置ごとに記録する(design.md 3.5)。
+                _approximations.Add(
+                    fillApproximation,
+                    _sheet.Name,
+                    mergedRange ?? new CellRange(address.Row, address.Column, address.Row, address.Column),
+                    null,
+                    style.FillApproximationDetail,
+                    fillApproximation == FormatApproximationKind.CellFillGradient
+                        ? "セルのグラデーションの塗りつぶしは描きません(塗りつぶしなし)。"
+                        : "セルの網かけは、背景色の単色で描きます。");
+            }
+
             var borders = bordersOverride ?? style.Borders;
             if (cell is null && (!style.BackgroundColor.IsTransparent || borders.HasAnyVisibleEdge))
             {

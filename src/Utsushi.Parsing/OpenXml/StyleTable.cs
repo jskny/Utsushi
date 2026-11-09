@@ -91,12 +91,13 @@ namespace Utsushi.Parsing.OpenXml
         private static CellStyle ResolveCellFormat(
             X.CellFormat xf,
             IReadOnlyList<FontStyle> fonts,
-            IReadOnlyList<ArgbColor> fills,
+            IReadOnlyList<FillInfo> fills,
             IReadOnlyList<BorderSet> borders,
             IReadOnlyDictionary<int, string> customNumberFormats)
         {
             var font = ResolveIndexed(fonts, xf.FontId?.Value, FontStyle.Default);
-            var fill = ResolveIndexed(fills, xf.FillId?.Value, ArgbColor.Transparent);
+            var fillInfo = ResolveIndexed(fills, xf.FillId?.Value, FillInfo.None);
+            var fill = fillInfo.Color;
             var border = ResolveIndexed(borders, xf.BorderId?.Value, BorderSet.None);
 
             string? numberFormat = null;
@@ -121,7 +122,12 @@ namespace Utsushi.Parsing.OpenXml
                 rotation = 0;
             }
 
-            return new CellStyle(font, border, hAlign, vAlign, numberFormat, fill, wrap, shrink, indent) { TextRotation = rotation };
+            return new CellStyle(font, border, hAlign, vAlign, numberFormat, fill, wrap, shrink, indent)
+            {
+                TextRotation = rotation,
+                FillApproximation = fillInfo.Approximation,
+                FillApproximationDetail = fillInfo.Detail,
+            };
         }
 
         private static T ResolveIndexed<T>(IReadOnlyList<T> list, uint? index, T fallback) =>
@@ -203,9 +209,15 @@ namespace Utsushi.Parsing.OpenXml
             return UnderlineStyle.Single;
         }
 
-        private static List<ArgbColor> ReadFills(X.Stylesheet stylesheet, ColorResolver colors, int maxEntries)
+        /// <summary>塗りつぶしの色と、近似した場合の種類(excel2pdf-consolidation 要件7.2(f))。</summary>
+        private sealed record FillInfo(ArgbColor Color, FormatApproximationKind? Approximation, string? Detail)
         {
-            var result = new List<ArgbColor>();
+            public static FillInfo None { get; } = new(ArgbColor.Transparent, null, null);
+        }
+
+        private static List<FillInfo> ReadFills(X.Stylesheet stylesheet, ColorResolver colors, int maxEntries)
+        {
+            var result = new List<FillInfo>();
             foreach (var fill in stylesheet.Fills?.Elements<X.Fill>() ?? Array.Empty<X.Fill>())
             {
                 if (result.Count >= maxEntries)
@@ -213,22 +225,32 @@ namespace Utsushi.Parsing.OpenXml
                     break;
                 }
 
+                if (fill.GradientFill is not null)
+                {
+                    // グラデーションは描かない(塗りつぶしなし)。書式の近似として知らせる。
+                    result.Add(new FillInfo(ArgbColor.Transparent, FormatApproximationKind.CellFillGradient, "gradientFill"));
+                    continue;
+                }
+
                 var pattern = fill.PatternFill;
                 if (pattern?.PatternType is null || pattern.PatternType.Value == X.PatternValues.None)
                 {
-                    result.Add(ArgbColor.Transparent);
+                    result.Add(FillInfo.None);
                     continue;
                 }
 
                 if (pattern.PatternType.Value == X.PatternValues.Solid)
                 {
                     // 塗りつぶし(単色)では前景色が塗り色になる。
-                    result.Add(colors.Resolve(pattern.ForegroundColor, ArgbColor.Transparent));
+                    result.Add(new FillInfo(colors.Resolve(pattern.ForegroundColor, ArgbColor.Transparent), null, null));
                     continue;
                 }
 
-                // 網掛けパターンは対象帳票では使用しない想定のため、背景色で近似する。
-                result.Add(colors.Resolve(pattern.BackgroundColor, ArgbColor.Transparent));
+                // 網掛けパターンは対象帳票では使用しない想定のため、背景色で近似する。書式の近似として知らせる。
+                result.Add(new FillInfo(
+                    colors.Resolve(pattern.BackgroundColor, ArgbColor.Transparent),
+                    FormatApproximationKind.CellFillPattern,
+                    "patternType=" + pattern.PatternType.Value));
             }
 
             return result;

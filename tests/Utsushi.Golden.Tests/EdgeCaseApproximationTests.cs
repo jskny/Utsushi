@@ -69,6 +69,17 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
+        public void 注文書の網かけとグラデーションのセルを返す()
+        {
+            var result = Check("edge-order-form");
+
+            Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.CellFillPattern
+                && a.Location == CellRange.Parse("B26:B26") && a.Detail == "patternType=DarkTrellis");
+            Assert.Contains(result.FormatApproximations, a => a.Kind == FormatApproximationKind.CellFillGradient
+                && a.Location == CellRange.Parse("B27:B27"));
+        }
+
+        [Fact]
         public void 工程表の90度回転した日付見出しを返す()
         {
             var result = Check("edge-schedule");

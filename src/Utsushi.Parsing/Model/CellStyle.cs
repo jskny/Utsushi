@@ -117,6 +117,15 @@ namespace Utsushi.Parsing.Model
         /// </summary>
         public int TextRotation { get; init; }
 
+        /// <summary>
+        /// 塗りつぶしを近似した場合の種類(網かけ・グラデーション)。近似していなければ null
+        /// (書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(f))。
+        /// </summary>
+        public Core.FormatApproximationKind? FillApproximation { get; init; }
+
+        /// <summary><see cref="FillApproximation"/> の補足の情報(網かけの種類など)。</summary>
+        public string? FillApproximationDetail { get; init; }
+
         /// <summary>既定の書式(罫線・背景なし、既定フォント)。</summary>
         public static CellStyle Default { get; } = new(
             FontStyle.Default,

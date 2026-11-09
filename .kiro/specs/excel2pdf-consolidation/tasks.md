@@ -100,7 +100,7 @@
   - _Requirements: 7.2, 7.3_
 - [x] 5.8 表示形式: 解釈できない書式・表せない値の印を `NumberFormatter` で載せ、記録する。`SetValue` 用に `NumberFormatting` の internal のオーバーロードを加え、上書きしたセルは書き込んだ値で求め直す
   - _Requirements: 7.2, 7.3_
-- [ ] 5.9 セルの塗りつぶし: 網かけ・グラデーションの印を `StyleTable` で読み、`EmitCell` で記録する(セルが無い位置を行・列の書式で描く場合を含む)
+- [x] 5.9 セルの塗りつぶし: 網かけ・グラデーションの印を `StyleTable` で読み、`EmitCell` で記録する(セルが無い位置を行・列の書式で描く場合を含む)
   - _Requirements: 7.2, 7.3, 7.4_
 - [ ] 5.10 図形の塗りつぶし・書体: テーマの `fillStyleLst` を読み、`ShapeFill` の印(design.md 3.5 の4つの場合)と `fontRef` の印を載せて記録する。既定のテーマの `fillRef idx=1` には印を付けない
   - _Requirements: 7.2, 7.3_
