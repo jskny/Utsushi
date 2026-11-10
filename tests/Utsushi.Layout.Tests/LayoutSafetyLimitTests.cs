@@ -193,7 +193,7 @@ namespace Utsushi.Layout.Tests
                 defaultRowHeightPt: 20.0,
                 pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("A1:XFD1048576") }));
 
-            var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet, Definition()));
+            var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet, Settings()));
 
             Assert.Contains("印刷範囲", ex.Message, StringComparison.Ordinal);
         }
@@ -314,8 +314,8 @@ namespace Utsushi.Layout.Tests
 
         // --- ヘルパー ----------------------------------------------------------------
 
-        private PagedLayout Compute(SheetModel sheet, ConversionSettings? definition = null) =>
-            _engine.Compute(ReportModel.Create(definition ?? Definition(), sheet));
+        private PagedLayout Compute(SheetModel sheet, ConversionSettings? settings = null) =>
+            _engine.Compute(ReportModel.Create(settings ?? Settings(), sheet));
 
         /// <summary>指定したセルだけを持ち、行高・列幅はすべて既定値のシート(大規模な範囲を少ないメモリで表す)。</summary>
         private static SheetModel SparseSheet(

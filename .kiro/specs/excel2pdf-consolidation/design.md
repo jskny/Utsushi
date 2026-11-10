@@ -382,8 +382,8 @@ public sealed record FormatApproximation(
 | セルの書式 | 扱い |
 |---|---|
 | 「縮小して全体を表示する」(`shrinkToFit`) | 縮小表示 |
-| 「折り返して全体を表示する」(`wrapText`) | 折り返し(収まらなければ中核仕様の要件2.14のエラー) |
-| どちらも無い | はみ出し表示(数値は切り取り) |
+| 「折り返して全体を表示する」(`wrapText`) | 折り返し(収まらなければ中核仕様の要件2.14のエラー)。数値は折り返さず、セルの幅で切り取る(中核仕様の要件14.3) |
+| どちらも無い | はみ出し表示(数値も同じ。結合セルは結合範囲で切る) |
 
 帳票定義の `overflow: "clip"` に相当するExcelの書式は無い。`clip` のセルは、はみ出し表示になる。
 対象は、請求書の `InvoiceNo`・`TotalAmount`、領収書の `Amount`・`CopyAmount`、納品書の `DeliveryNo`・`DeliveryDate`、エッジケースの送付状の `Department` である。
@@ -482,7 +482,7 @@ utsushi --help
 
    これ以外の差分が出たら原因を調べる。差分は layout-fidelity-reviewer のレビューを経てから更新する。
    帳票定義の削除(4.4の改名・`SubstitutionKey` の削除)で、1行目が `document=` になり、`key=` の列が無くなる。
-4. テンプレートを再生成すると、同じテンプレートを使う他のテスト(`WithoutDefinitionConversionTests`・`Excel2PdfTests` など)の結果も変わりうる。
+4. テンプレートを再生成すると、同じテンプレートを使う他のテスト(`Excel2PdfConversionTests`・`Excel2PdfTests` など)の結果も変わりうる。
    これらも同じ段階で確かめる。
 5. この移行を、帳票定義の削除より前に行う(要件6.1)。移行したテストが緑であることを、削除の前後で確かめる。
 

@@ -53,7 +53,7 @@ namespace Utsushi.Core.Exceptions
         /// </summary>
         /// <remarks>
         /// フォントの解決(<c>FontResolver</c>)は文書を知らないため、文書名・シート名を持たない例外を投げる。
-        /// ファサードがそれを捕捉し、どの帳票のどの段階(レイアウトの文字幅計測か、PDFの描画か)で起きたかを補った
+        /// ファサードがそれを捕捉し、どの文書のどの段階(レイアウトの文字幅計測か、PDFの描画か)で起きたかを補った
         /// この例外で包み直す(要件6.4)。元の例外は <see cref="Exception.InnerException"/> に入れる。
         /// </remarks>
         public FontNotAvailableException(

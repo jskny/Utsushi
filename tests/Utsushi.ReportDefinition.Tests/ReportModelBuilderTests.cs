@@ -15,7 +15,7 @@ namespace Utsushi.ReportDefinition.Tests
     {
         private readonly ReportModelBuilder _builder = new();
 
-        private static ReportDefinitions.Model.ConversionSettings Definition(string sheetName) =>
+        private static ReportDefinitions.Model.ConversionSettings Settings(string sheetName) =>
             new("test", sheetName, ReportDefinitions.Model.ConversionSettings.DefaultMaxDigitWidthPx);
 
         private static WorkbookModel Workbook(
@@ -47,7 +47,7 @@ namespace Utsushi.ReportDefinition.Tests
         [Fact]
         public void 設定のシートを取り出してモデルを構築する()
         {
-            var definition = Definition("請求書");
+            var definition = Settings("請求書");
             var workbook = Workbook("請求書", new[] { "A1", "C3", "F10" });
 
             var report = _builder.Build(workbook, definition);
@@ -62,7 +62,7 @@ namespace Utsushi.ReportDefinition.Tests
             // 読み込みは対象のシートだけを返すため通常は起きない。契約に反する読み込みの実装が差し替えられた場合の防御。
             var workbook = Workbook("見積書", new[] { "A1" });
 
-            var ex = Assert.Throws<InvalidOperationException>(() => _builder.Build(workbook, Definition("請求書")));
+            var ex = Assert.Throws<InvalidOperationException>(() => _builder.Build(workbook, Settings("請求書")));
 
             Assert.Contains("請求書", ex.Message);
             Assert.Contains("見積書", ex.Message);

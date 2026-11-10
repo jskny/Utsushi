@@ -17,7 +17,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 上限ちょうどの長さの差し込み値は受け付ける()
         {
-            var report = Report(Definition(), Sheet(("A1", "x", null)));
+            var report = Report(Settings(), Sheet(("A1", "x", null)));
             var value = new string('あ', CellSubstitutor.MaxValueLength);
 
             var result = _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = value });
@@ -28,7 +28,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 上限を超える長さの差し込み値はエラーになる()
         {
-            var report = Report(Definition(), Sheet(("A1", "x", null)));
+            var report = Report(Settings(), Sheet(("A1", "x", null)));
             var value = new string('あ', CellSubstitutor.MaxValueLength + 1);
 
             var ex = Assert.Throws<InvalidSubstitutionValueException>(
@@ -43,7 +43,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 上限を超える長さのセル上書き値はエラーになる()
         {
-            var report = Report(Definition(), Sheet(("B2", "x", null)));
+            var report = Report(Settings(), Sheet(("B2", "x", null)));
             var value = new string('a', CellSubstitutor.MaxValueLength + 1);
 
             var ex = Assert.Throws<InvalidSubstitutionValueException>(
@@ -56,7 +56,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 上限ちょうどの件数のセル上書きは受け付ける()
         {
-            var report = Report(Definition(), Sheet());
+            var report = Report(Settings(), Sheet());
             var overrides = Overrides(CellSubstitutor.MaxCellOverrideCount);
 
             var result = _substitutor.ApplyCellOverrides(report, overrides);
@@ -67,7 +67,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 上限を超える件数のセル上書きはエラーになる()
         {
-            var report = Report(Definition(), Sheet());
+            var report = Report(Settings(), Sheet());
             var overrides = Overrides(CellSubstitutor.MaxCellOverrideCount + 1);
 
             var ex = Assert.Throws<InvalidSubstitutionValueException>(
@@ -84,7 +84,7 @@ namespace Utsushi.Substitution.Tests
         [InlineData("B1", " B1 ")]
         public void 表記が違っても同じセルを指す直接指定はエラーになる(string first, string second)
         {
-            var report = Report(Definition(), Sheet(("B1", "x", null)));
+            var report = Report(Settings(), Sheet(("B1", "x", null)));
             var overrides = new Dictionary<string, string> { [first] = "1つ目", [second] = "2つ目" };
 
             var ex = Assert.Throws<InvalidCellOverrideAddressException>(
@@ -104,7 +104,7 @@ namespace Utsushi.Substitution.Tests
             Assert.False(CellAddress.TryParse(address, out _));
             Assert.False(CellAddress.TryParseColumnName(address.Substring(0, address.Length - 1), out _));
 
-            var report = Report(Definition(), Sheet(("A1", "x", null)));
+            var report = Report(Settings(), Sheet(("A1", "x", null)));
             var ex = Assert.Throws<InvalidCellOverrideAddressException>(
                 () => _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { [address] = "v" }));
 

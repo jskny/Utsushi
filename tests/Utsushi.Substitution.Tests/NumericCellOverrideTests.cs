@@ -18,7 +18,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void セルを数値のセルにしてセルの数値書式で表示する()
         {
-            var report = Report(Definition(), Sheet(("B2", "テンプレートの値", Currency)));
+            var report = Report(Settings(), Sheet(("B2", "テンプレートの値", Currency)));
 
             var result = _substitutor.ApplyNumericCellOverrides(report, new Dictionary<string, double> { ["b2"] = -1234.4 });
 
@@ -40,7 +40,7 @@ namespace Utsushi.Substitution.Tests
             };
 
             var result = _substitutor.ApplyNumericCellOverrides(
-                Report(Definition(), sheet), new Dictionary<string, double> { ["C5"] = 1000 });
+                Report(Settings(), sheet), new Dictionary<string, double> { ["C5"] = 1000 });
 
             Assert.Equal("¥1,000", result.Sheet.Cells[CellAddress.Parse("C5")].DisplayValue);
         }
@@ -50,7 +50,7 @@ namespace Utsushi.Substitution.Tests
         [InlineData(double.PositiveInfinity)]
         public void 表示できない数値はエラーにする(double value)
         {
-            var report = Report(Definition(), Sheet(("A1", "x", null)));
+            var report = Report(Settings(), Sheet(("A1", "x", null)));
 
             var ex = Assert.Throws<InvalidSubstitutionValueException>(
                 () => _substitutor.ApplyNumericCellOverrides(report, new Dictionary<string, double> { ["A1"] = value }));
@@ -66,7 +66,7 @@ namespace Utsushi.Substitution.Tests
                 overridden.Add(new CellAddress(i, 1));
             }
 
-            var report = Report(Definition(), Sheet(("A1", "x", null))) with { OverriddenCells = overridden };
+            var report = Report(Settings(), Sheet(("A1", "x", null))) with { OverriddenCells = overridden };
 
             var ex = Assert.Throws<InvalidSubstitutionValueException>(
                 () => _substitutor.ApplyNumericCellOverrides(report, new Dictionary<string, double> { ["B1"] = 1 }));
@@ -76,7 +76,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 番地の検証は文字列の直接指定と同じ()
         {
-            var report = Report(Definition(), Sheet(("A1", "x", null)));
+            var report = Report(Settings(), Sheet(("A1", "x", null)));
 
             Assert.Throws<InvalidCellOverrideAddressException>(
                 () => _substitutor.ApplyNumericCellOverrides(report, new Dictionary<string, double> { ["1A"] = 1 }));

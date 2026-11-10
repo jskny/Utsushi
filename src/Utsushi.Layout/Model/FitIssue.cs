@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Utsushi.Core;
 
 namespace Utsushi.Layout.Model
@@ -15,7 +14,7 @@ namespace Utsushi.Layout.Model
         /// <summary>数値の表示文字列がセルの幅に収まらない(Excel では <c>####</c> と表示される)。</summary>
         NumberTooWide,
 
-        /// <summary>切り取り表示、または結合セルの文字が、セル(結合範囲)の幅で切れる。</summary>
+        /// <summary>結合セルの文字が、結合範囲の幅で切れる(結合セルの文字ははみ出さない)。</summary>
         Clipped,
 
         /// <summary>折り返した文字がセルの高さに収まらない。</summary>

@@ -5,7 +5,7 @@ using Definition = Utsushi.ReportDefinitions.Model.ConversionSettings;
 namespace Utsushi.ReportDefinition.Tests
 {
     /// <summary>
-    /// 帳票定義なしモードの最大数字幅(要件12.3、タスク27.2)の検証。
+    /// 列幅の換算に使う最大数字幅(要件12.3、タスク27.2)の検証。
     /// ブックの標準フォントからの見積もり(<see cref="Definition.EstimateMaxDigitWidthPx"/>)と、
     /// 呼び出し元が指定した値の検証(<see cref="Definition.Create"/>)。
     /// </summary>
@@ -80,7 +80,7 @@ namespace Utsushi.ReportDefinition.Tests
         [InlineData(8.0)]
         [InlineData(0.5)]
         [InlineData(double.Epsilon)]
-        public void 正の最大数字幅はそのまま帳票定義に入る(double maxDigitWidthPx)
+        public void 正の最大数字幅はそのまま変換の設定に入る(double maxDigitWidthPx)
         {
             var definition = Definition.Create("doc", "Sheet1", maxDigitWidthPx);
 

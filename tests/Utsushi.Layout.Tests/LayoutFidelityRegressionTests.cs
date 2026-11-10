@@ -25,7 +25,7 @@ namespace Utsushi.Layout.Tests
         private readonly ReportLayoutEngine _engine = new(new ApproximateFontMetricsProvider(), () => new DateTime(2026, 4, 20));
 
         private PagedLayout Compute(SheetModel sheet, params CellAddress[] substituted) =>
-            _engine.Compute(ReportModel.Create(Definition(), sheet) with
+            _engine.Compute(ReportModel.Create(Settings(), sheet) with
             {
                 SubstitutedCells = new HashSet<CellAddress>(substituted),
             });

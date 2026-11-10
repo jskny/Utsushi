@@ -36,11 +36,6 @@ namespace Utsushi.Substitution
         /// <param name="report">上書き前の帳票モデル。</param>
         /// <param name="numericOverrides">セル番地(A1形式) → 数値。NaN・無限大は不可。</param>
         /// <exception cref="InvalidSubstitutionValueException">数値が NaN・無限大の場合(要件14.4)。</exception>
-        /// <exception cref="System.NotSupportedException">
-        /// 既定の実装(この機能より前に作られた実装を壊さないため)。<c>CellSubstitutor</c> は対応している。
-        /// </exception>
-        ReportModel ApplyNumericCellOverrides(ReportModel report, IReadOnlyDictionary<string, double> numericOverrides) =>
-            throw new System.NotSupportedException(
-                $"{GetType().Name} は数値の直接指定({nameof(ApplyNumericCellOverrides)})に対応していません。");
+        ReportModel ApplyNumericCellOverrides(ReportModel report, IReadOnlyDictionary<string, double> numericOverrides);
     }
 }

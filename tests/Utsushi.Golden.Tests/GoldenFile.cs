@@ -23,12 +23,12 @@ namespace Utsushi.Golden.Tests
         /// <summary>
         /// 実際の出力を、リポジトリ内のゴールデンファイルと比較する。
         /// </summary>
-        /// <param name="documentName">サンプル名(ゴールデンファイルの配置ディレクトリ)。</param>
+        /// <param name="sampleName">サンプル名(ゴールデンファイルの配置ディレクトリ)。</param>
         /// <param name="fileName">ゴールデンファイル名。</param>
         /// <param name="actual">実際の出力。</param>
-        public static void Verify(string documentName, string fileName, string actual)
+        public static void Verify(string sampleName, string fileName, string actual)
         {
-            var path = Path.Combine(TestPaths.FixturesRoot, documentName, fileName);
+            var path = Path.Combine(TestPaths.FixturesRoot, sampleName, fileName);
             var normalized = Normalize(actual);
 
             if (ShouldUpdate || !File.Exists(path))

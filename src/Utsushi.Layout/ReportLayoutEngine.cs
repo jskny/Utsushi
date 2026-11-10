@@ -63,7 +63,7 @@ namespace Utsushi.Layout
                 throw new ArgumentNullException(nameof(report));
             }
 
-            var definition = report.Settings;
+            var settings = report.Settings;
             var sheet = report.Sheet;
             var pageSetup = sheet.PageSetup;
 
@@ -78,13 +78,13 @@ namespace Utsushi.Layout
                     + $"(用紙 {paperWidthPt:0.#}x{paperHeightPt:0.#}pt、"
                     + $"余白 左{pageSetup.Margins.LeftPt:0.#} 右{pageSetup.Margins.RightPt:0.#} "
                     + $"上{pageSetup.Margins.TopPt:0.#} 下{pageSetup.Margins.BottomPt:0.#}pt)。",
-                    definition.DocumentName,
+                    settings.DocumentName,
                     sheet.Name);
             }
 
             // 複数の印刷範囲はそれぞれ独立したページ群になる(要件3.6)。
-            var printRanges = ResolvePrintRanges(sheet, definition);
-            EnsurePrintRangeCellsWithinLimit(printRanges, MaxPrintRangeCells, definition.DocumentName, sheet.Name, pageSetup.PrintTitles);
+            var printRanges = ResolvePrintRanges(sheet, settings);
+            EnsurePrintRangeCellsWithinLimit(printRanges, MaxPrintRangeCells, settings.DocumentName, sheet.Name, pageSetup.PrintTitles);
 
             // 改ページ位置・印刷タイトルを付けるページ・拡大縮小率を印刷範囲ごとに先に決める。
             // 印刷範囲の外にある印刷タイトルが実際に出力されるかどうかは、ページ分割の結果で決まるため、
@@ -95,7 +95,7 @@ namespace Utsushi.Layout
             {
                 var plan = PlanRange(report, printRange, printableWidthPt, printableHeightPt);
                 totalPages += (long)plan.RowBands.Count * plan.ColumnBands.Count;
-                EnsurePageCountWithinLimit(totalPages, MaxPagesPerDocument, definition.DocumentName, sheet.Name);
+                EnsurePageCountWithinLimit(totalPages, MaxPagesPerDocument, settings.DocumentName, sheet.Name);
                 plans.Add(plan);
             }
 
@@ -112,7 +112,7 @@ namespace Utsushi.Layout
 
             // 書式の近似(excel2pdf-consolidation 要件7)も、診断のときだけ集める(保存の描画は変えない。要件7.5)。
             var approximations = checkFit ? new FormatApproximationCollector() : null;
-            var styledBlanks = new StyledBlankPositionCounter(definition.DocumentName, sheet.Name);
+            var styledBlanks = new StyledBlankPositionCounter(settings.DocumentName, sheet.Name);
             if (approximations is not null)
             {
                 RecordConditionalFormatting(sheet, plans, approximations);
@@ -129,7 +129,7 @@ namespace Utsushi.Layout
             {
                 throw new LayoutComputationException(
                     $"シート '{sheet.Name}' から出力可能なページがありませんでした。",
-                    definition.DocumentName,
+                    settings.DocumentName,
                     sheet.Name);
             }
 
@@ -137,7 +137,7 @@ namespace Utsushi.Layout
             // ヘッダー/フッターは全ページを組み立てたあとに付け足す(要件3.8)。
             pages = AppendHeadersAndFooters(report, pages, approximations);
 
-            return new PagedLayout(pages, definition.DocumentName, sheet.Name)
+            return new PagedLayout(pages, settings.DocumentName, sheet.Name)
             {
                 FitIssues = fitIssues?.Issues ?? Array.Empty<FitIssue>(),
                 FitIssuesTruncated = fitIssues?.IsTruncated ?? false,
@@ -206,12 +206,12 @@ namespace Utsushi.Layout
             double printableWidthPt,
             double printableHeightPt)
         {
-            var definition = report.Settings;
+            var settings = report.Settings;
             var sheet = report.Sheet;
             var pageSetup = sheet.PageSetup;
             var printTitles = pageSetup.PrintTitles;
 
-            var grid = SheetGrid.Create(sheet, printRange, definition.MaxDigitWidthPx, printTitles);
+            var grid = SheetGrid.Create(sheet, printRange, settings.MaxDigitWidthPx, printTitles);
 
             // 印刷範囲の中にあるタイトル行/列は本文としても印刷する(要件3.4)。本文は印刷範囲の行/列だけ。
             var titles = new TitlePlan(
@@ -258,7 +258,7 @@ namespace Utsushi.Layout
             {
                 throw new LayoutComputationException(
                     "印刷タイトルの行/列だけで印字可能領域を使い切るため、本文を配置できません。",
-                    definition.DocumentName,
+                    settings.DocumentName,
                     sheet.Name);
             }
 
@@ -454,7 +454,7 @@ namespace Utsushi.Layout
         /// 範囲を包含する1つの矩形として扱うと、範囲の間にある不要なセルまで出力されてしまうため、
         /// ここでは範囲を定義順のまま返す。
         /// </remarks>
-        private static IReadOnlyList<CellRange> ResolvePrintRanges(SheetModel sheet, ConversionSettings definition)
+        private static IReadOnlyList<CellRange> ResolvePrintRanges(SheetModel sheet, ConversionSettings settings)
         {
             var printAreas = sheet.PageSetup.PrintAreas;
             if (printAreas.Count > 0)
@@ -463,7 +463,7 @@ namespace Utsushi.Layout
             }
 
             // 印刷範囲が無ければ、セルと描画オブジェクトが置かれた範囲を印刷する(要件3.10)。
-            var used = UsedRangeResolver.Resolve(sheet, definition.MaxDigitWidthPx);
+            var used = UsedRangeResolver.Resolve(sheet, settings.MaxDigitWidthPx);
             if (used is { } usedRange)
             {
                 return new[] { usedRange };
@@ -471,7 +471,7 @@ namespace Utsushi.Layout
 
             throw new LayoutComputationException(
                 $"シート '{sheet.Name}' に印刷対象のセルがありません。",
-                definition.DocumentName,
+                settings.DocumentName,
                 sheet.Name);
         }
 

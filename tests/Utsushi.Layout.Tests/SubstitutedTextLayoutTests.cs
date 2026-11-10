@@ -42,7 +42,7 @@ namespace Utsushi.Layout.Tests
         }
 
         private PagedLayout Compute(SheetModel sheet, params CellAddress[] substituted) =>
-            _engine.Compute(ReportModel.Create(Definition(), sheet) with
+            _engine.Compute(ReportModel.Create(Settings(), sheet) with
             {
                 SubstitutedCells = new HashSet<CellAddress>(substituted),
             });
@@ -259,7 +259,7 @@ namespace Utsushi.Layout.Tests
         public void 検証済みとして記録した差し込みセルは同じ印刷範囲の別のページで検証し直さない()
         {
             var sheet = SingleCellSheet("あいうえおかきくけこさしすせそ", wrap: true, rowHeightPt: 20.0);
-            var report = ReportModel.Create(Definition(), sheet) with { SubstitutedCells = new HashSet<CellAddress> { A1 } };
+            var report = ReportModel.Create(Settings(), sheet) with { SubstitutedCells = new HashSet<CellAddress> { A1 } };
             var rows = new[] { 1 };
 
             // 記録が無ければ、セルに収まらない差し込み値はエラーになる。
@@ -274,7 +274,7 @@ namespace Utsushi.Layout.Tests
         public void 収まることを確かめた差し込みセルを検証済みとして記録する()
         {
             var sheet = SingleCellSheet("あいう", wrap: true);
-            var report = ReportModel.Create(Definition(), sheet) with { SubstitutedCells = new HashSet<CellAddress> { A1 } };
+            var report = ReportModel.Create(Settings(), sheet) with { SubstitutedCells = new HashSet<CellAddress> { A1 } };
             var validated = new HashSet<CellAddress>();
             var rows = new[] { 1 };
 

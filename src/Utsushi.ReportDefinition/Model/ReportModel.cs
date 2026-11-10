@@ -18,8 +18,8 @@ namespace Utsushi.ReportDefinitions.Model
         FontStyle DefaultFont)
     {
         /// <summary>値をまだ書き込んでいない初期状態のモデルを作る。</summary>
-        public static ReportModel Create(ConversionSettings definition, SheetModel sheet, FontStyle? defaultFont = null) =>
-            new(definition, sheet, defaultFont ?? FontStyle.Default);
+        public static ReportModel Create(ConversionSettings settings, SheetModel sheet, FontStyle? defaultFont = null) =>
+            new(settings, sheet, defaultFont ?? FontStyle.Default);
 
         /// <summary>
         /// 呼び出し元から空でない値が書き込まれたセル(<c>SetText</c>・<c>SetValue</c>)。

@@ -23,8 +23,8 @@ namespace Utsushi.Layout.Tests
     {
         private readonly ReportLayoutEngine _engine = new(new ApproximateFontMetricsProvider());
 
-        private PagedLayout Compute(SheetModel sheet, ConversionSettings? definition = null) =>
-            _engine.Compute(ReportModel.Create(definition ?? Definition(), sheet));
+        private PagedLayout Compute(SheetModel sheet, ConversionSettings? settings = null) =>
+            _engine.Compute(ReportModel.Create(settings ?? Settings(), sheet));
 
         // -- 要件10.9: 接続線 -------------------------------------------------
 

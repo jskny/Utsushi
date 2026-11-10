@@ -18,8 +18,8 @@ namespace Utsushi.TestSupport
             Path.Combine(RepositoryRoot, "tests", "Utsushi.Golden.Tests", "Fixtures");
 
         /// <summary>帳票サンプルのテンプレート(.xlsx)のパスを返す。</summary>
-        public static string SampleTemplate(string documentName) =>
-            Path.Combine(SampleReportsRoot, documentName, "template.xlsx");
+        public static string SampleTemplate(string sampleName) =>
+            Path.Combine(SampleReportsRoot, sampleName, "template.xlsx");
 
         /// <summary>
         /// テスト実行ディレクトリ(bin/Debug/netX.0)から上へ辿り、リポジトリのルートを探す。

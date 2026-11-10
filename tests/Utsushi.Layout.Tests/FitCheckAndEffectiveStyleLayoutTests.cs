@@ -40,8 +40,8 @@ namespace Utsushi.Layout.Tests
         private static CellModel Number(string formatted, CellStyle? style = null) =>
             new("0", CellValueKind.Number, style ?? CellStyle.Default, formatted);
 
-        private PagedLayout Compute(SheetModel sheet, ConversionSettings? definition = null, params CellAddress[] substituted) =>
-            _engine.Compute(ReportModel.Create(definition ?? Definition(), sheet) with
+        private PagedLayout Compute(SheetModel sheet, ConversionSettings? settings = null, params CellAddress[] substituted) =>
+            _engine.Compute(ReportModel.Create(settings ?? Settings(), sheet) with
             {
                 SubstitutedCells = new HashSet<CellAddress>(substituted),
             });
@@ -124,7 +124,7 @@ namespace Utsushi.Layout.Tests
                 with
             { MergedRanges = new[] { new MergedRange(CellRange.Parse("A1:B1")), new MergedRange(CellRange.Parse("A3:B3")) } };
 
-            var issues = _engine.Compute(ReportModel.Create(Definition(), sheet) with
+            var issues = _engine.Compute(ReportModel.Create(Settings(), sheet) with
             {
                 SubstitutedCells = new HashSet<CellAddress> { CellAddress.Parse("A1") },
             }).FitIssues;
@@ -245,7 +245,7 @@ namespace Utsushi.Layout.Tests
         [Fact]
         public void 書き込んでいないセルは書き込んだセルとしない()
         {
-            var issue = Assert.Single(Compute(Sheet(null, ("A1", Text(LongText)), ("B1", Text("値"))), Definition()).FitIssues);
+            var issue = Assert.Single(Compute(Sheet(null, ("A1", Text(LongText)), ("B1", Text("値"))), Settings()).FitIssues);
 
             Assert.False(issue.IsSubstituted);
             Assert.StartsWith("セル A1: ", issue.Message, System.StringComparison.Ordinal);
@@ -254,7 +254,7 @@ namespace Utsushi.Layout.Tests
         [Fact]
         public void 収まりの確認を省くとFitIssuesは空になる()
         {
-            var report = ReportModel.Create(Definition(), Sheet(null, ("A1", Text(LongText)), ("B1", Text("値"))));
+            var report = ReportModel.Create(Settings(), Sheet(null, ("A1", Text(LongText)), ("B1", Text("値"))));
 
             Assert.Empty(_engine.Compute(report, checkFit: false).FitIssues);
             Assert.Single(_engine.Compute(report, checkFit: true).FitIssues);
@@ -371,7 +371,7 @@ namespace Utsushi.Layout.Tests
             };
 
             var ex = Assert.Throws<Utsushi.Core.Exceptions.LayoutComputationException>(
-                () => _engine.Compute(ReportModel.Create(Definition(), sheet)));
+                () => _engine.Compute(ReportModel.Create(Settings(), sheet)));
             Assert.Contains("上限", ex.Message, System.StringComparison.Ordinal);
         }
 

@@ -46,7 +46,7 @@ namespace Utsushi.Layout.Tests
                 Array.Empty<DrawingObjectModel>());
         }
 
-        public static ConversionSettings Definition(double maxDigitWidthPx = ConversionSettings.DefaultMaxDigitWidthPx) =>
+        public static ConversionSettings Settings(double maxDigitWidthPx = ConversionSettings.DefaultMaxDigitWidthPx) =>
             new("test-report", "テストシート", maxDigitWidthPx);
 
         /// <summary>A4縦・余白ゼロのページ設定(印字可能領域の計算を単純化するため)。</summary>

@@ -19,26 +19,26 @@ using Xunit;
 namespace Utsushi.Golden.Tests
 {
     /// <summary>
-    /// 帳票定義なしモードの列幅換算に使う最大数字幅(要件12.3、タスク27.2)の、ファサード(<see cref="Excel2Pdf"/>)経由の検証。
+    /// 列幅換算に使う最大数字幅(要件12.3、タスク27.2)の、ファサード(<see cref="Excel2Pdf"/>)経由の検証。
     /// </summary>
     /// <remarks>
     /// <para>
     /// 入力には invoice のサンプルを複製し、<c>xl/styles.xml</c> の先頭のフォント(ブックの標準フォント)の名前だけを差し替えたブックを使う
     /// (OpenXml SDK に依存してよいのは Parsing だけなので、ZIP内のXMLを文字列置換して作る。
-    /// <see cref="WithoutDefinitionConversionTests"/> と同じ方針)。
+    /// <see cref="Excel2PdfConversionTests"/> と同じ方針)。
     /// </para>
     /// <para>
     /// invoice の列幅は A〜F = 4, 28, 8, 6, 12, 14(文字数単位)。印刷範囲 A1:F34 は拡大縮小なし(100%)で1ページに収まるため、
     /// 罫線の左端から右端までの幅は列幅の換算結果の合計に一致する。
     /// </para>
     /// </remarks>
-    public sealed class WithoutDefinitionMaxDigitWidthTests : IDisposable
+    public sealed class MaxDigitWidthConversionTests : IDisposable
     {
         private static readonly double[] InvoiceColumnWidths = { 4.0, 28.0, 8.0, 6.0, 12.0, 14.0 };
 
         private readonly string _directory;
 
-        public WithoutDefinitionMaxDigitWidthTests()
+        public MaxDigitWidthConversionTests()
         {
             _directory = Path.Combine(Path.GetTempPath(), "utsushi-mdw-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_directory);

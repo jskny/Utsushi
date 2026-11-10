@@ -176,23 +176,23 @@ namespace Utsushi
                     + $")ではなく {workbook.Sheets.Count} 枚のシートを返しました。");
             }
 
-            var definition = ConversionSettings.Create(
+            var settings = ConversionSettings.Create(
                 name,
                 workbook.Sheets[0].Name,
                 maxDigitWidthPx ?? ConversionSettings.EstimateMaxDigitWidthPx(workbook.DefaultFont.Name, workbook.DefaultFont.SizePt));
 
             onWorkbookRead?.Invoke(workbook);
-            return BuildLayout(workbook, definition, cellOverrides, numericOverrides, checkFit);
+            return BuildLayout(workbook, settings, cellOverrides, numericOverrides, checkFit);
         }
 
         private PagedLayout BuildLayout(
             WorkbookModel workbook,
-            ConversionSettings definition,
+            ConversionSettings settings,
             IReadOnlyDictionary<string, string>? cellOverrides,
             IReadOnlyDictionary<string, double>? numericOverrides,
             bool checkFit)
         {
-            var report = _modelBuilder.Build(workbook, definition);
+            var report = _modelBuilder.Build(workbook, settings);
 
             if (cellOverrides is { Count: > 0 })
             {
@@ -211,7 +211,7 @@ namespace Utsushi
             catch (FontNotAvailableException ex) when (LacksContext(ex))
             {
                 // レイアウト計算中の文字幅の計測(SkiaFontMetricsProvider)で起きた場合は、Stage=Layout として伝える。
-                throw WithContext(ex, ProcessingStage.Layout, definition.DocumentName, definition.SheetName);
+                throw WithContext(ex, ProcessingStage.Layout, settings.DocumentName, settings.SheetName);
             }
         }
 

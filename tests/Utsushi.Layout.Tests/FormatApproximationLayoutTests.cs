@@ -30,7 +30,7 @@ namespace Utsushi.Layout.Tests
         private static CellModel Text(string text, CellStyle style) => new(text, CellValueKind.Text, style, text);
 
         private PagedLayout Compute(SheetModel sheet, bool checkFit = true) =>
-            _engine.Compute(ReportModel.Create(Definition(), sheet), checkFit);
+            _engine.Compute(ReportModel.Create(Settings(), sheet), checkFit);
 
         private static FormatApproximation Single(PagedLayout layout, FormatApproximationKind kind) =>
             Assert.Single(layout.FormatApproximations, a => a.Kind == kind);

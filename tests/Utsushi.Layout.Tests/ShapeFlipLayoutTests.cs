@@ -26,7 +26,7 @@ namespace Utsushi.Layout.Tests
         {
             var sheet = UniformSheet(rows: 3, columns: 3, columnWidth: 10.0, rowHeightPt: 20.0, pageSetup: NoMarginA4());
             sheet = sheet with { DrawingObjects = drawingObjects };
-            return Assert.Single(_engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+            return Assert.Single(_engine.Compute(ReportModel.Create(Settings(), sheet)).Pages);
         }
 
         private static GroupShapeModel Group(bool flipH, bool flipV, params GroupChildModel[] children) =>

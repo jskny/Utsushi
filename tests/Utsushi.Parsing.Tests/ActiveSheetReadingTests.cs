@@ -13,7 +13,7 @@ using Spec = Utsushi.Parsing.Tests.ActiveSheetWorkbookFixtures.SheetSpec;
 namespace Utsushi.Parsing.Tests
 {
     /// <summary>
-    /// 帳票定義なしモードのアクティブシート解決(<see cref="WorkbookReadOptions.ActiveSheetOnly"/>)の検証
+    /// 変換するシート(アクティブシート)の解決(<see cref="WorkbookReadOptions.ActiveSheetOnly"/>)の検証
     /// (要件12.2、タスク24)。
     /// </summary>
     public sealed class ActiveSheetReadingTests

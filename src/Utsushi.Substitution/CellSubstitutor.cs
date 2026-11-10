@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.Parsing.Model;
@@ -82,8 +81,8 @@ namespace Utsushi.Substitution
                 asText[addressText!] = value.ToString("R", CultureInfo.InvariantCulture);
             }
 
-            // 番地の検証(A1形式・同じセルの重複・結合範囲の内側)、差し込みセルの記録、overflow 指定の解除は
-            // 文字列の直接指定と同じ(要件14.2)。そのうえで、置き換えたセルを数値のセルにする。
+            // 番地の検証(A1形式・同じセルの重複・結合範囲の内側)と差し込みセルの記録は、文字列の直接指定と同じ(要件14.2)。
+            //そのうえで、置き換えたセルを数値のセルにする。
             var overridden = ApplyCellOverrides(report, asText);
 
             var sheet = overridden.Sheet;
@@ -118,7 +117,7 @@ namespace Utsushi.Substitution
                 return report;
             }
 
-            var definition = report.Settings;
+            var settings = report.Settings;
             var sheet = report.Sheet;
 
             if (cellOverrides.Count > MaxCellOverrideCount)
@@ -126,12 +125,12 @@ namespace Utsushi.Substitution
                 throw new InvalidSubstitutionValueException(
                     "cellOverrides",
                     $"セル番地の直接指定が {cellOverrides.Count} 件あり、上限({MaxCellOverrideCount} 件)を超えています。",
-                    definition.DocumentName,
+                    settings.DocumentName,
                     sheet.Name);
             }
 
             // まず全入力を検証してから一括で書き換える(要件2.8, 2.9)。
-            var parsed = ParseAndValidateAddresses(definition, sheet, cellOverrides);
+            var parsed = ParseAndValidateAddresses(settings, sheet, cellOverrides);
 
             var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
             var substitutedCells = new HashSet<CellAddress>(report.SubstitutedCells);
@@ -178,7 +177,7 @@ namespace Utsushi.Substitution
             string? value,
             string description,
             string target,
-            ConversionSettings definition,
+            ConversionSettings settings,
             string sheetName,
             CellAddress? cell)
         {
@@ -187,7 +186,7 @@ namespace Utsushi.Substitution
                 throw new InvalidSubstitutionValueException(
                     target,
                     $"{description} の値が null です。空欄にする場合は空文字を渡してください。",
-                    definition.DocumentName,
+                    settings.DocumentName,
                     sheetName,
                     cell);
             }
@@ -197,7 +196,7 @@ namespace Utsushi.Substitution
                 throw new InvalidSubstitutionValueException(
                     target,
                     $"{description} の値が {value.Length} 文字あり、上限({MaxValueLength} 文字。Excelのセルに入れられる文字数)を超えています。",
-                    definition.DocumentName,
+                    settings.DocumentName,
                     sheetName,
                     cell);
             }
@@ -238,7 +237,7 @@ namespace Utsushi.Substitution
                         target,
                         $"{description} の値の {i + 1} 文字目に{problem}が含まれています。"
                             + "PDFに文字として描画できないため、呼び出し元で除去または置き換えてください。",
-                        definition.DocumentName,
+                        settings.DocumentName,
                         sheetName,
                         cell);
                 }
@@ -254,7 +253,7 @@ namespace Utsushi.Substitution
         /// セル番地文字列をパースし、結合セル範囲内の非アンカー位置を指定していないかを検証する(要件2.8, 2.9)。
         /// </summary>
         private static List<(CellAddress Address, string Replacement)> ParseAndValidateAddresses(
-            ConversionSettings definition, SheetModel sheet, IReadOnlyDictionary<string, string> cellOverrides)
+            ConversionSettings settings, SheetModel sheet, IReadOnlyDictionary<string, string> cellOverrides)
         {
             var parsed = new List<(CellAddress, string)>(cellOverrides.Count);
             var addressTextByCell = new Dictionary<CellAddress, string>(cellOverrides.Count);
@@ -266,7 +265,7 @@ namespace Utsushi.Substitution
                     throw new InvalidCellOverrideAddressException(
                         addressText,
                         $"セル番地 '{addressText}' はA1形式として解釈できません。",
-                        definition.DocumentName,
+                        settings.DocumentName,
                         sheet.Name);
                 }
 
@@ -278,7 +277,7 @@ namespace Utsushi.Substitution
                         addressText,
                         $"セル番地 '{addressText}' と '{otherText}' が同じセル {address} を指しています。"
                             + "1つのセルへの直接指定は1つにしてください。",
-                        definition.DocumentName,
+                        settings.DocumentName,
                         sheet.Name);
                 }
 
@@ -291,12 +290,12 @@ namespace Utsushi.Substitution
                         merged!.Anchor,
                         $"セル '{address}' は結合セル範囲の先頭(アンカー: '{merged.Anchor}')ではないため、"
                             + "直接指定して上書きすることはできません。アンカーのセル番地を指定してください。",
-                        definition.DocumentName,
+                        settings.DocumentName,
                         sheet.Name);
                 }
 
                 var normalized = NormalizeValue(
-                    replacement, $"セル {address} の直接指定", addressText, definition, sheet.Name, address);
+                    replacement, $"セル {address} の直接指定", addressText, settings, sheet.Name, address);
 
                 parsed.Add((address, normalized));
             }

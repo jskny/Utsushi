@@ -228,7 +228,7 @@ namespace Utsushi.Layout.Tests
             };
 
             var sheet = UniformSheet(rows: 2, columns: 2, pageSetup: pageSetup);
-            var layout = engine.Compute(ReportModel.Create(Definition(), sheet));
+            var layout = engine.Compute(ReportModel.Create(Settings(), sheet));
 
             var page = Assert.Single(layout.Pages);
             var texts = page.Commands.OfType<TextCommand>().ToList();
@@ -268,7 +268,7 @@ namespace Utsushi.Layout.Tests
             };
 
             var sheet = UniformSheet(rows: 2, columns: 2, pageSetup: pageSetup);
-            var layout = engine.Compute(ReportModel.Create(Definition(), sheet));
+            var layout = engine.Compute(ReportModel.Create(Settings(), sheet));
 
             var page = Assert.Single(layout.Pages);
             Assert.Equal(0.5, page.ScaleFactor);
@@ -302,7 +302,7 @@ namespace Utsushi.Layout.Tests
 
             // 3ページに分かれる分量
             var sheet = UniformSheet(rows: 30, columns: 1, rowHeightPt: 100.0, pageSetup: pageSetup);
-            var layout = engine.Compute(ReportModel.Create(Definition(), sheet));
+            var layout = engine.Compute(ReportModel.Create(Settings(), sheet));
 
             Assert.True(layout.PageCount >= 2);
 
@@ -326,7 +326,7 @@ namespace Utsushi.Layout.Tests
             };
             var sheet = UniformSheet(rows: 1, columns: 1, pageSetup: pageSetup);
 
-            var page = Assert.Single(engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+            var page = Assert.Single(engine.Compute(ReportModel.Create(Settings(), sheet)).Pages);
 
             var texts = page.Commands.OfType<TextCommand>().Select(t => t.Text).ToList();
             Assert.Contains("株式会社サンプル経理部", texts);
@@ -339,7 +339,7 @@ namespace Utsushi.Layout.Tests
             var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => Timestamp);
             var sheet = UniformSheet(rows: 1, columns: 1, pageSetup: NoMarginA4());
 
-            var page = Assert.Single(engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+            var page = Assert.Single(engine.Compute(ReportModel.Create(Settings(), sheet)).Pages);
 
             // 本文の1セルぶんのテキストだけ
             Assert.Single(page.Commands.OfType<TextCommand>());

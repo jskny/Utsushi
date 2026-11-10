@@ -18,7 +18,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 指定したセルの値だけを書き換える()
         {
-            var definition = Definition();
+            var definition = Settings();
             var sheet = Sheet(("C3", "INV-0000", null), ("C4", "触らないセル", null));
             var report = Report(definition, sheet);
 
@@ -41,7 +41,7 @@ namespace Utsushi.Substitution.Tests
                     BorderEdge.None, BorderEdge.None, BorderEdge.None, BorderEdge.None, BorderEdge.None),
             };
 
-            var definition = Definition();
+            var definition = Settings();
             var report = Report(definition, Sheet(("D5", "0", style)));
 
             var result = _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["D5"] = "1,234" });
@@ -54,7 +54,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 入力のモデルは変更されない()
         {
-            var definition = Definition();
+            var definition = Settings();
             var report = Report(definition, Sheet(("A1", "もとの値", null)));
 
             _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = "あたらしい値" });
@@ -65,7 +65,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 空文字への置換もできる()
         {
-            var definition = Definition();
+            var definition = Settings();
             var report = Report(definition, Sheet(("A1", "消したい値", null)));
 
             var result = _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = string.Empty });
@@ -76,7 +76,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 数式セルを置換すると数式ではなく文字列になる()
         {
-            var definition = Definition();
+            var definition = Settings();
             var sheet = Sheet();
             var cells = new Dictionary<CellAddress, CellModel>
             {
@@ -97,7 +97,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void テンプレートの値の無いセルにもセル番地指定で書き込める()
         {
-            var definition = Definition();
+            var definition = Settings();
             var sheet = Sheet(("C3", "INV-0000", null), ("B5", "もとの備考", null));
             var report = Report(definition, sheet);
 
@@ -112,7 +112,7 @@ namespace Utsushi.Substitution.Tests
         public void セル番地指定の上書きでも書式は変わらない()
         {
             var style = CellStyle.Default with { Font = FontStyle.Default with { Bold = true } };
-            var definition = Definition();
+            var definition = Settings();
             var report = Report(definition, Sheet(("D5", "0", style)));
 
             var result = _substitutor.ApplyCellOverrides(
@@ -126,7 +126,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void セル番地指定の上書きでも入力のモデルは変更されない()
         {
-            var definition = Definition();
+            var definition = Settings();
             var report = Report(definition, Sheet(("A1", "もとの値", null)));
 
             _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = "あたらしい値" });
@@ -137,7 +137,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 存在しなかったセルへのセル番地指定も新規セルとして追加される()
         {
-            var definition = Definition();
+            var definition = Settings();
             var report = Report(definition, Sheet());
 
             var result = _substitutor.ApplyCellOverrides(
@@ -149,7 +149,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void A1形式として解釈できないセル番地はエラーになる()
         {
-            var definition = Definition();
+            var definition = Settings();
             var report = Report(definition, Sheet());
 
             var ex = Assert.Throws<InvalidCellOverrideAddressException>(
@@ -164,7 +164,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 結合セルのアンカーへの上書きはできる()
         {
-            var definition = Definition();
+            var definition = Settings();
             var sheet = Sheet(("B5", "もとの値", null)) with
             {
                 MergedRanges = new List<MergedRange> { new(CellRange.Parse("B5:D5")) },
@@ -180,7 +180,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 結合セルの非アンカーへの直接指定はエラーになる()
         {
-            var definition = Definition();
+            var definition = Settings();
             var sheet = Sheet(("B5", "もとの値", null)) with
             {
                 MergedRanges = new List<MergedRange> { new(CellRange.Parse("B5:D5")) },

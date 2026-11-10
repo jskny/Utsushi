@@ -321,6 +321,11 @@ namespace Utsushi.Golden.Tests
             Assert.Throws<ArgumentException>(() => new Excel2Pdf(
                 stream, engine, new Excel2PdfOptions { Render = PdfRenderOptions.Default }));
 
+            // 破棄したエンジンを渡す誤りも、読み始める前に検出する。
+            var disposed = Excel2PdfEngine.Create(FontResolverOptions.AllowFallback());
+            disposed.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => new Excel2Pdf(stream, disposed));
+
             Assert.Equal(0, stream.Position);
         }
 
@@ -368,7 +373,7 @@ namespace Utsushi.Golden.Tests
             Path.Combine(TestPaths.EdgeCaseSamplesRoot, "edge-order-form", "template.xlsx");
 
         [Fact]
-        public void 帳票定義なしではシート名を指定してアクティブシート以外を変換できる()
+        public void シート名を指定してアクティブシート以外を変換できる()
         {
             // edge-order-form は「表紙」「注文書」「マスタ(非表示)」の3シートで、アクティブシートは「注文書」。
             using var active = new Excel2Pdf(OrderForm, FallbackFonts());

@@ -9,7 +9,7 @@ namespace Utsushi.Substitution.Tests
     /// <summary>テスト用の帳票モデルを組み立てるヘルパー。</summary>
     internal static class TestReports
     {
-        public static ConversionSettings Definition() =>
+        public static ConversionSettings Settings() =>
             new(DocumentName: "test-report", SheetName: "テストシート", MaxDigitWidthPx: ConversionSettings.DefaultMaxDigitWidthPx);
 
         /// <summary>指定セルに値と書式を持つシートを作る。</summary>

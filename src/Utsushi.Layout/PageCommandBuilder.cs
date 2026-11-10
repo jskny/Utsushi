@@ -1380,7 +1380,7 @@ namespace Utsushi.Layout
             }
 
             var hAlign = ResolveHorizontalAlignment(style.HAlign, cell.ValueKind);
-            var overflow = ResolveOverflow(address, style, cell.ValueKind);
+            var overflow = ResolveOverflow(style, cell.ValueKind);
             RecordTextApproximations(address, cell, style, hAlign, mergedRange);
 
             // 拡大縮小率はフォントサイズにも適用する(座標だけを縮めると文字が収まらなくなるため)。
@@ -1483,13 +1483,13 @@ namespace Utsushi.Layout
             }
 
             var line = lines[0];
-            if (overflow == OverflowBehavior.Clip || mergedRange is not null)
+            // 切り取り(Clip)になるのは折り返し表示のセルの数値だけで、数値は上で判定を終えている。ここに来るのは結合セルの文字だけ。
+            if (mergedRange is not null)
             {
                 if (_fitIssues!.Accepts(address, FitIssueKind.Clipped) && IsWider(line, font, contentWidthPt))
                 {
-                    var where = mergedRange is not null ? $"結合範囲 {mergedRange.Value} の幅" : "セルの幅";
                     AddFitIssue(FitIssueKind.Clipped, address, line,
-                        $"文字が{where}で切れます。列幅を広げるか、文字数を減らしてください。");
+                        $"文字が結合範囲 {mergedRange.Value} の幅で切れます。列幅を広げるか、文字数を減らしてください。");
                 }
 
                 return;
@@ -1700,7 +1700,7 @@ namespace Utsushi.Layout
                     address);
             }
 
-            if (ResolveOverflow(address, style, kind) != OverflowBehavior.Wrap)
+            if (ResolveOverflow(style, kind) != OverflowBehavior.Wrap)
             {
                 return;
             }
@@ -1882,7 +1882,7 @@ namespace Utsushi.Layout
         /// 呼び出し元が設定した数値を、差し込み値の折り返しの行数の検証(要件2.14)でエラーにしないため。収まらない数値は
         /// 文字の収まりの確認(要件13)の NumberTooWide で分かる。layout-fidelity-reviewer指摘)。
         /// </remarks>
-        private OverflowBehavior ResolveOverflow(CellAddress address, CellStyle style, CellValueKind kind)
+        private static OverflowBehavior ResolveOverflow(CellStyle style, CellValueKind kind)
         {
             var behavior = style.WrapText
                 ? OverflowBehavior.Wrap

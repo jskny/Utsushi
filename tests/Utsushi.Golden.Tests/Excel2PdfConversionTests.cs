@@ -20,13 +20,13 @@ using Xunit;
 namespace Utsushi.Golden.Tests
 {
     /// <summary>
-    /// 帳票定義なしモード(要件12、タスク24)のファサード(<see cref="Excel2Pdf"/>)経由の検証。
+    /// 変換の入口(要件12・14)のファサード(<see cref="Excel2Pdf"/>)経由の検証。
     /// </summary>
     /// <remarks>
     /// <see cref="ReportConversionGoldenTests"/> と同じく、レイアウトの比較には決定的な
     /// <see cref="ApproximateFontMetricsProvider"/> を使い、描画には同梱フォントへのフォールバックを使う。
     /// </remarks>
-    public sealed class WithoutDefinitionConversionTests
+    public sealed class Excel2PdfConversionTests
     {
         /// <summary>
         /// 決定的なフォントメトリクスでレイアウトする入口。<paramref name="renderer"/> が null なら
@@ -59,7 +59,7 @@ namespace Utsushi.Golden.Tests
             Assert.Equal("請求書", layout.SheetName);
             Assert.Equal(1, layout.PageCount);
 
-            // テンプレートの値がそのまま描画される(置換キーは持たない)。
+            // 書き込んでいないセルは、テンプレートの値がそのまま描画される。
             var texts = Texts(layout);
             Assert.Contains("件名: サンプル案件", texts);
             Assert.Contains("請求番号", texts);

@@ -23,8 +23,8 @@ namespace Utsushi.Layout.Tests
     {
         private readonly ReportLayoutEngine _engine = new(new ApproximateFontMetricsProvider());
 
-        private PagedLayout Compute(SheetModel sheet, ConversionSettings? definition = null) =>
-            _engine.Compute(ReportModel.Create(definition ?? Definition(), sheet));
+        private PagedLayout Compute(SheetModel sheet, ConversionSettings? settings = null) =>
+            _engine.Compute(ReportModel.Create(settings ?? Settings(), sheet));
 
         // -- 要件3.1: 印刷範囲 -------------------------------------------------
 
@@ -54,7 +54,7 @@ namespace Utsushi.Layout.Tests
                     printAreas: new[] { CellRange.Parse("A5:A20") },
                     printTitles: new PrintTitles(1, 2, null, null)));
 
-            var report = ReportModel.Create(Definition(), sheet) with
+            var report = ReportModel.Create(Settings(), sheet) with
             {
                 SubstitutedCells = new HashSet<CellAddress> { new(1, 1) },
             };
@@ -609,7 +609,7 @@ namespace Utsushi.Layout.Tests
                 Cells = cells,
             };
 
-            var report = ReportModel.Create(Definition(), sheet);
+            var report = ReportModel.Create(Settings(), sheet);
 
             var text = Assert.Single(Texts(Assert.Single(_engine.Compute(report).Pages)));
 
@@ -1041,7 +1041,7 @@ namespace Utsushi.Layout.Tests
                 sheet = sheet with { DrawingObjects = new[] { shape } };
 
                 var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider());
-                var page = Assert.Single(engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+                var page = Assert.Single(engine.Compute(ReportModel.Create(Settings(), sheet)).Pages);
                 return Assert.Single(page.Commands.OfType<ShapeCommand>());
             }
 
