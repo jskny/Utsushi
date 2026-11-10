@@ -118,6 +118,35 @@ namespace Utsushi.Rendering.Tests
             Assert.Throws<ObjectDisposedException>(() => failed.Resolve(Font("登録できるフォント")));
         }
 
+        [Fact]
+        public void 代替フォント名が見つからずに失敗したら登録済みの書体を解放する()
+        {
+            var fontPath = FindAnyInstalledFont();
+            if (fontPath is null)
+            {
+                return;
+            }
+
+            var options = FontResolverOptions.AllowFallback("存在しない書体-ZZZ") with
+            {
+                FontFiles = new Dictionary<string, string> { ["登録できるフォント"] = fontPath },
+            };
+
+            FontResolver? failed = null;
+            FontResolver.ConstructionFailedForTesting = r => failed = r;
+            try
+            {
+                Assert.Throws<FontNotAvailableException>(() => new FontResolver(options));
+            }
+            finally
+            {
+                FontResolver.ConstructionFailedForTesting = null;
+            }
+
+            Assert.NotNull(failed);
+            Assert.Equal(0, failed!.OwnedTypefaceCountForTesting);
+        }
+
         private static string? FindAnyInstalledFont()
         {
             foreach (var directory in new[] { "/usr/share/fonts", "/usr/local/share/fonts" })

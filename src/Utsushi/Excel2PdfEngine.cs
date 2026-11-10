@@ -62,6 +62,9 @@ namespace Utsushi
         /// </summary>
         /// <param name="fonts">フォント解決の設定。null の場合は厳格モード(無いフォントは <see cref="Core.Exceptions.FontNotAvailableException"/>)。</param>
         /// <param name="render">PDF出力の設定。null の場合は既定(フォント埋め込み)。</param>
+        /// <exception cref="Core.Exceptions.FontNotAvailableException">
+        /// フォントの代替を許す設定で、指定した代替フォント名の書体が見つからない場合(中核仕様の要件11.7)。
+        /// </exception>
         public static Excel2PdfEngine Create(FontResolverOptions? fonts = null, PdfRenderOptions? render = null)
         {
             var fontResolver = new FontResolver(fonts);

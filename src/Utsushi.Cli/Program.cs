@@ -183,7 +183,8 @@ namespace Utsushi.Cli
             output.WriteLine("  --max-digit-width <px>          列幅の換算に使う最大数字幅(省略するとブックの標準フォントから見積もる)");
             output.WriteLine("  --ignore-unsupported            グラフなどの未対応の要素があっても、その要素を除いて変換する");
             output.WriteLine("                                  (check では、指定しても問題として数える)");
-            output.WriteLine("  --allow-font-fallback [書体名]  フォントが無ければ代替の書体で描く(省略すると同梱のBIZ UDPゴシック)");
+            output.WriteLine("  --allow-font-fallback [書体名]  フォントが無ければ代替の書体で描く(省略すると同梱のBIZ UDPゴシック。");
+            output.WriteLine("                                  指定した書体が無ければエラー)");
             output.WriteLine("  --allow-missing-glyphs          フォントに字形の無い文字があってもエラーにしない(動作確認用)");
             output.WriteLine("  --outline-text                  文字をアウトライン化する(PDF の文字列の検索・コピーはできなくなる)");
             output.WriteLine("  -h, --help                      この使い方を出す");

@@ -232,6 +232,78 @@ namespace Utsushi.Rendering.Tests
                 Array.Empty<string>(),
                 null);
 
+        [Fact]
+        public void 指定した代替フォント名が見つからなければ作る時点でエラーにする()
+        {
+            // 同梱フォントで黙って代替せず、書体名の誤りに気付けるようにする(要件11.7)。
+            var ex = Assert.Throws<FontNotAvailableException>(
+                () => new FontResolver(FontResolverOptions.AllowFallback("存在しない書体-ZZZ")));
+
+            Assert.Equal("存在しない書体-ZZZ", ex.FontName);
+            Assert.Contains("存在しない書体-ZZZ", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void 同梱フォントの名前は代替フォント名に指定できる()
+        {
+            using var resolver = new FontResolver(FontResolverOptions.AllowFallback("BIZ UDPGothic"));
+
+            Assert.Equal("BIZ UDPGothic", resolver.GetSubstitution(FontStyle.Default with { Name = "存在しないフォント-ZZZ" }));
+        }
+
+        [Fact]
+        public void 明示登録した書体は代替フォント名に指定できる()
+        {
+            var options = FontResolverOptions.AllowFallback("社内書体") with
+            {
+                FontFiles = new Dictionary<string, string> { ["社内書体"] = BundledFontFile() },
+            };
+
+            using var resolver = new FontResolver(options);
+
+            // 代替の時点でも明示登録の書体を使う(同梱フォントの共有のインスタンスではなく、登録したファイルの書体)。
+            var resolved = resolver.Resolve(FontStyle.Default with { Name = "存在しないフォント-ZZZ" });
+            Assert.NotSame(Fonts.BundledFonts.JapaneseGothicTypeface, resolved.Typeface);
+        }
+
+        [Fact]
+        public void 代替フォント名は日本語名と英語名の別名でも一致させる()
+        {
+            // 同梱フォントの日本語名(要件11.6)。
+            using (new FontResolver(FontResolverOptions.AllowFallback("BIZ UDPゴシック")))
+            {
+            }
+
+            // 英語名で明示登録した書体を、日本語名の代替フォント名で引く。
+            var options = FontResolverOptions.AllowFallback("BIZ UDPゴシック") with
+            {
+                FontFiles = new Dictionary<string, string> { ["BIZ UDPGothic"] = BundledFontFile() },
+            };
+            using var resolver = new FontResolver(options);
+            var resolved = resolver.Resolve(FontStyle.Default with { Name = "存在しないフォント-ZZZ" });
+            Assert.NotSame(Fonts.BundledFonts.JapaneseGothicTypeface, resolved.Typeface);
+        }
+
+        [Fact]
+        public void 厳格モードでは代替フォント名を確かめない()
+        {
+            using var resolver = new FontResolver(FontResolverOptions.Strict with { FallbackFamilyName = "存在しない書体-ZZZ" });
+        }
+
+        /// <summary>リポジトリにある同梱フォントのファイル(明示登録のテストに使う)。</summary>
+        private static string BundledFontFile()
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Utsushi.sln")))
+            {
+                directory = directory.Parent;
+            }
+
+            return Path.Combine(
+                directory?.FullName ?? throw new InvalidOperationException("リポジトリのルートが見つかりません。"),
+                "src", "Utsushi.Rendering", "Fonts", "BIZUDPGothic-Regular.ttf");
+        }
+
         private static string? FindAnyInstalledFont() =>
             EnumerateFontFiles().FirstOrDefault();
 

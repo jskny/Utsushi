@@ -102,6 +102,15 @@ namespace Utsushi.Cli.Tests
         }
 
         [Fact]
+        public void 見つからない代替フォント名を指定すると終了コード3にする()
+        {
+            var (exitCode, _, stderr) = Run("check", Invoice, "--allow-font-fallback", "存在しない書体-ZZZ");
+
+            Assert.Equal(Program.ExitConversionError, exitCode);
+            Assert.Contains("存在しない書体-ZZZ", stderr, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public void 入力ファイルが無ければ終了コード3にする()
         {
             var (exitCode, _, stderr) = Run("check", Path.Combine(_directory, "存在しない.xlsx"), "--allow-font-fallback");

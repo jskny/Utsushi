@@ -52,6 +52,10 @@ namespace Utsushi
         /// <summary>Excel ファイルのパスから作る。ブックのアクティブシート(または <see cref="Excel2PdfOptions.SheetName"/>)を変換する。</summary>
         /// <param name="xlsxPath">入力の Excel ファイルのパス。</param>
         /// <param name="options">フォント・PDF出力などの設定。null の場合は既定(フォントは厳格モード、未対応要素はエラー)。</param>
+        /// <exception cref="FontNotAvailableException">
+        /// <see cref="Excel2PdfOptions.Fonts"/> でフォントの代替を許し、指定した代替フォント名の書体が見つからない場合(中核仕様の要件11.7)。
+        /// バイト列・ストリームから作るコンストラクタも同じ。
+        /// </exception>
         public Excel2Pdf(string xlsxPath, Excel2PdfOptions? options = null)
             : this(_ => TemplateSource.FromPath(xlsxPath), options, engine: null)
         {
