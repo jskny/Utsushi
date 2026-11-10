@@ -2,15 +2,16 @@
 
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 
-> **改訂中(2026-11)**: `.kiro/specs/excel2pdf-consolidation/`(以下「一本化の仕様」)で、変換の入口を `Excel2Pdf` に一本化し、
-> 帳票定義(`definition.json`)・置換キーの仕組みを廃止する。移行後の設計は一本化の仕様の design.md に書き、本書は次のように読み替える。
-> 各節の本文は、一本化の仕様の実装の各タスクで、対応する箇所を書き換える。
+> **改訂(2026-11)**: `.kiro/specs/excel2pdf-consolidation/`(以下「一本化の仕様」)で、変換の入口を `Excel2Pdf` に一本化し、
+> 帳票定義(`definition.json`)・置換キーの仕組みを廃止した。現在の設計は一本化の仕様の design.md が正であり、本書の帳票定義・置換キーに関する記述は
+> 経緯の記録として残す。本書は次のように読み替える。
 >
 > - 「サポート外要素」は「未対応要素」と呼ぶ(本書では呼び方を改めた)。その扱いは、帳票定義の `unsupportedElements` ではなく、
 >   一本化の仕様の要件2(`Excel2PdfOptions.UnsupportedElements`。既定はエラー。読み込みは常に記録し、一覧で返す)に従う。
-> - 「2. ReportDefinition レイヤー」の帳票定義(JSON)のロード・置換キー・`printArea` の上書き・キーごとの `overflow` は廃止予定。
+> - 「2. ReportDefinition レイヤー」の帳票定義(JSON)のロード・置換キー・`printArea` の上書き・キーごとの `overflow` は廃止済み。
 >   レイヤー自体は、変換設定(`ConversionSettings`。文書名・シート名・最大数字幅)と `ReportModel` の組み立てだけを持つ形で残る。
-> - ファサードの公開APIは `Excel2Pdf`・`Excel2PdfEngine` だけになり、`ReportPdfConverter` は internal の変換パイプラインになる。
+> - ファサードの公開APIは `Excel2Pdf`・`Excel2PdfEngine` だけになり、`ReportPdfConverter` は internal の `ConversionPipeline` になった。
+> - 例外・レイアウトの `ReportCode` は `DocumentName` に改名した。処理段階 `ReportDefinition` と、帳票定義・置換キーの例外は削除した。
 > - 診断(文字の収まり・未対応要素・フォントの代替・書式の近似)は `Excel2Pdf.Check()` で返す(一本化の仕様の要件4・7)。
 
 ## 概要
@@ -410,7 +411,7 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
 
 ### 2. ReportDefinition レイヤー (`Utsushi.ReportDefinition`)
 
-> 帳票定義(JSON)のロードと置換キーは廃止予定(冒頭の「改訂中」を参照)。
+> 帳票定義(JSON)のロードと置換キーは廃止済み(冒頭の「改訂」を参照)。
 
 - **責務**: 帳票定義(JSON)をロードし、`WorkbookModel` と突合して `ReportModel` を構築する。帳票ごとの固有情報(置換キーとセル番地のマッピング、はみ出し時の挙動、許容誤差等)はすべてここに閉じ込める。
 - **帳票定義スキーマ(例)**: 全プロパティの一覧と制約は `docs/帳票定義スキーマ.md` を参照。

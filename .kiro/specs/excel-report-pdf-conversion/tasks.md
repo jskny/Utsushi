@@ -3,10 +3,10 @@
 対象要件: `.kiro/specs/excel-report-pdf-conversion/requirements.md`
 対象設計: `.kiro/specs/excel-report-pdf-conversion/design.md`
 
-> **改訂中(2026-11)**: `.kiro/specs/excel2pdf-consolidation/` で、入口を `Excel2Pdf` に一本化し、帳票定義・置換キーの仕組みを廃止する。
+> **改訂(2026-11)**: `.kiro/specs/excel2pdf-consolidation/` で、入口を `Excel2Pdf` に一本化し、帳票定義・置換キーの仕組みを廃止した。
 > 以下の完了済みのタスクは記録として残す。帳票定義(タスク3・帳票定義の読み込み)、置換キー(タスク4の置換キーの部分)、
 > CLIの `--report`/`--set`/`--definitions`、`ReportPdfConverter` の公開API、`CheckFit`、`unsupportedElements` の設定に関するタスクで作ったものは、
-> 一本化の仕様のタスク2・4(未対応要素の扱い・`ElementKind`)、タスク7(CLI)、タスク8(帳票定義・置換キー・`ReportPdfConverter`・`CheckFit`)で削除・置き換える。
+> 一本化の仕様のタスク2・4(未対応要素の扱い・`ElementKind`)、タスク7(CLI)、タスク8(帳票定義・置換キー・`ReportPdfConverter`・`CheckFit`)で削除・置き換えた。
 > 該当する主なタスクは、2.4、3.x、4.x、8.1・8.3、9.1、10.1、12.4、24.3〜24.5、27.2、29.4、29.5、30.3、30.7 である。
 
 > **状況**: タスク1〜15完了(タスク1〜11: 2026-09-19、タスク12: 2026-09-20、タスク13〜14:
