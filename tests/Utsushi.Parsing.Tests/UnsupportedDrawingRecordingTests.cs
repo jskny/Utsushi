@@ -1,6 +1,8 @@
 using System.IO;
 using System.Linq;
+using DocumentFormat.OpenXml.Packaging;
 using Utsushi.Core;
+using Utsushi.Core.Exceptions;
 using Utsushi.Parsing.OpenXml;
 using Utsushi.TestSupport;
 using Xunit;
@@ -307,6 +309,113 @@ namespace Utsushi.Parsing.Tests
             try
             {
                 Assert.DoesNotContain(_reader.ReadFile(path).UnsupportedElements, e => e.Kind == UnsupportedElementKind.MalformedDrawingObject);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 外部のブックへの参照をブック全体の未対応要素として記録する()
+        {
+            // 要件2.7(f)。外部参照はシートではなくブックに属するため、シート名・アンカーは無い。
+            var path = SafetyLimitWorkbookFixtures.CreateWorkbook((workbook, _) =>
+            {
+                var externalPart = workbook.WorkbookPart!.AddNewPart<ExternalWorkbookPart>();
+                externalPart.AddExternalRelationship(
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath",
+                    new System.Uri("other.xlsx", System.UriKind.Relative),
+                    "rIdPath");
+                externalPart.ExternalLink = new X.ExternalLink(
+                    new X.ExternalBook(
+                        new X.SheetNames(new X.SheetName { Val = "Sheet1" }),
+                        new X.SheetDataSet())
+                    {
+                        Id = "rIdPath",
+                    });
+                workbook.InsertAfter(
+                    new X.ExternalReferences(new X.ExternalReference { Id = workbook.WorkbookPart.GetIdOfPart(externalPart) }),
+                    workbook.GetFirstChild<X.Sheets>());
+            });
+            try
+            {
+                using var stream = File.OpenRead(path);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream));
+
+                var element = StrictReading.AssertContains(ex, UnsupportedElementKind.ExternalReference);
+                Assert.Single(ex.Elements);
+                Assert.Null(element.SheetName);
+                Assert.Null(element.Anchor);
+                Assert.Null(element.Detail);
+                Assert.Contains("外部のブックへの参照", element.Message, System.StringComparison.Ordinal);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 外部参照の無いブックは外部参照を記録しない()
+        {
+            var path = SafetyLimitWorkbookFixtures.CreateWorkbook();
+            try
+            {
+                Assert.DoesNotContain(_reader.ReadFile(path).UnsupportedElements, e => e.Kind == UnsupportedElementKind.ExternalReference);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 解決できない描画のパートを参照するシートを記録する()
+        {
+            // 要件2.7(a)。シートの <drawing r:id> が指すリレーションシップが無い。
+            var path = SafetyLimitWorkbookFixtures.CreateWorkbook((_, worksheet) => worksheet.Append(new X.Drawing { Id = "rIdMissing" }));
+            try
+            {
+                var workbook = _reader.ReadFile(path);
+
+                var element = Assert.Single(workbook.UnsupportedElements);
+                Assert.Equal(UnsupportedElementKind.UnsupportedDrawingObject, element.Kind);
+                Assert.Equal(SafetyLimitWorkbookFixtures.SheetName, element.SheetName);
+                Assert.Null(element.Anchor);
+                Assert.Equal("drawing", element.Detail);
+                Assert.Empty(Assert.Single(workbook.Sheets).DrawingObjects);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void 互換性のための代替コンテンツのアンカーを記録し描画オブジェクトとしては読まない()
+        {
+            // 要件2.7(a)。mc:AlternateContent の中身(mc:Choice)は解釈しないため、アンカーのセルは分からない。
+            var anchors =
+                "<mc:AlternateContent xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\">"
+                + "<mc:Choice xmlns:a14=\"http://schemas.microsoft.com/office/drawing/2010/main\" Requires=\"a14\">"
+                + DrawingStyleWorkbookFixtures.ShapeAnchor()
+                + "</mc:Choice>"
+                + "<mc:Fallback/>"
+                + "</mc:AlternateContent>";
+            var path = DrawingStyleWorkbookFixtures.CreateWorkbook(anchors);
+            try
+            {
+                using var stream = File.OpenRead(path);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream));
+
+                var element = StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedDrawingObject);
+                Assert.Single(ex.Elements);
+                Assert.Equal("テストシート", element.SheetName);
+                Assert.Null(element.Anchor);
+                Assert.Equal("AlternateContent", element.Detail);
+
+                Assert.Empty(Assert.Single(_reader.ReadFile(path).Sheets).DrawingObjects);
             }
             finally
             {

@@ -179,4 +179,4 @@
 - [x] 9.6 `.claude/agents/` の帳票定義への言及を改める
   - _Requirements: 1.5_
 - [x] 9.7 中核仕様の「廃止予定」の注記を、廃止済みに改める
-- [ ] 9.8 doc-reviewer・spec-compliance-reviewer(本仕様・中核仕様と実装の整合)
+- [x] 9.8 doc-reviewer・spec-compliance-reviewer(本仕様・中核仕様と実装の整合)

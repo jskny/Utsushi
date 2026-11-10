@@ -400,5 +400,67 @@ namespace Utsushi.Layout.Tests
                 saving.Pages.SelectMany(p => p.Commands).Count(),
                 checking.Pages.SelectMany(p => p.Commands).Count());
         }
+
+        [Fact]
+        public void 塗りつぶしを近似する図形を印刷される範囲にあるものだけ印の値とともに記録する()
+        {
+            // 要件7.2(g)。E2 は印刷範囲 A1:C3 の外にあり、印刷されないため記録しない。
+            var sheet = Sheet() with
+            {
+                DrawingObjects = new DrawingObjectModel[]
+                {
+                    TallShape("B2", 10.0) with { FillApproximation = "pattFill" },
+                    TallShape("E2", 10.0) with { FillApproximation = "blipFill" },
+                },
+            };
+
+            var item = Single(Compute(sheet), FormatApproximationKind.ShapeFill);
+
+            Assert.Equal("テストシート", item.SheetName);
+            Assert.Equal(CellRange.Parse("B2:B2"), item.Location);
+            Assert.Equal("pattFill", item.Detail);
+        }
+
+        [Fact]
+        public void 塗りつぶしの近似の印の無い図形は記録しない()
+        {
+            var sheet = Sheet() with { DrawingObjects = new DrawingObjectModel[] { TallShape("B2", 10.0) } };
+
+            Assert.DoesNotContain(Compute(sheet).FormatApproximations, a => a.Kind == FormatApproximationKind.ShapeFill);
+        }
+
+        [Fact]
+        public void グループの中の塗りつぶしを近似する図形をグループのアンカーで記録する()
+        {
+            var child = new GroupChildShape(
+                8, new RectPt(0, 0, 10, 10), ShapePresetType.Rect, System.Array.Empty<double>(), 0, null, null, null)
+            {
+                FillApproximation = "fillRef idx=2",
+            };
+            var plain = new GroupChildShape(
+                9, new RectPt(0, 0, 10, 10), ShapePresetType.Rect, System.Array.Empty<double>(), 0, null, null, null);
+            var group = new GroupShapeModel(
+                2, new PointPt(0, 0), new PointPt(10, 10), new GroupChildModel[] { child, plain }, 0.0,
+                CellAddress.Parse("A1"), new PointPt(0, 0), new FixedAnchorExtent(20.0, 20.0));
+            var sheet = Sheet() with { DrawingObjects = new DrawingObjectModel[] { group } };
+
+            var item = Single(Compute(sheet), FormatApproximationKind.ShapeFill);
+
+            Assert.Equal(CellRange.Parse("A1:A1"), item.Location);
+            Assert.Equal("fillRef idx=2", item.Detail);
+        }
+
+        [Fact]
+        public void 保存では図形の塗りつぶしの近似を記録しない()
+        {
+            var sheet = Sheet() with
+            {
+                DrawingObjects = new DrawingObjectModel[] { TallShape("B2", 10.0) with { FillApproximation = "pattFill" } },
+            };
+
+            Assert.DoesNotContain(
+                Compute(sheet, checkFit: false).FormatApproximations, a => a.Kind == FormatApproximationKind.ShapeFill);
+            Assert.Contains(Compute(sheet, checkFit: true).FormatApproximations, a => a.Kind == FormatApproximationKind.ShapeFill);
+        }
     }
 }
