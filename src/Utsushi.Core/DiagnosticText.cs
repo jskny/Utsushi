@@ -85,5 +85,46 @@ namespace Utsushi.Core
         public static bool IsRemoved(UnicodeCategory category) =>
             category is UnicodeCategory.Control or UnicodeCategory.Format
                 or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator;
+
+        /// <summary>Excel のシート名の最大の長さ。</summary>
+        public const int MaxSheetNameLength = 31;
+
+        /// <summary>文書名の最大の長さ。</summary>
+        public const int MaxDocumentNameLength = 255;
+
+        private static readonly char[] InvalidSheetNameChars = { ':', '\\', '/', '?', '*', '[', ']' };
+
+        /// <summary>
+        /// シート名が Excel の制約(空でない、31文字以下、<c>: \ / ? * [ ]</c> と制御文字・書式文字・行区切りを含まない)を満たすかどうか。
+        /// </summary>
+        /// <remarks>
+        /// シート名はエラーのメッセージ・診断の結果に入り、処理ログに流れる。ファイルから読んだ名前と、呼び出し元が指定した名前の
+        /// 両方をこの規則で確かめる(security-reviewer指摘)。
+        /// </remarks>
+        public static bool IsValidSheetName(string? name) =>
+            !string.IsNullOrEmpty(name)
+            && name!.Length <= MaxSheetNameLength
+            && name.IndexOfAny(InvalidSheetNameChars) < 0
+            && !ContainsRemoved(name);
+
+        /// <summary>
+        /// 文書名として使えるかどうか(255文字以下、制御文字・書式文字・行区切りを含まない)。文書名は PDF のタイトル・
+        /// ヘッダー/フッターの <c>&amp;F</c>・エラー情報に入る。
+        /// </summary>
+        public static bool IsValidDocumentName(string? name) =>
+            name is not null && name.Length <= MaxDocumentNameLength && !ContainsRemoved(name);
+
+        private static bool ContainsRemoved(string text)
+        {
+            foreach (var c in text)
+            {
+                if (IsRemoved(CharUnicodeInfo.GetUnicodeCategory(c)))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 }

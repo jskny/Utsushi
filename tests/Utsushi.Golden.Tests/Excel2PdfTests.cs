@@ -415,6 +415,15 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
+        public void 規則に合わないシート名と文書名は作る時点でエラーにする()
+        {
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { SheetName = "zz\nFAKE" }));
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { SheetName = new string('a', 32) }));
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { DocumentName = "a\r\nFAKE" }));
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { DocumentName = new string('a', 256) }));
+        }
+
+        [Fact]
         public void 空のシート名は指定できない()
         {
             Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { SheetName = " " }));

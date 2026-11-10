@@ -28,6 +28,9 @@ namespace Utsushi.Cli
         /// <summary>変換・診断のエラー。</summary>
         internal const int ExitConversionError = 3;
 
+        /// <summary>エラー出力の「原因:」の行の最大の長さ。</summary>
+        private const int MaxCauseLength = 200;
+
         internal static int Main(string[] args) => Run(args, Console.Out, Console.Error);
 
         /// <summary>CLI を実行し、終了コードを返す(design.md 5.3)。</summary>
@@ -80,9 +83,16 @@ namespace Utsushi.Cli
                 stderr.WriteLine(ex.ToDiagnosticString());
                 if (ex.InnerException is not null)
                 {
-                    stderr.WriteLine("原因: " + ex.InnerException.Message);
+                    // 内側の例外のメッセージは、ファイル由来の不正な値を含みうる。改行で偽の行を差し込ませず、長さを抑える(security-reviewer指摘)。
+                    stderr.WriteLine("原因: " + DiagnosticText.Normalize(ex.InnerException.Message, MaxCauseLength));
                 }
 
+                return ExitConversionError;
+            }
+            catch (InvalidOperationException ex)
+            {
+                // 部品の契約違反など、入力によらない内部のエラー。プロセスを異常終了させず、変換・診断のエラーとして報告する。
+                stderr.WriteLine($"{action}に失敗しました(内部のエラー): " + DiagnosticText.Normalize(ex.Message, MaxCauseLength));
                 return ExitConversionError;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

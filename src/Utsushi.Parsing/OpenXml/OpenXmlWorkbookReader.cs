@@ -321,10 +321,7 @@ namespace Utsushi.Parsing.OpenXml
         }
 
         /// <summary>Excel のシート名の最大の長さ。</summary>
-        internal const int MaxSheetNameLength = 31;
-
-        /// <summary>Excel がシート名に許さない文字。</summary>
-        private static readonly char[] InvalidSheetNameChars = { ':', '\\', '/', '?', '*', '[', ']' };
+        internal const int MaxSheetNameLength = DiagnosticText.MaxSheetNameLength;
 
         /// <summary>
         /// シート名が Excel の制約(31文字以下、制御文字と <c>: \ / ? * [ ]</c> を含まない)を満たすかを確かめる。
@@ -337,14 +334,7 @@ namespace Utsushi.Parsing.OpenXml
         /// </remarks>
         internal static void ValidateSheetName(string name, string? documentName)
         {
-            var invalid = name.Length > MaxSheetNameLength || name.IndexOfAny(InvalidSheetNameChars) >= 0;
-            for (var i = 0; !invalid && i < name.Length; i++)
-            {
-                var category = CharUnicodeInfo.GetUnicodeCategory(name[i]);
-                invalid = DiagnosticText.IsRemoved(category);
-            }
-
-            if (invalid)
+            if (!DiagnosticText.IsValidSheetName(name))
             {
                 throw new InvalidExcelFileException(
                     "シート名が Excel のシート名として不正です(31文字を超える、または使えない文字を含む)。ファイルが破損している可能性があります。",
@@ -2052,8 +2042,8 @@ namespace Utsushi.Parsing.OpenXml
                 return false;
             }
 
-            var parts = formula!.Split(' ');
-            var numberText = parts[parts.Length - 1];
+            // 最後のトークンだけを使う(区切りだらけの長い式で巨大な配列を作らせない。security-reviewer指摘)。
+            var numberText = formula!.Substring(formula.LastIndexOf(' ') + 1);
             if (!int.TryParse(numberText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var raw))
             {
                 return false;

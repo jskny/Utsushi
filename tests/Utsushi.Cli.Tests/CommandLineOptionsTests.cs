@@ -217,6 +217,38 @@ namespace Utsushi.Cli.Tests
             Assert.Equal(PdfRenderOptions.Default, options.Render);
         }
 
+        [Theory]
+        [InlineData("--sheet", "a", "--sheet", "b")]
+        [InlineData("--ignore-unsupported", null, "--ignore-unsupported", null)]
+        public void テキストと数値以外のオプションを重ねて指定すると使い方エラーにする(string first, string? firstValue, string second, string? secondValue)
+        {
+            var args = new System.Collections.Generic.List<string> { "check", Input, first };
+            if (firstValue is not null)
+            {
+                args.Add(firstValue);
+            }
+
+            args.Add(second);
+            if (secondValue is not null)
+            {
+                args.Add(secondValue);
+            }
+
+            Assert.Contains("重複", ParseError(args.ToArray()));
+        }
+
+        [Fact]
+        public void 値の代わりに次のオプションを書くと使い方エラーにする()
+        {
+            Assert.Contains("値が必要", ParseError("check", Input, "--document-name", "--allow-font-fallback"));
+        }
+
+        [Fact]
+        public void 形式の誤りのエラーに書き込む値を出さない()
+        {
+            Assert.DoesNotContain("株式会社", ParseError("check", Input, "--text", "株式会社サンプル"));
+        }
+
         [Fact]
         public void 書体名を省略したフォントの代替の許可は直後のオプションを書体名にしない()
         {

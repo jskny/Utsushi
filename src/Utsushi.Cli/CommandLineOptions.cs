@@ -178,8 +178,16 @@ namespace Utsushi.Cli
             double? maxDigitWidthPx = null;
             bool ignoreUnsupported = false, allowFontFallback = false, allowMissingGlyphs = false, outlineText = false;
 
+            var seenOptions = new HashSet<string>(StringComparer.Ordinal);
             for (; i < args.Length; i++)
             {
+                // --text・--number 以外のオプションを重ねて指定した場合は、どちらを使うか決められないため使い方エラーにする。
+                if (args[i] is not ("--text" or "--number") && IsOption(args[i]) && !seenOptions.Add(args[i]))
+                {
+                    error = $"{args[i]} が重複して指定されています。1つにしてください。";
+                    return null;
+                }
+
                 switch (args[i])
                 {
                     case "--text":
@@ -206,7 +214,7 @@ namespace Utsushi.Cli
                             if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
                                 || double.IsNaN(number) || double.IsInfinity(number))
                             {
-                                error = $"--number の値は数値で指定してください(小数点は「.」): '{pair}'";
+                                error = $"--number の値は数値で指定してください(小数点は「.」): セル {cell}";
                                 return null;
                             }
 
@@ -304,7 +312,8 @@ namespace Utsushi.Cli
 
         private static bool TryTakeValue(string[] args, ref int index, out string? value, out string? error)
         {
-            if (index + 1 >= args.Length)
+            // 値の代わりに次のオプションが書かれている誤り(--document-name --allow-font-fallback など)を、値として取り込まない。
+            if (index + 1 >= args.Length || IsOption(args[index + 1]))
             {
                 value = null;
                 error = $"{args[index]} には値が必要です。";
@@ -352,14 +361,15 @@ namespace Utsushi.Cli
             var separator = pair.IndexOf('=');
             if (separator <= 0)
             {
-                error = $"{option} は {formatHint} の形式で指定してください: '{pair}'";
+                // 値(宛名などの個人情報になりうる)を使い方エラーにそのまま出さない。
+                error = $"{option} は {formatHint} の形式で指定してください。";
                 return false;
             }
 
             var address = pair.Substring(0, separator);
             if (!CellAddress.TryParse(address, out cell))
             {
-                error = $"{option} のセル番地を A1 形式として解釈できません: '{address}'";
+                error = $"{option} のセル番地を A1 形式として解釈できません: '{DiagnosticText.Normalize(address, 16)}'";
                 return false;
             }
 

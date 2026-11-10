@@ -123,6 +123,19 @@ namespace Utsushi
                 throw new ArgumentException("シート名が空です。アクティブシートを変換する場合は null にしてください。", nameof(options));
             }
 
+            // 規則に合わない名前はどのブックのシートにも一致しない。エラー情報・ログに改行などを差し込ませないため、作る時点で拒否する。
+            if (_options.SheetName is not null && !DiagnosticText.IsValidSheetName(_options.SheetName))
+            {
+                throw new ArgumentException(
+                    "シート名が Excel のシート名として不正です(31文字を超える、または : \\ / ? * [ ] ・制御文字を含む)。", nameof(options));
+            }
+
+            if (_options.DocumentName is not null && !DiagnosticText.IsValidDocumentName(_options.DocumentName))
+            {
+                throw new ArgumentException(
+                    $"文書名に制御文字・書式文字・行区切りが含まれるか、{DiagnosticText.MaxDocumentNameLength}文字を超えています。", nameof(options));
+            }
+
             if (engine is not null && (_options.Fonts is not null || _options.Render is not null))
             {
                 throw new ArgumentException(
@@ -428,8 +441,12 @@ namespace Utsushi
         /// <summary>
         /// 例外・PDFのタイトルに使う文書名。既定は、パスなら拡張子を除いたファイル名、バイト列・ストリームなら空文字列(要件12.5)。
         /// </summary>
+        /// <remarks>ファイル名は利用者が付けた名前(アップロードされたファイル名など)のため、制御文字を除き長さを切り詰める。</remarks>
         private string DocumentLabel =>
-            _options.DocumentName ?? (_source.Path is { } path ? Path.GetFileNameWithoutExtension(path) : string.Empty);
+            _options.DocumentName
+            ?? (_source.Path is { } path
+                ? DiagnosticText.Normalize(Path.GetFileNameWithoutExtension(path), DiagnosticText.MaxDocumentNameLength) ?? string.Empty
+                : string.Empty);
 
         /// <summary>
         /// 未対応要素の扱いがエラーで、未対応要素が1件以上あれば例外にする(excel2pdf-consolidation 要件2.2)。

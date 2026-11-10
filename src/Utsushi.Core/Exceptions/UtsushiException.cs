@@ -52,12 +52,12 @@ namespace Utsushi.Core.Exceptions
 
             if (!string.IsNullOrEmpty(DocumentName))
             {
-                parts.Add("document=" + DocumentName);
+                parts.Add("document=" + DiagnosticText.Normalize(DocumentName, DiagnosticText.MaxDocumentNameLength));
             }
 
             if (!string.IsNullOrEmpty(SheetName))
             {
-                parts.Add("sheet=" + SheetName);
+                parts.Add("sheet=" + DiagnosticText.Normalize(SheetName, DiagnosticText.MaxDocumentNameLength));
             }
 
             if (CellAddress.HasValue)

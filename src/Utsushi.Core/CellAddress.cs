@@ -52,12 +52,12 @@ namespace Utsushi.Core
         public static bool TryParse(string? text, out CellAddress address)
         {
             address = default;
-            if (string.IsNullOrWhiteSpace(text))
+            if (string.IsNullOrWhiteSpace(text) || text!.Length > 64)
             {
                 return false;
             }
 
-            var s = text!.Trim().Replace("$", string.Empty);
+            var s = text.Trim().Replace("$", string.Empty);
             var i = 0;
             while (i < s.Length && IsAsciiLetter(s[i]))
             {
