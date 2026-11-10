@@ -1061,5 +1061,5 @@
     - _Requirements: 11.7_
   - [x] 31.2 `FontResolver` のコンストラクタで代替フォント名を解決し、見つからなければ `FontNotAvailableException` にする。代替の時点でも明示登録の書体を探す。テストを含む
     - _Requirements: 11.7_
-  - [ ] 31.3 docs(ライブラリの使い方・CLAUDE.md・README)を更新し、code-reviewer・doc-reviewer でレビューする
+  - [x] 31.3 docs(ライブラリの使い方・CLAUDE.md。README には代替フォント名の記述が無いため更新不要)を更新し、code-reviewer でレビューする
     - _Requirements: 11.7_

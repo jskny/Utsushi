@@ -564,7 +564,10 @@ namespace Utsushi.Rendering
             }
         }
 
-        /// <summary>代替フォントの書体を 明示登録 → インストール済み → 同梱 の順に探す。無ければ null。</summary>
+        /// <summary>
+        /// 代替フォントの書体を 明示登録 → インストール済み → 同梱 の順に探す。無ければ null。
+        /// 通常の字形(太字・斜体でない)だけを探す(代替の書体は通常の字形を合成して使うため。<see cref="ResolveCore"/> と同じ割り切り)。
+        /// </summary>
         private SKTypeface? FindFallback(string familyName) =>
             TryGetRegistered(familyName, bold: false, italic: false, out var registered)
                 ? registered
@@ -706,8 +709,10 @@ namespace Utsushi.Rendering
     /// </param>
     /// <param name="FontDirectories">フォントファイルを一括登録するディレクトリ。</param>
     /// <param name="FallbackFamilyName">
-    /// <see cref="FontResolutionMode.AllowFallback"/> のときに使う代替フォント名。null(または見つからない)の場合は
-    /// 同梱の日本語フォント(<see cref="BundledFonts.JapaneseGothicFamily"/>)を使う(要件11.1)。
+    /// <see cref="FontResolutionMode.AllowFallback"/> のときに使う代替フォント名。null の場合は
+    /// 同梱の日本語フォント(<see cref="BundledFonts.JapaneseGothicFamily"/>)を使う(要件11.1)。指定した書体が
+    /// 明示登録(<paramref name="FontFiles"/>・<paramref name="FontDirectories"/>)・インストール済み・同梱のいずれにも無い場合は、
+    /// <see cref="FontResolver"/> を作る時点で <see cref="FontNotAvailableException"/> になる(要件11.7)。
     /// </param>
     public sealed record FontResolverOptions(
         FontResolutionMode Mode,

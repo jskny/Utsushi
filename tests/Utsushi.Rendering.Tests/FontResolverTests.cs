@@ -261,7 +261,27 @@ namespace Utsushi.Rendering.Tests
 
             using var resolver = new FontResolver(options);
 
-            Assert.NotNull(resolver.GetSubstitution(FontStyle.Default with { Name = "存在しないフォント-ZZZ" }));
+            // 代替の時点でも明示登録の書体を使う(同梱フォントの共有のインスタンスではなく、登録したファイルの書体)。
+            var resolved = resolver.Resolve(FontStyle.Default with { Name = "存在しないフォント-ZZZ" });
+            Assert.NotSame(Fonts.BundledFonts.JapaneseGothicTypeface, resolved.Typeface);
+        }
+
+        [Fact]
+        public void 代替フォント名は日本語名と英語名の別名でも一致させる()
+        {
+            // 同梱フォントの日本語名(要件11.6)。
+            using (new FontResolver(FontResolverOptions.AllowFallback("BIZ UDPゴシック")))
+            {
+            }
+
+            // 英語名で明示登録した書体を、日本語名の代替フォント名で引く。
+            var options = FontResolverOptions.AllowFallback("BIZ UDPゴシック") with
+            {
+                FontFiles = new Dictionary<string, string> { ["BIZ UDPGothic"] = BundledFontFile() },
+            };
+            using var resolver = new FontResolver(options);
+            var resolved = resolver.Resolve(FontStyle.Default with { Name = "存在しないフォント-ZZZ" });
+            Assert.NotSame(Fonts.BundledFonts.JapaneseGothicTypeface, resolved.Typeface);
         }
 
         [Fact]
