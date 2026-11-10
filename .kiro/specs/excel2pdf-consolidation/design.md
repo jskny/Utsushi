@@ -95,8 +95,8 @@ public enum UnsupportedElementPolicy
 ```
 
 - 既定値は `init` の初期値で `Error` にする。そのうえで列挙の0も `Error` にし、`default(UnsupportedElementPolicy)` が無視にならないようにする。
-- 現在 `Utsushi.ReportDefinitions` に同名の列挙(`Ignore = 0`)がある。帳票定義を削除するまで(tasks.md のタスク8)は両方が存在する。
-  `ReportPdfConverter`(名前空間 `Utsushi`)の中で旧い列挙を参照している箇所は、新しい列挙と取り違えないよう完全修飾名で書く。
+- 移行期間には `Utsushi.ReportDefinitions` に同名の列挙(`Ignore = 0`)があり、旧い列挙を参照する箇所は完全修飾名で書いた
+  (タスク8で旧い列挙ごと削除した)。
 
 ### 1.4 `Excel2PdfDiagnostics`(要件4)
 
@@ -233,7 +233,7 @@ public sealed class UnsupportedWorkbookElementException : UtsushiException
 
 - メッセージは「未対応の要素が N 件あるため中止します(UnsupportedElements を Ignore にすると、出力せずに変換します)」とし、
   先頭の20件を1行ずつ続ける。21件目以降は「ほか M 件」とする。
-- `ToDiagnosticString()` には、先頭の100件を1行ずつと、全件の種類ごとの件数を含める。すべての要素は `Elements` から取る。
+- `ToDiagnosticString()` には、先頭の100件を1行ずつ含め、100件を超えた場合は全件の種類ごとの件数を加える。すべての要素は `Elements` から取る。
   1件のログの記録が際限なく大きくならないようにするためである(security-reviewer指摘。10,000件をすべて載せると数MBになる)。
 - 1行の説明(`UnsupportedElement.ToString()`)は、種類・シート名・位置・説明・補足の情報を載せる。ファイル由来の値(シート名・補足の情報)は、
   `DiagnosticText.Normalize` を通して改行を含めない。
@@ -243,10 +243,12 @@ public sealed class UnsupportedWorkbookElementException : UtsushiException
 
 ### 2.4 帳票定義ありの経路の移行期間の扱い
 
+> タスク8で帳票定義ありの経路ごと削除した。以下は移行期間の記録である。
+
 帳票定義を削除するまで(tasks.md のタスク8)は、帳票定義ありの経路が残る。この間、`unsupportedElements: "error"` の帳票定義では、
 ファサードの共通の経路(`ReportPdfConverter.ReadWorkbook`。`Convert*`・`ComputeLayout*`・`CheckFit*` のすべてが通る)で、
 `WorkbookModel.UnsupportedElements` が1件以上なら例外を送出する。これにより中核仕様の要件13.5(収まりの確認は変換と同じエラー)を保つ。
-移行期間には、同じ帳票定義でも次の2点が変わる。
+移行期間には、同じ帳票定義でも次の3点が変わる。
 
 - 例外の中身が、最初の1件から全件になる。
 - 壊れた描画オブジェクト(`MalformedDrawingObject`)でも止まるようになる。
@@ -426,7 +428,7 @@ utsushi --help
 |---|---|
 | 0 | `check`: 問題なし。`convert`: 保存した。`--help`: 使い方を標準出力に出した |
 | 1 | `check`: 問題が1つ以上ある(`Excel2PdfDiagnostics.HasIssues`。`--ignore-unsupported`・`--allow-font-fallback` の指定によらない。書式の近似だけなら0) |
-| 2 | 使い方エラー(標準エラーに理由と使い方) |
+| 2 | 使い方エラー(標準エラーに理由と使い方)。引数の値の誤りのうち `Excel2Pdf` が検出したもの(`ArgumentException`)は、理由と `--help` の案内だけを出す |
 | 3 | 変換・診断のエラー。`UtsushiException` は `ToDiagnosticString()` を、`IOException`・`UnauthorizedAccessException` は例外のメッセージを標準エラーに出す |
 
 `check` の標準出力の形式は次のとおりである(1行1件。種類ごとにまとめ、件数を見出しに出す)。
@@ -520,6 +522,10 @@ utsushi --help
 - 移行が完了したら、product.md・structure.md・tech.md・CLAUDE.md の「移行中」の注記を外す。
 - `docs/実装設計失敗事例集.md` の過去の事例は、記録としてそのまま残す(廃止した機能に関する節には、廃止した旨の注記だけを加える)。
 
+## 8. (欠番)
+
+章番号は、ほかの文書・コードのコメントから参照している「design.md 9」を変えないため、詰めずに欠番にする。
+
 ## 9. 実装前の調査で決めたこと
 
 実装に着手する前に、各タスクの実現可能性を調査した(2026-11-09)。仕様の範囲で次のとおり決める。
@@ -548,14 +554,14 @@ utsushi --help
 - `GetSubstitution` は、解決と辞書の参照を同じロックの下で行う(フォントの登録でキャッシュが消える競合を避けるため)。
 - 代替の書体名は、書体のデータが持つファミリ名(`SKTypeface.FamilyName`)をそのまま返す。同梱のフォントでは英語名(`BIZ UDPGothic` など)になりうる。
 - `Excel2Pdf` は、エンジンを渡されない場合も内部でエンジン(`Excel2PdfEngine`)を作って使う。これにより、診断でフォントの代替を問い合わせられる。
-  移行期間中に利用者が `ReportPdfConverter` を渡した場合は、`FontResolver` を取り出せないため、フォントの代替の一覧は空にする(タスク8で、この経路ごと無くなる)。
-- 未対応要素の判定は `Save`・`ToPdfBytes`(と、移行期間だけ残る `CheckFit()`)で行い、`Check()` では行わない。
+  (移行期間中に利用者が `ReportPdfConverter` を渡した場合は、フォントの代替の一覧を空にしていた。タスク8で、この経路ごと削除した。)
+- 未対応要素の判定は `Save`・`ToPdfBytes`(と、移行期間だけ残した `CheckFit()`。タスク8で削除した)で行い、`Check()` では行わない。
   ファサードの内部の変換は、読み込みの直後に呼ぶコールバック(`onWorkbookRead`)を受け取り、保存では判定に、診断では一覧の受け取りに使う。
 - 破棄したエンジンを渡した場合は、`Excel2Pdf` の作成の時点で `ObjectDisposedException` にする。
 - フォントの代替の重複の除去は、`FontResolver` と同じくフォント名の大文字・小文字を区別しない。フォント名はファイル由来の値のため正規化して返す。
 - **移行期間(タスク4〜7)の帳票定義ありの `Excel2Pdf`**: 未対応要素の扱いは帳票定義の `unsupportedElements` に従い、`Excel2PdfOptions.UnsupportedElements` は帳票定義なしの経路にだけ効く。
   また、`unsupportedElements: "error"` の帳票定義では、`Check()` も例外になる(中核仕様の要件13.5を保つため。2.4)。
-  帳票定義ありの経路で `Excel2PdfOptions.UnsupportedElements` を指定しても効かない(既定値と区別できないため、エラーにはしない)。いずれもタスク8で帳票定義ありの経路ごと無くなる。
+  帳票定義ありの経路で `Excel2PdfOptions.UnsupportedElements` を指定しても効かない(既定値と区別できないため、エラーにはしない)。いずれもタスク8で帳票定義ありの経路ごと削除した。
 
 ### タスク5(書式の近似)
 

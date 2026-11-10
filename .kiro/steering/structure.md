@@ -27,9 +27,9 @@ PDF描画レイヤー (Rendering)
 ファサード (Utsushi)  ← 呼び出し元プロダクトが参照する唯一のアセンブリ
 ```
 
-`Utsushi.Core` は例外階層(`UtsushiException` とその派生)と、レイヤーをまたぐ値型
-(`CellAddress` / `CellRange` / `ArgbColor` / `RectPt` / `PointPt` / `Units`)のみを持つ。
-ロジックは置かず、どのレイヤーからも参照してよい。逆に `Utsushi.Core` は他のどのプロジェクトも参照しない。
+`Utsushi.Core` は例外階層(`UtsushiException` とその派生)、レイヤーをまたぐ値型
+(`CellAddress` / `CellRange` / `ArgbColor` / `RectPt` / `PointPt` / `Units`)、診断の記録の型(`UnsupportedElement`・`FormatApproximation` とその種類、
+`ProcessingStage`)と、診断の文の正規化(`DiagnosticText`)だけを持つ。変換のロジックは置かず、どのレイヤーからも参照してよい。逆に `Utsushi.Core` は他のどのプロジェクトも参照しない。
 
 - 上位レイヤー(Rendering側)は下位レイヤー(Parsing側)の実装詳細(例: OpenXml SDKの型)を直接知ってはならない。レイヤー間の受け渡しは各レイヤーが定義する内部モデル(POCO)を介する。
 - 帳票ごとの差異はテンプレート(Excelの書式・印刷設定)と呼び出し元が書き込む値で表し、共通レイヤーのコードに帳票固有の分岐を持ち込まない。
@@ -92,7 +92,7 @@ Utsushi/
 
 ## 帳票の追加手順(標準ワークフロー)
 
-共通レイヤーのコードは変更しない。テンプレートを整え、呼び出し元がセル番地を指定して値を書き込むだけで完結する(要件8.1)。
+共通レイヤーのコードは変更しない。テンプレートを整え、呼び出し元がセル番地を指定して値を書き込むだけで完結する(`product.md`)。
 
 1. テンプレートの作り方・登録前のチェックリストは `docs/テンプレート作成ガイド.md` を参照する。書き込むセルのはみ出しの扱いは、
    セルの書式(「縮小して全体を表示する」「折り返して全体を表示する」)で表す。

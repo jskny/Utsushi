@@ -15,7 +15,7 @@ pdf.Save("output.pdf");
 
 グラフ・EMF画像・コメントなど、PDFに出力されない要素(未対応要素)があると、既定では保存の時点で、見つかった要素をすべて一覧にした例外になる。
 `pdf.Check()` は例外にせずに、未対応要素・文字の収まらない箇所・フォントの代替・書式の近似(参考)を返す。
-CLI の `check` でも同じ診断ができる(`dotnet run --project src/Utsushi.Cli -- check input.xlsx`)。
+CLI の `check` でも同じ診断ができる(`dotnet run --project src/Utsushi.Cli -- check input.xlsx`。テンプレートのフォントが無い環境では `--allow-font-fallback` を付ける。その場合はフォントの代替を問題として数える)。
 
 サーバー(ASP.NET Core など)で使う場合、`Excel2PdfEngine.Create()` で作ったエンジンはスレッドセーフなので1つを共有し、`Excel2Pdf` はリクエストごとに作る
 (詳細は [`docs/ライブラリの使い方.md`](docs/ライブラリの使い方.md) の「複数スレッドからの利用」)。

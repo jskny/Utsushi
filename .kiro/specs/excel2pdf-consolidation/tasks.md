@@ -3,7 +3,7 @@
 対象要件: `.kiro/specs/excel2pdf-consolidation/requirements.md`
 対象設計: `.kiro/specs/excel2pdf-consolidation/design.md`
 
-> **状況**: 実装中。実装前の実現可能性の調査で決めたことは design.md 9 にまとめた。
+> **状況**: 完了(2026-11)。実装前の実現可能性の調査で決めたことは design.md 9 にまとめた。
 >
 > **順序の方針**:
 > - 中核仕様を最初に改訂する(CLAUDE.md「先に仕様側を更新する」)。

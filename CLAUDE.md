@@ -76,7 +76,8 @@ python3 tools/edge-case-samples/generate.py samples/edge-cases
 # ゴールデンファイルの期待値を更新する(差分は必ずレビューしてからコミット)
 UTSUSHI_UPDATE_GOLDEN=1 dotnet test
 
-# CLIでテンプレートを診断する(未対応の要素・文字の収まらない箇所・フォントの代替・書式の近似(参考)。問題があれば終了コード1)
+# CLIでテンプレートを診断する(未対応の要素・文字の収まらない箇所・フォントの代替・書式の近似(参考)。問題があれば終了コード1。
+# --allow-font-fallback を付けるとフォントの代替を問題として数えるため、フォントの無い環境では終了コード1になる)
 dotnet run --project src/Utsushi.Cli -- check samples/reports/invoice/template.xlsx --allow-font-fallback
 
 # CLIで変換を試す(パスはコマンドの直後に書く。アクティブシートを変換する)
