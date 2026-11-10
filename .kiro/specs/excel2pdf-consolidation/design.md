@@ -227,7 +227,7 @@ public sealed class UnsupportedWorkbookElementException : UtsushiException
 {
     public IReadOnlyList<UnsupportedElement> Elements { get; }
     public bool IsTruncated { get; }
-    // ElementKind(string)は削除する(tasks.md のタスク2で、参照しているテストとともに)
+    // ElementKind(string)は削除した(参照していたテストとともに)
 }
 ```
 
@@ -519,7 +519,7 @@ utsushi --help
   `docs/テンプレート作成ガイド.md`、`docs/エッジケース検証レポート.md`、`samples/edge-cases/README.md`、`.claude/agents/` の帳票定義への言及を改める。
 - 「帳票固有の分岐は帳票定義データ側に置く」という方針(`CLAUDE.md`「必ず守る制約」・`tech.md`「コーディング規約」・`structure.md`「レイヤー構成」)は、
   「帳票ごとの差異はテンプレート(Excelの書式・印刷設定)と呼び出し元が書き込む値で表し、共通レイヤーのコードに帳票固有の分岐を持ち込まない」に改める。
-- 移行が完了したら、product.md・structure.md・tech.md・CLAUDE.md の「移行中」の注記を外す。
+- 移行の完了時に、product.md・structure.md・tech.md・CLAUDE.md の移行中の注記を外した。
 - `docs/実装設計失敗事例集.md` の過去の事例は、記録としてそのまま残す(廃止した機能に関する節には、廃止した旨の注記だけを加える)。
 
 ## 8. (欠番)
