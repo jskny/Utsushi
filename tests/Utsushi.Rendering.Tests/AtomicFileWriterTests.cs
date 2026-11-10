@@ -11,7 +11,7 @@ namespace Utsushi.Rendering.Tests
     /// <see cref="AtomicFileWriter"/> の検証(要件5.4)。
     /// </summary>
     /// <remarks>
-    /// <see cref="SkiaPdfRenderer.RenderToFile"/> だけでなく、<c>Utsushi.ReportPdfConverter.ConvertToFile</c>
+    /// <see cref="SkiaPdfRenderer.RenderToFile"/> だけでなく、<c>Utsushi.ConversionPipeline.RenderToFile</c>
     /// が既定以外の <c>IPdfRenderer</c> を使う場合のフォールバック経路もこのヘルパーに委譲しているため、
     /// どちらの経路でも同じアトミック性が保証されることを確認する。
     /// </remarks>
@@ -107,7 +107,7 @@ namespace Utsushi.Rendering.Tests
 
                 Assert.IsAssignableFrom<IOException>(ex.InnerException);
                 Assert.Equal(ProcessingStage.Rendering, ex.Stage);
-                Assert.Equal("invoice", ex.ReportCode);
+                Assert.Equal("invoice", ex.DocumentName);
                 Assert.Equal("請求書", ex.SheetName);
             }
             finally

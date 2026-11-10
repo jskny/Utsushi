@@ -1,4 +1,4 @@
-report=invoice sheet=請求書 pages=1
+document=invoice sheet=請求書 pages=1
 
 ## page 1 paper=A4/Portrait size=595.28x841.89 scale=1 rows=1-34 cols=1-6
 fill   rect=[50.4,231 378x13.5] color=#FFDCE6F1
@@ -202,7 +202,7 @@ line   from=(428.4,446.63) to=(428.4,460.88) color=#FF000000 width=0.75 dash=Sol
 text   origin=(239.4,74.04) anchor=Center font=MS PGothic@18pt/#FF000000,bold clip=[50.4,54 378x30] value="請求書"
 text   origin=(51.9,101.98) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,92 210x13.5] value="株式会社テスト製作所 御中"
 text   origin=(353.4,101.83) anchor=Right font=MS PGothic@11pt/#FF000000 clip=[50.4,54 378x501] value="請求番号"
-text   origin=(356.4,101.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[354.9,92 73.5x13.5] value="INV-2026-0417"
+text   origin=(356.4,101.83) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[50.4,54 378x501] value="INV-2026-0417"
 text   origin=(353.4,115.33) anchor=Right font=MS PGothic@11pt/#FF000000 clip=[50.4,54 378x501] value="発行日"
 text   origin=(356.4,115.33) anchor=Left font=MS PGothic@11pt/#FF000000 clip=[50.4,54 378x501] value="2026年4月1日"
 text   origin=(51.9,128.83) anchor=Left font=MS PGothic@11pt/#FF000000,bold clip=[50.4,119 210x13.5] value="件名: ゴールデンテスト用案件"
@@ -266,6 +266,8 @@ group  center=(272.9,149.5) rotation=-8 children=2
   shape  rect=[240.4,132.5 65x34] preset=Ellipse rotation=0 fill=none outline=#FFC00000/1pt text=[]
   shape  rect=[252.4,141.5 41x16] preset=Rect rotation=0 fill=none outline=#FFC00000/1pt text=[]
 
-## fit issues count=2
-fit Clipped cell=F3 page=1 substituted=yes key=InvoiceNo text="INV-2026-0417"
-fit NumberTooWide cell=F5 page=1 substituted=no key=- text="2026年4月30日"
+## fit issues count=1
+fit NumberTooWide cell=F5 page=1 substituted=no text="2026年4月30日"
+
+## format approximations count=1
+approx ShapeFont at=A25:A25 detail=fontRef=minor

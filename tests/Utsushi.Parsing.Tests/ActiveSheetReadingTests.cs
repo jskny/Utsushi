@@ -13,7 +13,7 @@ using Spec = Utsushi.Parsing.Tests.ActiveSheetWorkbookFixtures.SheetSpec;
 namespace Utsushi.Parsing.Tests
 {
     /// <summary>
-    /// 帳票定義なしモードのアクティブシート解決(<see cref="WorkbookReadOptions.ActiveSheetOnly"/>)の検証
+    /// 変換するシート(アクティブシート)の解決(<see cref="WorkbookReadOptions.ActiveSheetOnly"/>)の検証
     /// (要件12.2、タスク24)。
     /// </summary>
     public sealed class ActiveSheetReadingTests
@@ -207,11 +207,11 @@ namespace Utsushi.Parsing.Tests
                 using var stream = File.OpenRead(path);
 
                 var ex = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(ReportCode: "文書", ActiveSheetOnly: true)));
+                    () => _reader.Read(stream, new WorkbookReadOptions(DocumentName: "文書", ActiveSheetOnly: true)));
 
                 Assert.Equal(InvalidExcelFileReason.NoWorksheet, ex.Reason);
                 Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-                Assert.Equal("文書", ex.ReportCode);
+                Assert.Equal("文書", ex.DocumentName);
             }
             finally
             {
@@ -245,7 +245,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 選ばれなかったシートに非対応の図形があってもunsupportedElementsがerrorで失敗しない()
+        public void 選ばれなかったシートに非対応の図形があっても未対応要素として記録しない()
         {
             var unsupported = new OpenXmlElement[]
             {
@@ -259,15 +259,15 @@ namespace Utsushi.Parsing.Tests
                 // 前提の確認: 非対応の図形があるシートを読めば error で失敗する入力であること。
                 using (var stream = File.OpenRead(path))
                 {
-                    var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(
-                        stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, SheetNameFilter: "作業用")));
-                    Assert.Equal("UnsupportedShapePreset", ex.ElementKind);
+                    var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(
+                        stream, new WorkbookReadOptions(SheetNameFilter: "作業用")));
+                    StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedShapePreset);
                 }
 
                 using (var stream = File.OpenRead(path))
                 {
-                    var workbook = _reader.Read(
-                        stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, ActiveSheetOnly: true));
+                    var workbook = _reader.ReadStrict(
+                        stream, new WorkbookReadOptions(ActiveSheetOnly: true));
                     Assert.Equal("帳票", Assert.Single(workbook.Sheets).Name);
                 }
             }
@@ -278,7 +278,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 選ばれなかったシートの図形数が上限を超えていてもunsupportedElementsがerrorで失敗しない()
+        public void 選ばれなかったシートの図形数が上限を超えていても未対応要素として記録しない()
         {
             var tooMany = Enumerable.Range(0, OpenXmlWorkbookReader.MaxShapesPerSheet + 1)
                 .Select(i => (OpenXmlElement)ShapeWorkbookFixtures.ShapeAnchor(
@@ -292,15 +292,15 @@ namespace Utsushi.Parsing.Tests
                 // 前提の確認: 図形数が上限を超えたシートを読めば error で失敗する入力であること。
                 using (var stream = File.OpenRead(path))
                 {
-                    var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(
-                        stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, SheetNameFilter: "作業用")));
-                    Assert.Equal("TooManyShapes", ex.ElementKind);
+                    var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(
+                        stream, new WorkbookReadOptions(SheetNameFilter: "作業用")));
+                    StrictReading.AssertContains(ex, UnsupportedElementKind.LimitExceeded, "TooManyShapes");
                 }
 
                 using (var stream = File.OpenRead(path))
                 {
-                    var workbook = _reader.Read(
-                        stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, ActiveSheetOnly: true));
+                    var workbook = _reader.ReadStrict(
+                        stream, new WorkbookReadOptions(ActiveSheetOnly: true));
                     Assert.Equal("帳票", Assert.Single(workbook.Sheets).Name);
                 }
             }

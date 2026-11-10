@@ -5,18 +5,18 @@
 
 ## 現在の状態
 
-中核機能(`.kiro/specs/excel-report-pdf-conversion/`)の実装は完了している。`dotnet build` / `dotnet test` / `dotnet format` はいずれもグリーン。
+中核機能(`.kiro/specs/excel-report-pdf-conversion/`)と、入口の `Excel2Pdf` への一本化(`.kiro/specs/excel2pdf-consolidation/`)の実装は完了している。`dotnet build` / `dotnet test` / `dotnet format` はいずれもグリーン。
 
 - `src/` — Core / Parsing / ReportDefinition / Substitution / Layout / Rendering の5レイヤー+共通基盤、ファサード `Utsushi`、CLI
 - `tests/` — 各レイヤー・CLIの引数解釈のユニットテストとゴールデン(回帰)テスト
-- `samples/reports/<帳票コード>/` — 帳票定義(`definition.json`)とテンプレート(`template.xlsx`)
+- `samples/reports/<サンプル名>/` — テンプレート(`template.xlsx`)の合成サンプル
 - `tools/Utsushi.SampleGenerator/` — サンプル帳票 `.xlsx` の生成ツール(製品コードからは参照されない)
-- `samples/edge-cases/<帳票コード>/` — 利用者が作りがちなテンプレートを再現したエッジケース検証用サンプル(`tools/edge-case-samples/generate.py` で生成。Python + openpyxl)
+- `samples/edge-cases/<サンプル名>/` — 利用者が作りがちなテンプレートを再現したエッジケース検証用サンプル(`tools/edge-case-samples/generate.py` で生成。Python + openpyxl)
 - `.kiro/steering/` — 常時適用される方針(製品概要・技術方針・プロジェクト構成)
 - `.kiro/specs/excel-report-pdf-conversion/` — 中核機能の要件定義書・設計書・実装タスクリスト
+- `.kiro/specs/excel2pdf-consolidation/` — 入口の `Excel2Pdf` への一本化(帳票定義の廃止)と診断の強化(未対応要素の一覧・既定でエラー、フォントの代替、書式の近似、CLIの `check`/`convert`)の要件定義書・設計書・実装タスクリスト
 - `docs/テンプレート作成ガイド.md` — Excelでテンプレートを作る担当者向けの注意点(フォント・差し込みセルの設定・再現できる機能/できない機能)
-- `docs/帳票定義スキーマ.md` — `definition.json` のスキーマ
-- `docs/ライブラリの使い方.md` — ファサード `Utsushi`(簡易API `Excel2Pdf`・`ReportPdfConverter`)のAPI・例外の使い方
+- `docs/ライブラリの使い方.md` — ファサード `Utsushi`(`Excel2Pdf`・`Excel2PdfEngine`・診断の `Check()`)のAPI・例外の使い方
 - `docs/開発環境メモ.md` — Claude Code on the web実行環境で裏取りした環境固有の注意点(SDKセットアップ、日本語フォント、`pkill -f`の自己マッチ問題など)
 - `docs/エッジケース検証レポート.md` — エッジケース検証用サンプルによる検証の結果(利用者に影響するExcelとの差異と、呼び出し側への推奨事項)
 - `docs/実装設計失敗事例集.md` — 過去の不具合・設計ミス・検出漏れとその原因・対応・教訓の記録。実装・レビュー着手前に関連する節を確認する
@@ -38,9 +38,9 @@
 ## 必ず守る制約
 
 - **商用ライブラリ禁止・Office Interop禁止**(`.kiro/steering/tech.md`)。新規依存ライブラリを追加する前にライセンスを確認する。
-- 対象は登録済みの自社帳票が主。帳票定義なしモード(要件12)は社内のExcelをベストエフォートでPDF化する補助経路であり、これを足がかりに任意のExcelファイルを汎用的に扱うための機能(汎用レンダラ化)は追加しない。
+- 対象は自社で運用中の帳票テンプレート。任意のExcelファイルを汎用的に扱うための機能(汎用レンダラ化)は追加しない(`.kiro/steering/product.md`)。
 - レイヤー間の依存は一方向(`Parsing → ReportDefinition → Substitution → Layout → Rendering`)。上位レイヤーが下位レイヤーの実装詳細を直接参照しない。
-- 帳票固有の分岐は帳票定義データ側に置き、共通レイヤーのコードにハードコードしない。
+- 帳票ごとの差異はテンプレート(Excelの書式・印刷設定)と呼び出し元が書き込む値で表し、共通レイヤーのコードに帳票固有の分岐をハードコードしない。
 
 ## サブエージェント
 
@@ -52,7 +52,7 @@
 | `code-reviewer` | 実装変更が完了した直後、コミット前 |
 | `layout-fidelity-reviewer` | Layout/Renderingレイヤー(改ページ計算・結合セル・フォントメトリクス・単位換算など)への変更直後。本プロダクトで最もリスクが高い領域専門のレビュー |
 | `test-writer` | 新規/変更実装にテストが不足している場合 |
-| `security-reviewer` | Excelファイル入力・帳票定義・出力パスを扱う変更、新規依存ライブラリ追加時。差分に閉じず`src/Utsushi.Parsing/OpenXml/`全体の未対応ループも横断確認する(過去に上限漏れが後追いで複数回見つかった経緯があるため) |
+| `security-reviewer` | Excelファイル入力・CLIの引数・出力パスを扱う変更、新規依存ライブラリ追加時。差分に閉じず`src/Utsushi.Parsing/OpenXml/`全体の未対応ループも横断確認する(過去に上限漏れが後追いで複数回見つかった経緯があるため) |
 | `spec-compliance-reviewer` | requirements/design/tasksの作成・更新時、実装完了後の仕様整合性確認(仕様↔実装のトレーサビリティ) |
 | `doc-reviewer` | `.kiro/steering/`・`.kiro/specs/`・`docs/`・`CLAUDE.md`等の追加・更新直後。ドキュメント間の矛盾、技術的記載の裏取り、参照切れ、体裁を確認 |
 
@@ -76,15 +76,14 @@ python3 tools/edge-case-samples/generate.py samples/edge-cases
 # ゴールデンファイルの期待値を更新する(差分は必ずレビューしてからコミット)
 UTSUSHI_UPDATE_GOLDEN=1 dotnet test
 
-# CLIで変換を試す
-dotnet run --project src/Utsushi.Cli -- \
-  --report invoice --input samples/reports/invoice/template.xlsx \
-  --output /tmp/invoice.pdf --definitions samples/reports \
-  --set CustomerName="株式会社サンプル 御中" --set InvoiceNo="INV-0001" --set TotalAmount="¥1,000"
+# CLIでテンプレートを診断する(未対応の要素・文字の収まらない箇所・フォントの代替・書式の近似(参考)。問題があれば終了コード1。
+# --allow-font-fallback を付けるとフォントの代替を問題として数えるため、フォントの無い環境では終了コード1になる)
+dotnet run --project src/Utsushi.Cli -- check samples/reports/invoice/template.xlsx --allow-font-fallback
 
-# 帳票定義なしで変換する(--report を省略。--set・--definitions は使えない。アクティブシートを変換し、未対応の要素は無視する)
+# CLIで変換を試す(パスはコマンドの直後に書く。アクティブシートを変換する)
 dotnet run --project src/Utsushi.Cli -- \
-  --input samples/reports/invoice/template.xlsx --output /tmp/no-definition.pdf --allow-font-fallback
+  convert samples/reports/invoice/template.xlsx /tmp/invoice.pdf --allow-font-fallback \
+  --text A3="株式会社サンプル 御中" --text F3="INV-0001" --number F12=1000
 ```
 
 > 開発環境に対象フォント(MS PGothic等)が無い場合、既定の厳格モードでは `FontNotAvailableException` になる。

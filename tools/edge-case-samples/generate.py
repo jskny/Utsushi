@@ -153,7 +153,7 @@ def _sheet_paths(src):
 
 
 def _patch_cell(xml, ref, value):
-    pattern = re.compile(r'<c r="%s"([^>]*)><f>(.*?)</f><v ?/>(?:</v>)?</c>' % re.escape(ref))
+    pattern = re.compile(r'<c r="%s"([^>]*)><f>(.*?)</f>(?:<v ?/>|<v></v>)</c>' % re.escape(ref))
     match = pattern.search(xml)
     if match is None:
         raise ValueError("数式セルが見つからない: " + ref)
@@ -317,7 +317,8 @@ def generate_sales_list(root):
     ws.merge_cells("A1:K1")
     put(ws, "A1", "売上一覧表", f=font(16, True), align=Alignment(horizontal="center", vertical="center"))
     put(ws, "A2", "(対象期間)", f=font(11, True))
-    put(ws, "J2", "(部署名)", align=Alignment(horizontal="right"))
+    # 差し込む部署名は縮小して全体を表示する(以前の帳票定義の overflow: shrink の代わり。excel2pdf-consolidation 要件6.2)
+    put(ws, "J2", "(部署名)", align=Alignment(horizontal="right", shrink_to_fit=True))
     ws.merge_cells("J2:K2")
 
     header_fill = PatternFill("solid", fgColor=Color(theme=8, tint=0.5999938962981048))
@@ -506,7 +507,9 @@ def generate_order_form(root):
     box_range(ws, "A3:D3", f=font(14, True))
     for c in ws["A3:D3"][0]:
         c.border = Border(bottom=Side(style="double", color="000000"))
-    put(ws, "A3", "(宛先)", f=font(14, True), fmt='@" 御中"', border=Border(bottom=Side(style="double")))
+    # 差し込む宛先は縮小して全体を表示する(以前の帳票定義の overflow: shrink の代わり。excel2pdf-consolidation 要件6.2)
+    put(ws, "A3", "(宛先)", f=font(14, True), fmt='@" 御中"', border=Border(bottom=Side(style="double")),
+        align=Alignment(shrink_to_fit=True))
 
     # 発注日(和暦)・注文番号
     put(ws, "F3", "発注日", align=Alignment(horizontal="distributed", indent=1))

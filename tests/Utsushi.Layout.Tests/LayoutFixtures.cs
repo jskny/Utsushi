@@ -46,18 +46,8 @@ namespace Utsushi.Layout.Tests
                 Array.Empty<DrawingObjectModel>());
         }
 
-        public static ReportDefinition Definition(
-            double maxDigitWidthPx = ReportDefinition.DefaultMaxDigitWidthPx,
-            CellRange? printAreaOverride = null,
-            IEnumerable<SubstitutionFieldDefinition>? fields = null) =>
-            new(
-                "test-report",
-                "テストシート",
-                (fields ?? Enumerable.Empty<SubstitutionFieldDefinition>()).ToList(),
-                ReportDefinition.DefaultToleranceMm,
-                UnsupportedElementPolicy.Ignore,
-                maxDigitWidthPx,
-                printAreaOverride);
+        public static ConversionSettings Settings(double maxDigitWidthPx = ConversionSettings.DefaultMaxDigitWidthPx) =>
+            new("test-report", "テストシート", maxDigitWidthPx);
 
         /// <summary>A4縦・余白ゼロのページ設定(印字可能領域の計算を単純化するため)。</summary>
         public static PageSetupModel NoMarginA4(

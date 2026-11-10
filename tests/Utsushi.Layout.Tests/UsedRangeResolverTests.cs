@@ -22,7 +22,7 @@ namespace Utsushi.Layout.Tests
     /// </para>
     /// <para>
     /// 前半は <see cref="UsedRangeResolver.GetOccupiedRange"/>・<see cref="UsedRangeResolver.Resolve"/> を直接、
-    /// 後半は <see cref="ReportLayoutEngine.Compute"/> 経由で、印刷範囲の優先順位(帳票定義の上書き &gt; Excelの印刷範囲 &gt;
+    /// 後半は <see cref="ReportLayoutEngine.Compute"/> 経由で、印刷範囲の優先順位(Excelの印刷範囲 &gt;
     /// 使用範囲)に組み込まれていることを確かめる。
     /// </para>
     /// </remarks>
@@ -208,7 +208,7 @@ namespace Utsushi.Layout.Tests
                 HiddenRows = new HashSet<int> { 3, 4, 5 },
             };
 
-            var page = Assert.Single(_engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+            var page = Assert.Single(_engine.Compute(ReportModel.Create(Settings(), sheet)).Pages);
 
             Assert.Equal((2, 9), page.ColumnRange);
             Assert.Equal((2, 7), page.RowRange);
@@ -371,7 +371,7 @@ namespace Utsushi.Layout.Tests
         {
             var sheet = SheetWithCells(3, 2, FixedShape("E10", 60.0, 30.0));
 
-            var page = Assert.Single(_engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+            var page = Assert.Single(_engine.Compute(ReportModel.Create(Settings(), sheet)).Pages);
 
             Assert.Equal((1, 11), page.RowRange);
             Assert.Equal((1, 6), page.ColumnRange);
@@ -386,7 +386,7 @@ namespace Utsushi.Layout.Tests
             // 以前は使用範囲がセルだけから決まり「印刷対象のセルがありません」(LayoutComputationException)になっていた。
             var sheet = EmptySheet(null, FixedShape("B3", 60.0, 30.0));
 
-            var page = Assert.Single(_engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+            var page = Assert.Single(_engine.Compute(ReportModel.Create(Settings(), sheet)).Pages);
 
             Assert.Equal((3, 4), page.RowRange);
             Assert.Equal((2, 3), page.ColumnRange);
@@ -402,7 +402,7 @@ namespace Utsushi.Layout.Tests
         {
             var sheet = EmptySheet(null, FixedImage("C2", 10.0, 10.0));
 
-            var page = Assert.Single(_engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+            var page = Assert.Single(_engine.Compute(ReportModel.Create(Settings(), sheet)).Pages);
 
             Assert.Equal((2, 2), page.RowRange);
             Assert.Equal((3, 3), page.ColumnRange);
@@ -413,20 +413,20 @@ namespace Utsushi.Layout.Tests
         public void セルも描画オブジェクトも無いシートは従来どおり印刷対象が無いエラーになる()
         {
             var ex = Assert.Throws<LayoutComputationException>(
-                () => _engine.Compute(ReportModel.Create(Definition(), EmptySheet())));
+                () => _engine.Compute(ReportModel.Create(Settings(), EmptySheet())));
 
             Assert.Contains("印刷対象のセルがありません", ex.Message, StringComparison.Ordinal);
         }
 
         [Theory]
-        // 帳票定義の最大数字幅, 期待する列の範囲(幅100ptの図形のみ)
+        // 変換の設定の最大数字幅, 期待する列の範囲(幅100ptの図形のみ)
         [InlineData(7.0, 2)]
         [InlineData(14.0, 1)]
-        public void 使用範囲の計算には帳票定義の最大数字幅が使われる(double maxDigitWidthPx, int expectedLastColumn)
+        public void 使用範囲の計算には変換の設定の最大数字幅が使われる(double maxDigitWidthPx, int expectedLastColumn)
         {
             var sheet = EmptySheet(null, FixedShape("A1", 100.0, 10.0));
 
-            var page = Assert.Single(_engine.Compute(ReportModel.Create(Definition(maxDigitWidthPx), sheet)).Pages);
+            var page = Assert.Single(_engine.Compute(ReportModel.Create(Settings(maxDigitWidthPx), sheet)).Pages);
 
             Assert.Equal((1, expectedLastColumn), page.ColumnRange);
         }
@@ -437,35 +437,10 @@ namespace Utsushi.Layout.Tests
             var pageSetup = NoMarginA4(printAreas: new[] { CellRange.Parse("A1:B3") });
             var sheet = SheetWithCells(3, 2, FixedShape("E10", 60.0, 30.0)) with { PageSetup = pageSetup };
 
-            var page = Assert.Single(_engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+            var page = Assert.Single(_engine.Compute(ReportModel.Create(Settings(), sheet)).Pages);
 
             Assert.Equal((1, 3), page.RowRange);
             Assert.Equal((1, 2), page.ColumnRange);
-        }
-
-        [Fact]
-        public void 帳票定義のprintAreaがあれば描画オブジェクトの範囲は使われない()
-        {
-            var sheet = SheetWithCells(3, 2, FixedShape("E10", 60.0, 30.0));
-
-            var page = Assert.Single(
-                _engine.Compute(ReportModel.Create(Definition(printAreaOverride: CellRange.Parse("A1:B2")), sheet)).Pages);
-
-            Assert.Equal((1, 2), page.RowRange);
-            Assert.Equal((1, 2), page.ColumnRange);
-        }
-
-        [Fact]
-        public void 帳票定義のprintAreaはExcelの印刷範囲より優先され描画オブジェクトの範囲も使われない()
-        {
-            var pageSetup = NoMarginA4(printAreas: new[] { CellRange.Parse("A1:B3") });
-            var sheet = SheetWithCells(3, 2, FixedShape("E10", 60.0, 30.0)) with { PageSetup = pageSetup };
-
-            var page = Assert.Single(
-                _engine.Compute(ReportModel.Create(Definition(printAreaOverride: CellRange.Parse("A1:A1")), sheet)).Pages);
-
-            Assert.Equal((1, 1), page.RowRange);
-            Assert.Equal((1, 1), page.ColumnRange);
         }
 
         [Fact]

@@ -22,12 +22,12 @@ namespace Utsushi.Substitution.Tests
         [InlineData("\uFEFF株式会社", "U+FEFF")] // BOM
         public void 改行以外の制御文字や不可視の書式文字を含む値はエラーになる(string value, string expectedCodePoint)
         {
-            var report = Report(Definition(Field("InvoiceNo", "C3")), Sheet(("C3", "x", null)));
+            var report = Report(Settings(), Sheet(("C3", "x", null)));
 
             var ex = Assert.Throws<InvalidSubstitutionValueException>(
-                () => _substitutor.Apply(report, new Dictionary<string, string> { ["InvoiceNo"] = value }));
+                () => _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["C3"] = value }));
 
-            Assert.Equal("InvoiceNo", ex.Target);
+            Assert.Equal("C3", ex.Target);
             Assert.Equal(CellAddress.Parse("C3"), ex.CellAddress);
             Assert.Equal(ProcessingStage.Substitution, ex.Stage);
             Assert.Contains(expectedCodePoint, ex.Message);
@@ -41,18 +41,18 @@ namespace Utsushi.Substitution.Tests
             // 孤立サロゲートを文字列リテラルのままInlineDataに渡すと、テストデータの直列化で
             // U+FFFDに置き換わってしまうため、UTF-16の単位の配列から組み立てる。
             var value = new string(System.Array.ConvertAll(chars, c => (char)c));
-            var report = Report(Definition(Field("Name", "A1")), Sheet(("A1", "x", null)));
+            var report = Report(Settings(), Sheet(("A1", "x", null)));
 
             Assert.Throws<InvalidSubstitutionValueException>(
-                () => _substitutor.Apply(report, new Dictionary<string, string> { ["Name"] = value }));
+                () => _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = value }));
         }
 
         [Fact]
         public void サロゲートペアの文字は受け付ける()
         {
-            var report = Report(Definition(Field("Name", "A1")), Sheet(("A1", "x", null)));
+            var report = Report(Settings(), Sheet(("A1", "x", null)));
 
-            var result = _substitutor.Apply(report, new Dictionary<string, string> { ["Name"] = "𠮷野 様" });
+            var result = _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = "𠮷野 様" });
 
             Assert.Equal("𠮷野 様", result.Sheet.GetCell(CellAddress.Parse("A1"))!.DisplayValue);
         }
@@ -60,12 +60,12 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void nullの値はエラーになる()
         {
-            var report = Report(Definition(Field("Name", "A1")), Sheet(("A1", "x", null)));
+            var report = Report(Settings(), Sheet(("A1", "x", null)));
 
             var ex = Assert.Throws<InvalidSubstitutionValueException>(
-                () => _substitutor.Apply(report, new Dictionary<string, string> { ["Name"] = null! }));
+                () => _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = null! }));
 
-            Assert.Equal("Name", ex.Target);
+            Assert.Equal("A1", ex.Target);
         }
 
         [Theory]
@@ -74,46 +74,44 @@ namespace Utsushi.Substitution.Tests
         [InlineData("東京都千代田区\n丸の内1-1-1")]
         public void 改行コードはLFに統一される(string value)
         {
-            var report = Report(Definition(Field("Address", "A1")), Sheet(("A1", "x", null)));
+            var report = Report(Settings(), Sheet(("A1", "x", null)));
 
-            var result = _substitutor.Apply(report, new Dictionary<string, string> { ["Address"] = value });
+            var result = _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = value });
 
             Assert.Equal("東京都千代田区\n丸の内1-1-1", result.Sheet.GetCell(CellAddress.Parse("A1"))!.DisplayValue);
         }
 
-        [Theory]
-        [InlineData("")]
-        [InlineData("   ")]
-        [InlineData("　")]
-        public void 必須キーの値が空または空白のみならエラーになる(string value)
-        {
-            var report = Report(Definition(Field("CustomerName", "A1", required: true)), Sheet(("A1", "x", null)));
-
-            var ex = Assert.Throws<RequiredSubstitutionValueMissingException>(
-                () => _substitutor.Apply(report, new Dictionary<string, string> { ["CustomerName"] = value }));
-
-            Assert.Equal("CustomerName", ex.Key);
-            Assert.Contains("空", ex.Message);
-        }
-
         [Fact]
-        public void 任意キーに空文字を渡すとテンプレートの値を消せる()
+        public void 空文字を書き込むとテンプレートの値を消せる()
         {
-            var report = Report(Definition(Field("Remarks", "A1")), Sheet(("A1", "テンプレートの値", null)));
+            var report = Report(Settings(), Sheet(("A1", "テンプレートの値", null)));
 
-            var result = _substitutor.Apply(report, new Dictionary<string, string> { ["Remarks"] = string.Empty });
+            var result = _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = string.Empty });
 
             Assert.Equal(string.Empty, result.Sheet.GetCell(CellAddress.Parse("A1"))!.DisplayValue);
             Assert.DoesNotContain(CellAddress.Parse("A1"), result.SubstitutedCells);
         }
 
         [Fact]
+        public void 書き込んだセルを空文字で上書きすると書き込み済みの記録から外れる()
+        {
+            // 空文字は何も出力しないため、印刷範囲外・非表示の検出(要件2.13)の対象から外す(MarkSubstituted の削除の経路)。
+            var report = Report(Settings(), Sheet(("A1", "x", null)));
+            var written = _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = "値" });
+            Assert.Contains(CellAddress.Parse("A1"), written.SubstitutedCells);
+
+            var cleared = _substitutor.ApplyCellOverrides(written, new Dictionary<string, string> { ["A1"] = string.Empty });
+
+            Assert.DoesNotContain(CellAddress.Parse("A1"), cleared.SubstitutedCells);
+        }
+
+        [Fact]
         public void 空でない値を差し込んだセルだけが差し込み済みとして記録される()
         {
-            var definition = Definition(Field("A", "A1"), Field("B", "B1"), Field("C", "C1"));
+            var definition = Settings();
             var report = Report(definition, Sheet(("A1", "x", null), ("B1", "y", null), ("C1", "z", null)));
 
-            var result = _substitutor.Apply(report, new Dictionary<string, string> { ["A"] = "値", ["B"] = string.Empty });
+            var result = _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = "値", ["B1"] = string.Empty });
 
             Assert.Contains(CellAddress.Parse("A1"), result.SubstitutedCells);
             Assert.DoesNotContain(CellAddress.Parse("B1"), result.SubstitutedCells);
@@ -123,7 +121,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void セル番地直接指定でも制御文字はエラーになる()
         {
-            var report = Report(Definition(), Sheet(("B5", "x", null)));
+            var report = Report(Settings(), Sheet(("B5", "x", null)));
 
             var ex = Assert.Throws<InvalidSubstitutionValueException>(
                 () => _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["B5"] = "a\tb" }));
@@ -135,7 +133,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void セル番地直接指定でも改行コードが統一され差し込み済みとして記録される()
         {
-            var report = Report(Definition(), Sheet(("B5", "x", null)));
+            var report = Report(Settings(), Sheet(("B5", "x", null)));
 
             var result = _substitutor.ApplyCellOverrides(
                 report, new Dictionary<string, string> { ["B5"] = "1行目\r\n2行目" });
@@ -144,38 +142,14 @@ namespace Utsushi.Substitution.Tests
             Assert.Contains(CellAddress.Parse("B5"), result.SubstitutedCells);
         }
 
-        [Fact]
-        public void セル番地直接指定で空文字にすると差し込み済みの記録から外れる()
-        {
-            var report = Report(Definition(Field("Name", "A1")), Sheet(("A1", "x", null)));
-            var applied = _substitutor.Apply(report, new Dictionary<string, string> { ["Name"] = "値" });
-
-            var result = _substitutor.ApplyCellOverrides(applied, new Dictionary<string, string> { ["A1"] = string.Empty });
-
-            Assert.DoesNotContain(CellAddress.Parse("A1"), result.SubstitutedCells);
-        }
-
-        [Theory]
-        [InlineData("")]
-        [InlineData("  ")]
-        public void 必須キーのセルをセル番地直接指定で空にするとエラーになる(string value)
-        {
-            var report = Report(Definition(Field("CustomerName", "A3", required: true)), Sheet(("A3", "x", null)));
-
-            var ex = Assert.Throws<RequiredSubstitutionValueMissingException>(
-                () => _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A3"] = value }));
-
-            Assert.Equal("CustomerName", ex.Key);
-        }
-
         [Theory]
         [InlineData("東京都\u2028丸の内")] // 行区切り
         [InlineData("東京都\u2029丸の内")] // 段落区切り
         public void Unicodeの行区切りと段落区切りもLFに統一される(string value)
         {
-            var report = Report(Definition(Field("Address", "A1")), Sheet(("A1", "x", null)));
+            var report = Report(Settings(), Sheet(("A1", "x", null)));
 
-            var result = _substitutor.Apply(report, new Dictionary<string, string> { ["Address"] = value });
+            var result = _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = value });
 
             Assert.Equal("東京都\n丸の内", result.Sheet.GetCell(CellAddress.Parse("A1"))!.DisplayValue);
         }
@@ -183,11 +157,11 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void 不正な値があるときは他のセルも書き換えない()
         {
-            var definition = Definition(Field("A", "A1"), Field("B", "B1"));
+            var definition = Settings();
             var report = Report(definition, Sheet(("A1", "もとのA", null), ("B1", "もとのB", null)));
 
             Assert.Throws<InvalidSubstitutionValueException>(
-                () => _substitutor.Apply(report, new Dictionary<string, string> { ["A"] = "正常", ["B"] = "不正\t" }));
+                () => _substitutor.ApplyCellOverrides(report, new Dictionary<string, string> { ["A1"] = "正常", ["B1"] = "不正\t" }));
 
             Assert.Equal("もとのA", report.Sheet.GetCell(CellAddress.Parse("A1"))!.DisplayValue);
         }

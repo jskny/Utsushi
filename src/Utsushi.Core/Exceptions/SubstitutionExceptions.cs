@@ -1,42 +1,7 @@
 namespace Utsushi.Core.Exceptions
 {
     /// <summary>
-    /// 帳票定義に存在しない置換キーが指定された。要件2.3。
-    /// </summary>
-    public sealed class SubstitutionKeyNotFoundException : UtsushiException
-    {
-        public SubstitutionKeyNotFoundException(string key, string message, string? reportCode = null, string? sheetName = null)
-            : base(message, ProcessingStage.Substitution, reportCode, sheetName)
-        {
-            Key = key;
-        }
-
-        /// <summary>帳票定義に存在しなかった置換キー。</summary>
-        public string Key { get; }
-    }
-
-    /// <summary>
-    /// 帳票定義が必須とした置換キーに対応する値が渡されていない。要件2.4。
-    /// </summary>
-    public sealed class RequiredSubstitutionValueMissingException : UtsushiException
-    {
-        public RequiredSubstitutionValueMissingException(
-            string key,
-            string message,
-            string? reportCode = null,
-            string? sheetName = null,
-            CellAddress? cellAddress = null)
-            : base(message, ProcessingStage.Substitution, reportCode, sheetName, cellAddress)
-        {
-            Key = key;
-        }
-
-        /// <summary>値が渡されなかった必須の置換キー。</summary>
-        public string Key { get; }
-    }
-
-    /// <summary>
-    /// 置換値そのものが不正(<c>null</c>、改行以外の制御文字、対になっていないサロゲートを含む)。要件2.10。
+    /// 書き込む値そのものが不正(改行以外の制御文字・不可視の書式文字・対になっていないサロゲートを含む、長すぎる、件数が多すぎる)。要件2.10。
     /// </summary>
     /// <remarks>
     /// 制御文字はフォントに字形が無く、PDF上で豆腐(□)や空白として描画される。
@@ -47,20 +12,20 @@ namespace Utsushi.Core.Exceptions
         public InvalidSubstitutionValueException(
             string target,
             string message,
-            string? reportCode = null,
+            string? documentName = null,
             string? sheetName = null,
             CellAddress? cellAddress = null)
-            : base(message, ProcessingStage.Substitution, reportCode, sheetName, cellAddress)
+            : base(message, ProcessingStage.Substitution, documentName, sheetName, cellAddress)
         {
             Target = target;
         }
 
-        /// <summary>不正な値が渡された置換キー、またはセル番地直接指定のセル番地の文字列。</summary>
+        /// <summary>不正な値を書き込んだセル番地の文字列(数の上限を超えた場合は引数の名前)。</summary>
         public string Target { get; }
     }
 
     /// <summary>
-    /// セル番地を直接指定した上書き(帳票定義の置換キーを経由しない経路)で、
+    /// セル番地を指定した書き込み(<c>SetText</c>・<c>SetValue</c>)で、
     /// 指定された文字列がA1形式のセル番地として解釈できない。要件2.8。
     /// </summary>
     public sealed class InvalidCellOverrideAddressException : UtsushiException
@@ -68,9 +33,9 @@ namespace Utsushi.Core.Exceptions
         public InvalidCellOverrideAddressException(
             string address,
             string message,
-            string? reportCode = null,
+            string? documentName = null,
             string? sheetName = null)
-            : base(message, ProcessingStage.Substitution, reportCode, sheetName)
+            : base(message, ProcessingStage.Substitution, documentName, sheetName)
         {
             Address = address;
         }
@@ -93,9 +58,9 @@ namespace Utsushi.Core.Exceptions
             CellAddress address,
             CellAddress anchorAddress,
             string message,
-            string? reportCode = null,
+            string? documentName = null,
             string? sheetName = null)
-            : base(message, ProcessingStage.Substitution, reportCode, sheetName, address)
+            : base(message, ProcessingStage.Substitution, documentName, sheetName, address)
         {
             AnchorAddress = anchorAddress;
         }

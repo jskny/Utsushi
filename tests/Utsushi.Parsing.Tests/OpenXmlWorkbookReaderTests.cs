@@ -93,7 +93,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 結合セル範囲の数が上限を超える場合はunsupportedElementsがignoreなら上限までしか読み取らない()
+        public void 結合セル範囲の数が上限を超える場合は読み込みでは上限までしか読み取らない()
         {
             // security-reviewer指摘: mergeCellの範囲サイズだけでなく個数にも上限を設ける
             // (Layoutレイヤーの結合セル矩形統合・罫線合成が結合範囲の個数に比例するため)。
@@ -111,18 +111,17 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 結合セル範囲の数が上限を超える場合はunsupportedElementsがerrorなら例外になる()
+        public void 結合セル範囲の数が上限を超える場合は未対応要素として記録する()
         {
             var path = MergedRangeWorkbookFixtures.CreateWithManyMergedRanges(
                 OpenXmlWorkbookReader.MaxMergedRangesPerSheet + 5);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("TooManyMergedRanges", ex.ElementKind);
-                Assert.Equal(ProcessingStage.Parsing, ex.Stage);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.LimitExceeded, "TooManyMergedRanges");
             }
             finally
             {
@@ -215,10 +214,10 @@ namespace Utsushi.Parsing.Tests
             var ex = Assert.Throws<InvalidExcelFileException>(
                 () => _reader.ReadFile(
                     TestPaths.SampleTemplate("invoice"),
-                    new WorkbookReadOptions(SheetNameFilter: "存在しないシート", ReportCode: "invoice")));
+                    new WorkbookReadOptions(SheetNameFilter: "存在しないシート", DocumentName: "invoice")));
 
             Assert.Equal(InvalidExcelFileReason.NoWorksheet, ex.Reason);
-            Assert.Equal("invoice", ex.ReportCode);
+            Assert.Equal("invoice", ex.DocumentName);
         }
 
         [Fact]

@@ -19,14 +19,14 @@ namespace Utsushi.Layout
         /// </summary>
         internal const int MaxStyledBlankPositions = 200_000;
 
-        private readonly string _reportCode;
+        private readonly string _documentName;
         private readonly string _sheetName;
         private readonly int _limit;
         private int _count;
 
-        public StyledBlankPositionCounter(string reportCode, string sheetName, int limit = MaxStyledBlankPositions)
+        public StyledBlankPositionCounter(string documentName, string sheetName, int limit = MaxStyledBlankPositions)
         {
-            _reportCode = reportCode;
+            _documentName = documentName;
             _sheetName = sheetName;
             _limit = limit;
         }
@@ -40,7 +40,7 @@ namespace Utsushi.Layout
                 throw new LayoutComputationException(
                     $"行全体・列全体の書式で塗りつぶし・罫線を描く、セルの無い位置が上限({_limit:N0}か所)を超えました。"
                     + "印刷範囲を狭めるか、行全体・列全体に設定した書式を見直してください。",
-                    _reportCode,
+                    _documentName,
                     _sheetName);
             }
         }

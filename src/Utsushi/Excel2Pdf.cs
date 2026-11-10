@@ -10,12 +10,9 @@ using Utsushi.Rendering;
 namespace Utsushi
 {
     /// <summary>
-    /// Excel ファイルのセルに値を書き込み、PDF として保存する簡易API(要件14)。
+    /// Excel ファイルのセルに値を書き込み、PDF として保存する(要件14、excel2pdf-consolidation 要件1)。Utsushi の唯一の入口。
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// <see cref="ReportPdfConverter"/> の上に置いた薄い入口で、変換の処理・検証・例外は同じものを使う。
-    /// </para>
     /// <code>
     /// using var pdf = new Utsushi.Excel2Pdf("input.xlsx");
     /// pdf.SetText("C2", "Hello World");
@@ -23,8 +20,7 @@ namespace Utsushi
     /// pdf.Save("output.pdf");
     /// </code>
     /// <para>
-    /// 帳票コードを指定しないコンストラクタは帳票定義なしの変換(要件12。アクティブシートを変換する)、
-    /// 帳票コードと帳票定義のルートを指定するコンストラクタは帳票定義ありの変換(要件1〜11)を使う。
+    /// ブックのアクティブシート(または <see cref="Excel2PdfOptions.SheetName"/>)を変換する。
     /// </para>
     /// <para>
     /// パスで作った場合、コンストラクタはファイルを開かない。<see cref="Save(string)"/> のたびに入力ファイルを読み直すため、
@@ -32,7 +28,7 @@ namespace Utsushi
     /// </para>
     /// <para>
     /// スレッドセーフではない。設定した値をインスタンスに溜めるため、1つのインスタンスを複数スレッド(ASP.NET Core の複数のリクエストなど)
-    /// から使うと値が混ざる。リクエスト(帳票1件)ごとに作り、スレッドセーフな <see cref="ReportPdfConverter"/> を1つ共有して渡す。
+    /// から使うと値が混ざる。リクエスト(文書1件)ごとに作り、スレッドセーフな <see cref="Excel2PdfEngine"/> を1つ共有して渡す。
     /// </para>
     /// </remarks>
     public sealed class Excel2Pdf : IDisposable
@@ -40,203 +36,132 @@ namespace Utsushi
         /// <summary>Excel の1900年日付システムで表せる最も古い日付。</summary>
         private static readonly DateTime MinimumDate = new(1900, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
 
-        private readonly ReportPdfConverter _converter;
-        private readonly bool _ownsConverter;
+        /// <summary>エンジン(渡されたもの、または自身で作ったもの)。</summary>
+        private readonly Excel2PdfEngine _engine;
+
+        /// <summary>エンジンを自身で作ったかどうか(<see cref="Dispose"/> で解放する)。</summary>
+        private readonly bool _ownsEngine;
         private readonly Excel2PdfOptions _options;
         private readonly TemplateSource _source;
 
         /// <summary>正規化したセル番地 → 設定した値(<see cref="string"/> または <see cref="double"/>)。</summary>
         private readonly Dictionary<CellAddress, object> _cells = new();
 
-        /// <summary>置換キー → 値(帳票定義ありのときだけ。<see cref="SetField"/>)。</summary>
-        private readonly Dictionary<string, string> _fields = new(StringComparer.Ordinal);
-
         private bool _disposed;
 
-        /// <summary>帳票定義を使わずに変換する(要件12)。ブックのアクティブシート(または <see cref="Excel2PdfOptions.SheetName"/>)を変換する。</summary>
+        /// <summary>Excel ファイルのパスから作る。ブックのアクティブシート(または <see cref="Excel2PdfOptions.SheetName"/>)を変換する。</summary>
         /// <param name="xlsxPath">入力の Excel ファイルのパス。</param>
-        /// <param name="options">フォント・PDF出力などの設定。null の場合は既定(フォントは厳格モード)。</param>
+        /// <param name="options">フォント・PDF出力などの設定。null の場合は既定(フォントは厳格モード、未対応要素はエラー)。</param>
         public Excel2Pdf(string xlsxPath, Excel2PdfOptions? options = null)
-            : this(_ => TemplateSource.FromPath(xlsxPath), reportCode: null, options, converter: null, reportDefinitionRoot: null)
-        {
-        }
-
-        /// <summary>登録済みの帳票定義を使って変換する(要件1〜11)。</summary>
-        /// <param name="xlsxPath">入力の Excel ファイル(テンプレート)のパス。</param>
-        /// <param name="reportCode">帳票コード(<c>definition.json</c> の <c>reportCode</c>)。</param>
-        /// <param name="reportDefinitionRoot">帳票定義のルートディレクトリ(例: <c>samples/reports</c>)。</param>
-        /// <param name="options">フォント・PDF出力などの設定。null の場合は既定(フォントは厳格モード)。</param>
-        public Excel2Pdf(string xlsxPath, string reportCode, string reportDefinitionRoot, Excel2PdfOptions? options = null)
-            : this(
-                _ => TemplateSource.FromPath(xlsxPath),
-                reportCode ?? throw new ArgumentNullException(nameof(reportCode)),
-                options,
-                converter: null,
-                reportDefinitionRoot ?? throw new ArgumentNullException(nameof(reportDefinitionRoot)))
+            : this(_ => TemplateSource.FromPath(xlsxPath), options, engine: null)
         {
         }
 
         /// <summary>
-        /// 呼び出し元が作ったコンバータを使う。大量に発行する場合に、フォントの解決結果を使い回すために使う。
-        /// コンバータは <see cref="Dispose"/> で解放しない(要件14.9)。
-        /// </summary>
-        /// <param name="xlsxPath">入力の Excel ファイルのパス。</param>
-        /// <param name="converter">変換に使うコンバータ。</param>
-        /// <param name="reportCode">
-        /// 帳票コード。null の場合は帳票定義なしの変換。帳票定義ありで使う場合は、帳票定義のルートを指定して作ったコンバータ
-        /// (<see cref="ReportPdfConverter.CreateDefault(string, FontResolverOptions?, PdfRenderOptions?)"/>)を渡す。
-        /// </param>
-        /// <param name="options">
-        /// 帳票定義なしの変換の文書名・最大数字幅・シート名。フォント・PDF出力の設定(<see cref="Excel2PdfOptions.Fonts"/>・
-        /// <see cref="Excel2PdfOptions.Render"/>)はコンバータのものを使うため、指定するとエラー。
-        /// </param>
-        public Excel2Pdf(string xlsxPath, ReportPdfConverter converter, string? reportCode = null, Excel2PdfOptions? options = null)
-            : this(
-                _ => TemplateSource.FromPath(xlsxPath),
-                reportCode,
-                options,
-                converter ?? throw new ArgumentNullException(nameof(converter)),
-                reportDefinitionRoot: null)
-        {
-        }
-
-        /// <summary>
-        /// Excel ファイルの内容(バイト列)から、帳票定義を使わずに変換する(要件14.10)。データベースや埋め込みリソースに
-        /// 置いたテンプレートに使う。内容は作成の時点で複製するため、後で配列を書き換えても影響しない。
+        /// Excel ファイルの内容(バイト列)から作る(要件14.10)。データベースや埋め込みリソースに置いたテンプレートに使う。
+        /// 内容は作成の時点で複製するため、後で配列を書き換えても影響しない。
         /// </summary>
         /// <param name="xlsxContent">Excel ファイルの内容。100MB まで。</param>
-        /// <param name="options">設定。帳票定義なしの文書名を省略すると空文字列になる。</param>
+        /// <param name="options">設定。文書名を省略すると空文字列になる。</param>
         /// <exception cref="InvalidExcelFileException">内容が上限(100MB)を超える場合(<c>Reason=TooLarge</c>)。</exception>
         public Excel2Pdf(byte[] xlsxContent, Excel2PdfOptions? options = null)
-            : this(label => TemplateSource.FromBytes(xlsxContent, label), reportCode: null, options, converter: null, reportDefinitionRoot: null)
-        {
-        }
-
-        /// <summary>Excel ファイルの内容(バイト列)から、登録済みの帳票定義を使って変換する(要件14.10)。</summary>
-        public Excel2Pdf(byte[] xlsxContent, string reportCode, string reportDefinitionRoot, Excel2PdfOptions? options = null)
-            : this(
-                label => TemplateSource.FromBytes(xlsxContent, label),
-                reportCode ?? throw new ArgumentNullException(nameof(reportCode)),
-                options,
-                converter: null,
-                reportDefinitionRoot ?? throw new ArgumentNullException(nameof(reportDefinitionRoot)))
-        {
-        }
-
-        /// <summary>Excel ファイルの内容(バイト列)から、呼び出し元が作ったコンバータで変換する(要件14.10)。</summary>
-        public Excel2Pdf(byte[] xlsxContent, ReportPdfConverter converter, string? reportCode = null, Excel2PdfOptions? options = null)
-            : this(
-                label => TemplateSource.FromBytes(xlsxContent, label),
-                reportCode,
-                options,
-                converter ?? throw new ArgumentNullException(nameof(converter)),
-                reportDefinitionRoot: null)
+            : this(label => TemplateSource.FromBytes(xlsxContent, label), options, engine: null)
         {
         }
 
         /// <summary>
-        /// Excel ファイルのストリームから、帳票定義を使わずに変換する(要件14.10)。ストリームは作成の時点で最後まで読み、閉じない
-        /// (呼び出し元で閉じる)。
+        /// Excel ファイルのストリームから作る(要件14.10)。ストリームは作成の時点で最後まで読み、閉じない(呼び出し元で閉じる)。
         /// </summary>
         /// <param name="xlsxStream">Excel ファイルのストリーム。現在位置から最後まで読む。100MB まで。</param>
-        /// <param name="options">設定。帳票定義なしの文書名を省略すると空文字列になる。</param>
+        /// <param name="options">設定。文書名を省略すると空文字列になる。</param>
         /// <exception cref="InvalidExcelFileException">内容が上限(100MB)を超える場合(<c>Reason=TooLarge</c>)。</exception>
         public Excel2Pdf(Stream xlsxStream, Excel2PdfOptions? options = null)
-            : this(label => TemplateSource.FromStream(xlsxStream, label), reportCode: null, options, converter: null, reportDefinitionRoot: null)
+            : this(label => TemplateSource.FromStream(xlsxStream, label), options, engine: null)
         {
         }
 
-        /// <summary>Excel ファイルのストリームから、登録済みの帳票定義を使って変換する(要件14.10)。</summary>
-        public Excel2Pdf(Stream xlsxStream, string reportCode, string reportDefinitionRoot, Excel2PdfOptions? options = null)
-            : this(
-                label => TemplateSource.FromStream(xlsxStream, label),
-                reportCode ?? throw new ArgumentNullException(nameof(reportCode)),
-                options,
-                converter: null,
-                reportDefinitionRoot ?? throw new ArgumentNullException(nameof(reportDefinitionRoot)))
+        /// <summary>
+        /// 呼び出し元が作ったエンジンを使う(excel2pdf-consolidation 要件1.2)。大量に発行する場合・サーバーで使う場合に、
+        /// フォントの解決結果を使い回すために使う。エンジンは <see cref="Dispose"/> で解放しない。
+        /// </summary>
+        /// <param name="xlsxPath">入力の Excel ファイルのパス。</param>
+        /// <param name="engine">変換に使うエンジン。</param>
+        /// <param name="options">
+        /// 文書名・最大数字幅・シート名・未対応要素の扱い。フォント・PDF出力の設定(<see cref="Excel2PdfOptions.Fonts"/>・
+        /// <see cref="Excel2PdfOptions.Render"/>)はエンジンのものを使うため、指定するとエラー。
+        /// </param>
+        public Excel2Pdf(string xlsxPath, Excel2PdfEngine engine, Excel2PdfOptions? options = null)
+            : this(_ => TemplateSource.FromPath(xlsxPath), options, engine ?? throw new ArgumentNullException(nameof(engine)))
         {
         }
 
-        /// <summary>Excel ファイルのストリームから、呼び出し元が作ったコンバータで変換する(要件14.10)。</summary>
-        public Excel2Pdf(Stream xlsxStream, ReportPdfConverter converter, string? reportCode = null, Excel2PdfOptions? options = null)
-            : this(
-                label => TemplateSource.FromStream(xlsxStream, label),
-                reportCode,
-                options,
-                converter ?? throw new ArgumentNullException(nameof(converter)),
-                reportDefinitionRoot: null)
+        /// <summary>Excel ファイルの内容(バイト列)から、呼び出し元が作ったエンジンで変換する。</summary>
+        public Excel2Pdf(byte[] xlsxContent, Excel2PdfEngine engine, Excel2PdfOptions? options = null)
+            : this(label => TemplateSource.FromBytes(xlsxContent, label), options, engine ?? throw new ArgumentNullException(nameof(engine)))
+        {
+        }
+
+        /// <summary>Excel ファイルのストリームから、呼び出し元が作ったエンジンで変換する。ストリームは作成の時点で最後まで読み、閉じない。</summary>
+        public Excel2Pdf(Stream xlsxStream, Excel2PdfEngine engine, Excel2PdfOptions? options = null)
+            : this(label => TemplateSource.FromStream(xlsxStream, label), options, engine ?? throw new ArgumentNullException(nameof(engine)))
         {
         }
 
         /// <param name="createSource">
-        /// 入力を準備する(帳票コード・文書名を受け取る)。ストリームを読み始める前に引数を検証し終えるよう(要件6.14)、
+        /// 入力を準備する(文書名を受け取る)。ストリームを読み始める前に引数を検証し終えるよう(要件6.14)、
         /// ほかの引数の検証の後で呼ぶ。
         /// </param>
-        private Excel2Pdf(
-            Func<string?, TemplateSource> createSource,
-            string? reportCode,
-            Excel2PdfOptions? options,
-            ReportPdfConverter? converter,
-            string? reportDefinitionRoot)
+        /// <param name="options">設定。</param>
+        /// <param name="engine">渡されたエンジン。null なら自身で作る。</param>
+        private Excel2Pdf(Func<string?, TemplateSource> createSource, Excel2PdfOptions? options, Excel2PdfEngine? engine)
         {
             _options = options ?? new Excel2PdfOptions();
-            ReportPdfConverter.ValidateMaxDigitWidth(_options.MaxDigitWidthPx);
-            if (reportCode is not null && _options.MaxDigitWidthPx is not null)
-            {
-                throw new ArgumentException(
-                    "帳票定義ありの変換では、最大数字幅は帳票定義の maxDigitWidthPx を使います。"
-                        + $"{nameof(Excel2PdfOptions.MaxDigitWidthPx)} は指定できません。",
-                    nameof(options));
-            }
-
-            if (reportCode is not null && _options.SheetName is not null)
-            {
-                throw new ArgumentException(
-                    "帳票定義ありの変換では、シートは帳票定義の sheetName で決まります。"
-                        + $"{nameof(Excel2PdfOptions.SheetName)} は指定できません。",
-                    nameof(options));
-            }
+            ConversionPipeline.ValidateMaxDigitWidth(_options.MaxDigitWidthPx);
 
             if (_options.SheetName is not null && string.IsNullOrWhiteSpace(_options.SheetName))
             {
                 throw new ArgumentException("シート名が空です。アクティブシートを変換する場合は null にしてください。", nameof(options));
             }
 
-            if (reportCode is not null && string.IsNullOrWhiteSpace(reportCode))
-            {
-                throw new ArgumentException("帳票コードが空です。帳票定義なしで変換する場合は null を渡してください。", nameof(reportCode));
-            }
-
-            if (converter is not null && (_options.Fonts is not null || _options.Render is not null))
+            // 規則に合わない名前はどのブックのシートにも一致しない。エラー情報・ログに改行などを差し込ませないため、作る時点で拒否する。
+            if (_options.SheetName is not null && !DiagnosticText.IsValidSheetName(_options.SheetName))
             {
                 throw new ArgumentException(
-                    $"コンバータを渡す場合、フォント・PDF出力の設定はコンバータのものを使います。"
+                    "シート名が Excel のシート名として不正です(31文字を超える、または : \\ / ? * [ ] ・制御文字を含む)。", nameof(options));
+            }
+
+            if (_options.DocumentName is not null && !DiagnosticText.IsValidDocumentName(_options.DocumentName))
+            {
+                throw new ArgumentException(
+                    $"文書名に制御文字・書式文字・行区切りが含まれるか、{DiagnosticText.MaxDocumentNameLength}文字を超えています。", nameof(options));
+            }
+
+            if (engine is not null && (_options.Fonts is not null || _options.Render is not null))
+            {
+                throw new ArgumentException(
+                    $"エンジンを渡す場合、フォント・PDF出力の設定はエンジンのものを使います。"
                         + $"{nameof(Excel2PdfOptions.Fonts)}・{nameof(Excel2PdfOptions.Render)} は指定できません。",
                     nameof(options));
             }
 
-            ReportCode = reportCode;
-            _source = createSource(reportCode ?? _options.DocumentName);
+            engine?.ThrowIfDisposed();
+            _source = createSource(_options.DocumentName);
 
-            if (converter is not null)
+            if (engine is not null)
             {
-                _converter = converter;
-                _ownsConverter = false;
+                _engine = engine;
+                _ownsEngine = false;
             }
             else
             {
-                _converter = reportDefinitionRoot is null
-                    ? ReportPdfConverter.CreateDefault(_options.Fonts, _options.Render)
-                    : ReportPdfConverter.CreateDefault(reportDefinitionRoot, _options.Fonts, _options.Render);
-                _ownsConverter = true;
+                // 自身でエンジンを作る(診断でフォントの代替を問い合わせるため。design.md 9)。
+                _engine = Excel2PdfEngine.Create(_options.Fonts, _options.Render);
+                _ownsEngine = true;
             }
         }
 
         /// <summary>入力の Excel ファイルのパス。バイト列・ストリームから作った場合は null。</summary>
         public string? XlsxPath => _source.Path;
-
-        /// <summary>帳票コード。帳票定義なしの変換では null。</summary>
-        public string? ReportCode { get; }
 
         /// <summary>
         /// セルに文字列を設定する(要件14.2)。同じセルに何度設定しても、最後に設定した値を使う。
@@ -352,51 +277,20 @@ namespace Utsushi
         }
 
         /// <summary>
-        /// 置換キーに値を設定する(帳票定義ありのときだけ。要件14.7)。置換キーによる置換(要件2.1〜2.6)として扱い、
-        /// 帳票定義の必須キー・はみ出し時の挙動(<c>overflow</c>)が効く。
-        /// </summary>
-        /// <param name="key">置換キー(<c>substitutionFields[].key</c>)。</param>
-        /// <param name="text">文字列。</param>
-        /// <exception cref="InvalidOperationException">帳票定義なしで作った場合。</exception>
-        public Excel2Pdf SetField(string key, string text)
-        {
-            ThrowIfDisposed();
-            if (key is null)
-            {
-                throw new ArgumentNullException(nameof(key));
-            }
-
-            if (text is null)
-            {
-                throw new ArgumentNullException(nameof(text));
-            }
-
-            if (ReportCode is null)
-            {
-                throw new InvalidOperationException(
-                    $"置換キーは帳票定義ありの変換でだけ使えます。帳票定義なしでは {nameof(SetText)} でセル番地を指定してください。");
-            }
-
-            _fields[key] = text;
-            return this;
-        }
-
-        /// <summary>
         /// PDF をファイルへ保存する(要件14.8)。失敗時に不完全なファイルを残さない。保存のたびに入力の Excel ファイルを読み直す。
         /// </summary>
         /// <param name="pdfPath">保存先のパス。</param>
-        /// <exception cref="UtsushiException">入力ファイル・帳票定義・設定した値・レイアウト・描画・書き込みのいずれかで失敗した場合。</exception>
-        /// <exception cref="NotSupportedException">
-        /// 渡したコンバータの <see cref="Substitution.ICellSubstitutor"/> が数値の直接指定に対応しておらず、<see cref="SetValue(string, double)"/>
-        /// などで数値を設定した場合(既定のコンバータでは起きない)。
+        /// <exception cref="UnsupportedWorkbookElementException">
+        /// 未対応要素の扱いがエラー(既定)で、PDFに出力されない要素がある場合。見つかった要素をすべて持つ(excel2pdf-consolidation 要件2)。
         /// </exception>
+        /// <exception cref="UtsushiException">入力ファイル・設定した値・レイアウト・描画・書き込みのいずれかで失敗した場合。</exception>
         public void Save(string pdfPath)
         {
             ThrowIfDisposed();
-            ReportPdfConverter.ValidateOutputPath(pdfPath);
+            ConversionPipeline.ValidateOutputPath(pdfPath);
 
-            var layout = ComputeLayout(checkFit: false);
-            _converter.RenderToFile(layout, pdfPath);
+            var layout = ComputeLayout(checkFit: false, ThrowIfUnsupportedElements);
+            _engine.Pipeline.RenderToFile(layout, pdfPath);
         }
 
         /// <summary>PDF をバイト列で返す(要件14.10)。Web のレスポンスやデータベースへの保存に使う。</summary>
@@ -409,7 +303,7 @@ namespace Utsushi
         }
 
         /// <summary>
-        /// すべての設定(セル番地・置換キーとも)を消す(要件14.12)。以降の保存ではテンプレートの値を使う。
+        /// すべての設定を消す(要件14.12)。以降の保存ではテンプレートの値を使う。
         /// 1つのインスタンスを使い回して宛先ごとに保存する場合に、前の宛先の値が残らないようにする。
         /// </summary>
         /// <returns>このインスタンス。</returns>
@@ -417,22 +311,6 @@ namespace Utsushi
         {
             ThrowIfDisposed();
             _cells.Clear();
-            _fields.Clear();
-            return this;
-        }
-
-        /// <summary>置換キーの設定を消す(要件14.12)。設定していない置換キーを指定しても何もしない。</summary>
-        /// <param name="key">置換キー。</param>
-        /// <returns>このインスタンス。</returns>
-        public Excel2Pdf ClearField(string key)
-        {
-            ThrowIfDisposed();
-            if (key is null)
-            {
-                throw new ArgumentNullException(nameof(key));
-            }
-
-            _fields.Remove(key);
             return this;
         }
 
@@ -457,20 +335,95 @@ namespace Utsushi
                 throw new ArgumentNullException(nameof(output));
             }
 
-            var layout = ComputeLayout(checkFit: false);
-            _converter.RenderToStream(layout, output);
+            var layout = ComputeLayout(checkFit: false, ThrowIfUnsupportedElements);
+            _engine.Pipeline.RenderToStream(layout, output);
         }
 
         /// <summary>
-        /// PDF を出力せずに、文字がセルに収まらない箇所を返す(要件13)。設定した値で確認する。
+        /// PDF を出力せずに、表示が崩れる原因を一覧で返す(excel2pdf-consolidation 要件4)。設定した値で確かめる。
+        /// 文字がセルに収まらない箇所・PDFに出力されない要素(未対応要素)・フォントの代替と、参考の書式の近似を返す。
         /// </summary>
-        public FitCheckResult CheckFit()
+        /// <remarks>
+        /// 未対応要素の扱いがエラーでも、未対応要素を理由に例外にせず一覧で返す(要件4.2)。それ以外のエラーは、未対応要素の扱いを
+        /// 無視にした場合の <see cref="Save(string)"/> と同じ(要件4.4。PDFの描画の段階で初めて分かるエラーは返さない)。
+        /// 文字の幅とフォントの代替は描画と同じフォントの構成で求めるため、PDFを作るサーバーと同じ環境で呼ぶこと。
+        /// </remarks>
+        /// <exception cref="UtsushiException">入力ファイル・設定した値・レイアウトの段階で失敗した場合。</exception>
+        public Excel2PdfDiagnostics Check()
         {
             ThrowIfDisposed();
-            return ReportPdfConverter.ToFitCheckResult(ComputeLayout(checkFit: true));
+            Parsing.Model.WorkbookModel? workbook = null;
+            var layout = ComputeLayout(checkFit: true, read => workbook = read);
+            return new Excel2PdfDiagnostics(
+                layout.FitIssues,
+                layout.FitIssuesTruncated,
+                workbook?.UnsupportedElements ?? Array.Empty<UnsupportedElement>(),
+                workbook?.UnsupportedElementsTruncated ?? false,
+                CollectFontSubstitutions(layout),
+                layout.FormatApproximations,
+                layout.FormatApproximationsTruncated);
         }
 
-        /// <summary>自身が作ったコンバータ(フォント解決のリソース)を解放する。渡されたコンバータは解放しない。</summary>
+        /// <summary>
+        /// レイアウトの結果に現れたフォント(セル・ヘッダー/フッターの文字、図形の文字。グループは再帰的にたどる)について、
+        /// フォントの代替を問い合わせる(要件3.2。キャッシュ済みのフォントも、この変換で使っていれば必ず問い合わせる)。
+        /// </summary>
+        private IReadOnlyList<FontSubstitution> CollectFontSubstitutions(PagedLayout layout)
+        {
+            // フォント名の大文字・小文字は区別しない(FontResolver と同じ)。
+            var fonts = new HashSet<(string Name, bool Bold, bool Italic)>();
+            var ordered = new List<Parsing.Model.FontStyle>();
+            void Add(Parsing.Model.FontStyle font)
+            {
+                if (fonts.Add((font.Name.ToUpperInvariant(), font.Bold, font.Italic)))
+                {
+                    ordered.Add(font);
+                }
+            }
+
+            void Walk(IEnumerable<DrawCommand> commands)
+            {
+                foreach (var command in commands)
+                {
+                    switch (command)
+                    {
+                        case TextCommand text:
+                            Add(text.Font);
+                            break;
+                        case ShapeCommand shape:
+                            foreach (var line in shape.TextLines)
+                            {
+                                Add(line.Font);
+                            }
+
+                            break;
+                        case GroupCommand group:
+                            Walk(group.Children);
+                            break;
+                    }
+                }
+            }
+
+            foreach (var page in layout.Pages)
+            {
+                Walk(page.Commands);
+            }
+
+            var result = new List<FontSubstitution>();
+            foreach (var font in ordered)
+            {
+                if (_engine.FontResolver.GetSubstitution(font) is { } actual)
+                {
+                    // フォント名はファイル由来の値のため、処理ログに流れても行を崩さないよう正規化する(security-reviewer指摘)。
+                    result.Add(new FontSubstitution(
+                        DiagnosticText.Normalize(font.Name) ?? string.Empty, font.Bold, font.Italic, DiagnosticText.Normalize(actual) ?? string.Empty));
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>自身が作ったエンジン(フォント解決のリソース)を解放する。渡されたエンジンは解放しない。</summary>
         public void Dispose()
         {
             if (_disposed)
@@ -479,20 +432,37 @@ namespace Utsushi
             }
 
             _disposed = true;
-            if (_ownsConverter)
+            if (_ownsEngine)
             {
-                _converter.Dispose();
+                _engine.Dispose();
             }
         }
 
         /// <summary>
-        /// 例外・PDFのタイトルに使う名前(帳票コード、無ければ文書名)。文書名の既定は、パスなら拡張子を除いたファイル名、
-        /// バイト列・ストリームなら空文字列(要件12.5)。
+        /// 例外・PDFのタイトルに使う文書名。既定は、パスなら拡張子を除いたファイル名、バイト列・ストリームなら空文字列(要件12.5)。
         /// </summary>
+        /// <remarks>ファイル名は利用者が付けた名前(アップロードされたファイル名など)のため、制御文字を除き長さを切り詰める。</remarks>
         private string DocumentLabel =>
-            ReportCode ?? _options.DocumentName ?? (_source.Path is { } path ? Path.GetFileNameWithoutExtension(path) : string.Empty);
+            _options.DocumentName
+            ?? (_source.Path is { } path
+                ? DiagnosticText.Normalize(Path.GetFileNameWithoutExtension(path), DiagnosticText.MaxDocumentNameLength) ?? string.Empty
+                : string.Empty);
 
-        internal PagedLayout ComputeLayout(bool checkFit)
+        /// <summary>
+        /// 未対応要素の扱いがエラーで、未対応要素が1件以上あれば例外にする(excel2pdf-consolidation 要件2.2)。
+        /// 読み込みの直後(書き込み・レイアウト計算の前)に呼ばれる。
+        /// </summary>
+        private void ThrowIfUnsupportedElements(Parsing.Model.WorkbookModel workbook)
+        {
+            if (_options.UnsupportedElements == UnsupportedElementPolicy.Error
+                && workbook.UnsupportedElements.Count > 0)
+            {
+                throw new UnsupportedWorkbookElementException(
+                    workbook.UnsupportedElements, workbook.UnsupportedElementsTruncated, DocumentLabel, workbook.Sheets[0].Name);
+            }
+        }
+
+        internal PagedLayout ComputeLayout(bool checkFit, Action<Parsing.Model.WorkbookModel>? onWorkbookRead = null)
         {
             var texts = new Dictionary<string, string>();
             var numbers = new Dictionary<string, double>();
@@ -509,10 +479,8 @@ namespace Utsushi
             }
 
             using var input = _source.Open(DocumentLabel);
-            return ReportCode is not null
-                ? _converter.ComputeLayoutCore(ReportCode, input, _fields, texts, numbers, checkFit)
-                : _converter.ComputeLayoutWithoutDefinitionCore(
-                    input, texts, DocumentLabel, _options.MaxDigitWidthPx, numbers, checkFit, _options.SheetName);
+            return _engine.Pipeline.ComputeLayout(
+                input, texts, DocumentLabel, _options.MaxDigitWidthPx, numbers, checkFit, _options.SheetName, onWorkbookRead);
         }
 
         private CellAddress ParseCell(string cell)
@@ -631,7 +599,7 @@ namespace Utsushi
                 }
                 catch (IOException ex)
                 {
-                    // パスで渡した場合(ReportPdfConverter.OpenInputFile)と同じく、読み込みの失敗を UtsushiException 階層にそろえる。
+                    // パスで渡した場合(ConversionPipeline.OpenInputFile)と同じく、読み込みの失敗を UtsushiException 階層にそろえる。
                     throw new InvalidExcelFileException(
                         $"Excel ファイルのストリームを読み取れませんでした: {ex.Message}",
                         InvalidExcelFileReason.Unknown,
@@ -644,7 +612,7 @@ namespace Utsushi
             public Stream Open(string documentLabel) =>
                 _content is not null
                     ? new MemoryStream(_content, writable: false)
-                    : ReportPdfConverter.OpenInputFile(Path!, documentLabel);
+                    : ConversionPipeline.OpenInputFile(Path!, documentLabel);
 
             private static void EnsureWithinLimit(long length, long limit, string? label)
             {
@@ -678,18 +646,35 @@ namespace Utsushi
         public PdfRenderOptions? Render { get; init; }
 
         /// <summary>
-        /// 帳票定義なしの変換で、PDFのタイトル・ヘッダー/フッターのファイル名・エラー情報に使う名前(要件12.5)。
+        /// 文書名。PDFのタイトル・ヘッダー/フッターのファイル名・エラー情報に使う(要件12.5)。
         /// null の場合は入力ファイル名から拡張子を除いたもの(バイト列・ストリームから作った場合は空文字列)。
         /// </summary>
         public string? DocumentName { get; init; }
 
-        /// <summary>帳票定義なしの変換で、列幅の換算に使う最大数字幅(ピクセル)。null の場合はブックの標準フォントから見積もる。</summary>
+        /// <summary>列幅の換算に使う最大数字幅(ピクセル)。null の場合はブックの標準フォントから見積もる。</summary>
         public double? MaxDigitWidthPx { get; init; }
 
         /// <summary>
-        /// 帳票定義なしの変換で変換するシートの名前(要件14.11。大文字・小文字を区別する)。null の場合はアクティブシート。
-        /// ブックに無い場合は保存の時点で <see cref="InvalidExcelFileException"/>(ブック内のシート名を含む)。帳票定義ありでは指定できない。
+        /// 変換するシートの名前(要件14.11。大文字・小文字を区別する)。null の場合はアクティブシート。
+        /// ブックに無い場合は保存の時点で <see cref="InvalidExcelFileException"/>(ブック内のシート名を含む)。
         /// </summary>
         public string? SheetName { get; init; }
+
+        /// <summary>
+        /// 未対応要素(グラフ・非対応の図形・EMF画像・コメントなど、PDFに出力されない要素。excel2pdf-consolidation 要件2)の扱い。
+        /// 既定は <see cref="UnsupportedElementPolicy.Error"/>(保存の時点で、見つかった要素をすべて持つ <see cref="UnsupportedWorkbookElementException"/>)。
+        /// 欠落を承知で変換する場合は <see cref="UnsupportedElementPolicy.Ignore"/> を指定する。
+        /// </summary>
+        public UnsupportedElementPolicy UnsupportedElements { get; init; } = UnsupportedElementPolicy.Error;
+    }
+
+    /// <summary>未対応要素(PDFに出力されない要素)の扱い(excel2pdf-consolidation 要件2.1)。</summary>
+    public enum UnsupportedElementPolicy
+    {
+        /// <summary>保存の時点で、見つかった未対応要素をすべて持つ例外を送出する(既定)。</summary>
+        Error = 0,
+
+        /// <summary>未対応要素を出力せずに変換を続ける。</summary>
+        Ignore = 1,
     }
 }

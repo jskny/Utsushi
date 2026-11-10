@@ -18,5 +18,40 @@ namespace Utsushi.Parsing
         /// <param name="value">数値。</param>
         /// <param name="formatCode">数値書式。</param>
         public static ArgbColor? ResolveColor(double value, string? formatCode) => NumberFormatter.ResolveColor(value, formatCode);
+
+        /// <summary>
+        /// 数値に書式を適用した表示文字列・色と、書式を解釈できない(または書式で表せない値の)ために標準の表示にしたかどうかを返す
+        /// (excel2pdf-consolidation 要件7.2(e))。<see cref="Format"/>・<see cref="ResolveColor"/> と同じ規則。
+        /// </summary>
+        /// <param name="value">数値。</param>
+        /// <param name="formatCode">数値書式。</param>
+        public static NumberFormatResult FormatWithFallback(double value, string? formatCode)
+        {
+            var text = NumberFormatter.FormatNumber(value, formatCode, out NumberFormatFallback fallback);
+            return new NumberFormatResult(text, NumberFormatter.ResolveColor(value, formatCode), fallback);
+        }
+    }
+
+    /// <summary>数値に書式を適用した結果。</summary>
+    /// <param name="Text">表示文字列。</param>
+    /// <param name="Color">色の指定。無ければ null。</param>
+    /// <param name="Fallback">書式を解釈できない、または書式で表せない値のため、標準の表示にしたかどうかと、その理由。</param>
+    public sealed record NumberFormatResult(string Text, ArgbColor? Color, NumberFormatFallback Fallback)
+    {
+        /// <summary>標準の表示にしたかどうか。</summary>
+        public bool FellBackToGeneral => Fallback != NumberFormatFallback.None;
+    }
+
+    /// <summary>数値書式で表示できずに標準の表示にした理由(excel2pdf-consolidation 要件7.2(e))。</summary>
+    public enum NumberFormatFallback
+    {
+        /// <summary>書式どおりに表示した。</summary>
+        None = 0,
+
+        /// <summary>書式を解釈できない(分数・指数など)。テンプレートの書式が原因。</summary>
+        UnsupportedFormat = 1,
+
+        /// <summary>書式で表せない値(負の経過時間・明治より前の日付の和暦など)。値が原因。</summary>
+        UnrepresentableValue = 2,
     }
 }

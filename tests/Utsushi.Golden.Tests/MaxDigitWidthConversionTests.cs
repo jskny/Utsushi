@@ -19,28 +19,26 @@ using Xunit;
 namespace Utsushi.Golden.Tests
 {
     /// <summary>
-    /// 帳票定義なしモードの列幅換算に使う最大数字幅(要件12.3、タスク27.2)の、ファサード(<see cref="ReportPdfConverter"/>)経由の検証。
+    /// 列幅換算に使う最大数字幅(要件12.3、タスク27.2)の、ファサード(<see cref="Excel2Pdf"/>)経由の検証。
     /// </summary>
     /// <remarks>
     /// <para>
     /// 入力には invoice のサンプルを複製し、<c>xl/styles.xml</c> の先頭のフォント(ブックの標準フォント)の名前だけを差し替えたブックを使う
     /// (OpenXml SDK に依存してよいのは Parsing だけなので、ZIP内のXMLを文字列置換して作る。
-    /// <see cref="WithoutDefinitionConversionTests"/> と同じ方針)。
+    /// <see cref="Excel2PdfConversionTests"/> と同じ方針)。
     /// </para>
     /// <para>
     /// invoice の列幅は A〜F = 4, 28, 8, 6, 12, 14(文字数単位)。印刷範囲 A1:F34 は拡大縮小なし(100%)で1ページに収まるため、
     /// 罫線の左端から右端までの幅は列幅の換算結果の合計に一致する。
     /// </para>
     /// </remarks>
-    public sealed class WithoutDefinitionMaxDigitWidthTests : IDisposable
+    public sealed class MaxDigitWidthConversionTests : IDisposable
     {
-        private static readonly DateTime FixedTimestamp = new(2026, 4, 20, 10, 30, 0, DateTimeKind.Unspecified);
-
         private static readonly double[] InvoiceColumnWidths = { 4.0, 28.0, 8.0, 6.0, 12.0, 14.0 };
 
         private readonly string _directory;
 
-        public WithoutDefinitionMaxDigitWidthTests()
+        public MaxDigitWidthConversionTests()
         {
             _directory = Path.Combine(Path.GetTempPath(), "utsushi-mdw-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_directory);
@@ -54,21 +52,7 @@ namespace Utsushi.Golden.Tests
             }
         }
 
-        private static ReportPdfConverter CreateConverter(string definitionRoot)
-        {
-            var fontResolver = new FontResolver(FontResolverOptions.AllowFallback());
-
-            return new ReportPdfConverter(
-                new OpenXmlWorkbookReader(),
-                new FileSystemReportDefinitionRepository(definitionRoot),
-                new ReportModelBuilder(),
-                new CellSubstitutor(),
-                new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => FixedTimestamp),
-                new SkiaPdfRenderer(new SkiaFontMetricsProvider(fontResolver)),
-                fontResolver);
-        }
-
-        private ReportPdfConverter CreateConverter() => CreateConverter(TestPaths.SampleReportsRoot);
+        private static TestConverter CreateConverter() => new();
 
         /// <summary>invoice のテンプレートを複製し、標準フォント(<c>fonts</c> の先頭)の名前を差し替えたブックを作る。</summary>
         private string CreateInvoiceWithDefaultFont(string fontName)
@@ -107,46 +91,10 @@ namespace Utsushi.Golden.Tests
             return path;
         }
 
-        /// <summary>invoice の帳票定義を複製し、<c>maxDigitWidthPx</c> だけを差し替えた定義ルートを作る。</summary>
-        private string CreateDefinitionRootWithMaxDigitWidth(double maxDigitWidthPx)
-        {
-            var root = Path.Combine(_directory, "definitions");
-            var reportDirectory = Path.Combine(root, "invoice");
-            Directory.CreateDirectory(reportDirectory);
-
-            var json = File.ReadAllText(Path.Combine(TestPaths.SampleReportsRoot, "invoice", "definition.json"));
-            const string original = "\"maxDigitWidthPx\": 7,";
-            if (json.IndexOf(original, StringComparison.Ordinal) < 0)
-            {
-                throw new InvalidOperationException("invoice の帳票定義の maxDigitWidthPx が想定(7)と異なります。");
-            }
-
-            json = json.Replace(
-                original,
-                "\"maxDigitWidthPx\": " + maxDigitWidthPx.ToString(CultureInfo.InvariantCulture) + ",",
-                StringComparison.Ordinal);
-            File.WriteAllText(Path.Combine(reportDirectory, "definition.json"), json);
-            return root;
-        }
-
-        private static PagedLayout ComputeWithoutDefinition(ReportPdfConverter converter, string path, double? maxDigitWidthPx = null)
+        private static PagedLayout Compute(TestConverter converter, string path, double? maxDigitWidthPx = null)
         {
             using var input = File.OpenRead(path);
-            return converter.ComputeLayoutWithoutDefinition(input, documentName: "doc", maxDigitWidthPx: maxDigitWidthPx);
-        }
-
-        private static PagedLayout ComputeWithDefinition(ReportPdfConverter converter, string path)
-        {
-            using var input = File.OpenRead(path);
-            return converter.ComputeLayout(
-                "invoice",
-                input,
-                new Dictionary<string, string>
-                {
-                    ["CustomerName"] = "株式会社サンプル商事 御中",
-                    ["InvoiceNo"] = "INV-0000",
-                    ["TotalAmount"] = "¥0",
-                });
+            return converter.ComputeLayout(input, documentName: "doc", maxDigitWidthPx: maxDigitWidthPx);
         }
 
         /// <summary>
@@ -214,7 +162,7 @@ namespace Utsushi.Golden.Tests
         {
             using var converter = CreateConverter();
 
-            var layout = ComputeWithoutDefinition(converter, TestPaths.SampleTemplate("invoice"), maxDigitWidthPx);
+            var layout = Compute(converter, TestPaths.SampleTemplate("invoice"), maxDigitWidthPx);
 
             Assert.Equal(ExpectedInvoiceWidth(maxDigitWidthPx), TableWidth(layout), 3);
         }
@@ -225,8 +173,8 @@ namespace Utsushi.Golden.Tests
             using var converter = CreateConverter();
             var path = TestPaths.SampleTemplate("invoice");
 
-            var narrow = ComputeWithoutDefinition(converter, path, 7.0);
-            var wide = ComputeWithoutDefinition(converter, path, 9.0);
+            var narrow = Compute(converter, path, 7.0);
+            var wide = Compute(converter, path, 9.0);
 
             Assert.True(
                 TableWidth(wide) > TableWidth(narrow),
@@ -242,8 +190,8 @@ namespace Utsushi.Golden.Tests
             var gothic = CreateInvoiceWithDefaultFont("ＭＳ Ｐゴシック");
             var calibri = CreateInvoiceWithDefaultFont("Calibri");
 
-            var specified = ComputeWithoutDefinition(converter, gothic, 7.0);
-            var estimated = ComputeWithoutDefinition(converter, calibri);
+            var specified = Compute(converter, gothic, 7.0);
+            var estimated = Compute(converter, calibri);
 
             Assert.Equal(ExpectedInvoiceWidth(7.0), TableWidth(specified), 3);
             Assert.Equal(PageStructure(estimated), PageStructure(specified));
@@ -255,46 +203,46 @@ namespace Utsushi.Golden.Tests
         [InlineData("ＭＳ Ｐゴシック")]
         [InlineData("MS PGothic")]
         [InlineData("游ゴシック")]
-        public void 指定しなければ標準フォントから見積もった値になり定義ありで8を指定した場合と同じページ構成になる(string fontName)
+        public void 指定しなければ標準フォントから見積もった値になり8を指定した場合と同じページ構成になる(string fontName)
         {
             var path = CreateInvoiceWithDefaultFont(fontName);
-            using var converter = CreateConverter(CreateDefinitionRootWithMaxDigitWidth(8.0));
+            using var converter = CreateConverter();
 
-            var withoutDefinition = ComputeWithoutDefinition(converter, path);
-            var withDefinition = ComputeWithDefinition(converter, path);
+            var estimated = Compute(converter, path);
+            var specified = Compute(converter, path, 8.0);
 
-            Assert.Equal(ExpectedInvoiceWidth(8.0), TableWidth(withoutDefinition), 3);
-            Assert.Equal(PageStructure(withDefinition), PageStructure(withoutDefinition));
+            Assert.Equal(ExpectedInvoiceWidth(8.0), TableWidth(estimated), 3);
+            Assert.Equal(PageStructure(specified), PageStructure(estimated));
         }
 
         [Fact]
-        public void 標準フォントが見積もりの表と違えば定義ありで8を指定した場合と異なるページ構成になる()
+        public void 標準フォントが見積もりの表と違えば8を指定した場合と異なるページ構成になる()
         {
             // 上のテストが偶然一致していないこと(比較が列幅の違いを検出できること)の確認。
             var path = CreateInvoiceWithDefaultFont("Calibri");
-            using var converter = CreateConverter(CreateDefinitionRootWithMaxDigitWidth(8.0));
+            using var converter = CreateConverter();
 
-            var withoutDefinition = ComputeWithoutDefinition(converter, path);
-            var withDefinition = ComputeWithDefinition(converter, path);
+            var estimated = Compute(converter, path);
+            var specified = Compute(converter, path, 8.0);
 
-            Assert.Equal(ExpectedInvoiceWidth(7.0), TableWidth(withoutDefinition), 3);
-            Assert.NotEqual(PageStructure(withDefinition), PageStructure(withoutDefinition));
+            Assert.Equal(ExpectedInvoiceWidth(7.0), TableWidth(estimated), 3);
+            Assert.NotEqual(PageStructure(specified), PageStructure(estimated));
         }
 
         [Theory]
         [InlineData("Calibri")]
         [InlineData("Arial")]
         [InlineData("メイリオ")]
-        public void 表に無い標準フォントやCalibriは7で換算され定義ありで7を指定した場合と同じページ構成になる(string fontName)
+        public void 表に無い標準フォントやCalibriは7で換算され7を指定した場合と同じページ構成になる(string fontName)
         {
             var path = CreateInvoiceWithDefaultFont(fontName);
-            using var converter = CreateConverter(CreateDefinitionRootWithMaxDigitWidth(7.0));
+            using var converter = CreateConverter();
 
-            var withoutDefinition = ComputeWithoutDefinition(converter, path);
-            var withDefinition = ComputeWithDefinition(converter, path);
+            var estimated = Compute(converter, path);
+            var specified = Compute(converter, path, 7.0);
 
-            Assert.Equal(ExpectedInvoiceWidth(7.0), TableWidth(withoutDefinition), 3);
-            Assert.Equal(PageStructure(withDefinition), PageStructure(withoutDefinition));
+            Assert.Equal(ExpectedInvoiceWidth(7.0), TableWidth(estimated), 3);
+            Assert.Equal(PageStructure(specified), PageStructure(estimated));
         }
 
         // -- 不正な値 ---------------------------------------------------------------------------
@@ -310,27 +258,27 @@ namespace Utsushi.Golden.Tests
 
         [Theory]
         [MemberData(nameof(InvalidMaxDigitWidths))]
-        public void ComputeLayoutWithoutDefinitionは不正な最大数字幅でArgumentOutOfRangeException(double maxDigitWidthPx)
+        public void レイアウトの計算は不正な最大数字幅でArgumentOutOfRangeException(double maxDigitWidthPx)
         {
             using var converter = CreateConverter();
             using var input = File.OpenRead(TestPaths.SampleTemplate("invoice"));
 
             var ex = Assert.Throws<ArgumentOutOfRangeException>(
-                () => converter.ComputeLayoutWithoutDefinition(input, maxDigitWidthPx: maxDigitWidthPx));
+                () => converter.ComputeLayout(input, maxDigitWidthPx: maxDigitWidthPx));
 
             Assert.Equal("maxDigitWidthPx", ex.ParamName);
         }
 
         [Theory]
         [MemberData(nameof(InvalidMaxDigitWidths))]
-        public void ConvertWithoutDefinitionは不正な最大数字幅でArgumentOutOfRangeExceptionになり何も書き出さない(double maxDigitWidthPx)
+        public void ストリームへの保存は不正な最大数字幅でArgumentOutOfRangeExceptionになり何も書き出さない(double maxDigitWidthPx)
         {
             using var converter = CreateConverter();
             using var input = File.OpenRead(TestPaths.SampleTemplate("invoice"));
             using var output = new MemoryStream();
 
             var ex = Assert.Throws<ArgumentOutOfRangeException>(
-                () => converter.ConvertWithoutDefinition(input, output, maxDigitWidthPx: maxDigitWidthPx));
+                () => converter.Convert(input, output, maxDigitWidthPx: maxDigitWidthPx));
 
             Assert.Equal("maxDigitWidthPx", ex.ParamName);
             Assert.Equal(0, output.Length);
@@ -338,13 +286,13 @@ namespace Utsushi.Golden.Tests
 
         [Theory]
         [MemberData(nameof(InvalidMaxDigitWidths))]
-        public void ConvertFileWithoutDefinitionは不正な最大数字幅でArgumentOutOfRangeExceptionになりファイルを出力しない(double maxDigitWidthPx)
+        public void ファイルへの保存は不正な最大数字幅でArgumentOutOfRangeExceptionになりファイルを出力しない(double maxDigitWidthPx)
         {
             using var converter = CreateConverter();
             var outputPath = Path.Combine(_directory, "out.pdf");
 
             var ex = Assert.Throws<ArgumentOutOfRangeException>(
-                () => converter.ConvertFileWithoutDefinition(
+                () => converter.ConvertFile(
                     TestPaths.SampleTemplate("invoice"), outputPath, maxDigitWidthPx: maxDigitWidthPx));
 
             Assert.Equal("maxDigitWidthPx", ex.ParamName);

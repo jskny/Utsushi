@@ -22,7 +22,7 @@ namespace Utsushi.Golden.Tests
     ///   <item>座標・テキスト・罫線の差分を行単位で読めるため、崩れた箇所を直接特定できる。</item>
     /// </list>
     /// <para>
-    /// 座標は 0.01pt(約0.0035mm)に丸める。帳票定義の許容誤差(既定0.5mm)より十分細かく、
+    /// 座標は 0.01pt(約0.0035mm)に丸める。Excel表示との許容誤差(0.5mm)より十分細かく、
     /// 浮動小数の最下位ビットの揺れは吸収できる粒度である。
     /// </para>
     /// </remarks>
@@ -34,7 +34,7 @@ namespace Utsushi.Golden.Tests
         public static string Create(PagedLayout layout)
         {
             var sb = new StringBuilder();
-            sb.Append("report=").Append(layout.ReportCode)
+            sb.Append("document=").Append(layout.DocumentName)
               .Append(" sheet=").Append(layout.SheetName)
               .Append(" pages=").Append(layout.PageCount)
               .AppendLine();
@@ -68,8 +68,21 @@ namespace Utsushi.Golden.Tests
                       .Append(" cell=").Append(issue.Cell)
                       .Append(" page=").Append(issue.PageNumber)
                       .Append(" substituted=").Append(issue.IsSubstituted ? "yes" : "no")
-                      .Append(" key=").Append(issue.SubstitutionKey ?? "-")
                       .Append(" text=").Append(Quote(issue.Text))
+                      .AppendLine();
+                }
+            }
+
+            // 書式の近似(excel2pdf-consolidation 要件7)。1件も無いときは段落を出さない(既存のスナップショットを変えないため)。
+            if (layout.FormatApproximations.Count > 0)
+            {
+                sb.AppendLine();
+                sb.Append("## format approximations count=").Append(layout.FormatApproximations.Count).AppendLine();
+                foreach (var item in layout.FormatApproximations)
+                {
+                    sb.Append("approx ").Append(item.Kind)
+                      .Append(" at=").Append(item.Location?.ToString() ?? "-")
+                      .Append(" detail=").Append(item.Detail ?? "-")
                       .AppendLine();
                 }
             }

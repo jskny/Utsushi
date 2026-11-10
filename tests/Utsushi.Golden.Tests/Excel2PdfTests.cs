@@ -169,95 +169,14 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
-        public void 帳票定義なしでは置換キーを使えない()
-        {
-            using var pdf = new Excel2Pdf(Invoice, FallbackFonts());
-
-            Assert.Throws<InvalidOperationException>(() => pdf.SetField("CustomerName", "x"));
-        }
-
-        [Fact]
-        public void 帳票定義ありでは置換キーとセル番地の両方で設定できる()
-        {
-            using var pdf = new Excel2Pdf(Invoice, "invoice", TestPaths.SampleReportsRoot, FallbackFonts());
-            pdf.SetField("CustomerName", "株式会社テスト製作所 御中")
-               .SetField("InvoiceNo", "INV-0001")
-               .SetField("TotalAmount", "¥1,000")
-               .SetValue("F12", 4321);
-
-            var texts = Texts(pdf);
-
-            Assert.Contains("株式会社テスト製作所 御中", texts);
-            Assert.Contains("¥1,000", texts);   // 置換キー(文字列)
-            Assert.Contains("¥4,321", texts);   // セル番地の数値(F12 の表示形式 "¥"#,##0)
-            Assert.Equal("invoice", pdf.ReportCode);
-        }
-
-        [Fact]
-        public void 帳票定義ありで必須の置換キーが無ければ保存の時点でエラーにする()
-        {
-            using var pdf = new Excel2Pdf(Invoice, "invoice", TestPaths.SampleReportsRoot, FallbackFonts());
-            pdf.SetField("CustomerName", "株式会社テスト製作所 御中");
-
-            Assert.Throws<RequiredSubstitutionValueMissingException>(() => pdf.Save(new MemoryStream()));
-        }
-
-        [Fact]
         public void 収まりの確認は設定した値で行う()
         {
             using var pdf = new Excel2Pdf(Invoice, FallbackFonts());
             pdf.SetValue("F12", 123456789012345);
 
-            var result = pdf.CheckFit();
+            var result = pdf.Check();
 
-            Assert.Contains(result.Issues, i => i.Kind == FitIssueKind.NumberTooWide && i.Cell == CellAddress.Parse("F12"));
-        }
-
-        [Fact]
-        public void 渡されたコンバータは破棄しない()
-        {
-            using var converter = ReportPdfConverter.CreateDefault(FontResolverOptions.AllowFallback());
-
-            using (var pdf = new Excel2Pdf(Invoice, converter))
-            {
-                pdf.SetText("A3", "一通目");
-                pdf.Save(new MemoryStream());
-            }
-
-            // 同じコンバータで続けて使える。
-            using var next = new Excel2Pdf(Invoice, converter);
-            next.SetText("A3", "二通目");
-            next.Save(new MemoryStream());
-        }
-
-        [Fact]
-        public void 共有したコンバータで同時に変換しても値が混ざらない()
-        {
-            // ASP.NET Core のように、1つのコンバータを共有し、リクエストごとに Excel2Pdf を作る使い方(docs「複数スレッドからの利用」)。
-            using var converter = ReportPdfConverter.CreateDefault(TestPaths.SampleReportsRoot, FontResolverOptions.AllowFallback());
-            var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
-
-            System.Threading.Tasks.Parallel.For(0, 40, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = 8 }, i =>
-            {
-                var name = $"顧客{i:000} 御中";
-                using var pdf = new Excel2Pdf(Invoice, converter, "invoice");
-                pdf.SetField("CustomerName", name)
-                   .SetField("InvoiceNo", $"INV-{i:000}")
-                   .SetField("TotalAmount", "¥1,000")
-                   .SetValue("F12", i * 1000);
-
-                Assert.True(pdf.ToPdfBytes().Length > 0);
-
-                var texts = Texts(pdf);
-                var expectedAmount = (i * 1000).ToString("\\¥#,##0", System.Globalization.CultureInfo.InvariantCulture);
-                if (!texts.Contains(name) || !texts.Contains($"INV-{i:000}") || !texts.Contains(expectedAmount)
-                    || texts.Any(t => t.StartsWith("顧客", StringComparison.Ordinal) && t != name))
-                {
-                    failures.Add($"{i}: {string.Join(",", texts.Where(t => t.StartsWith("顧客", StringComparison.Ordinal)))}");
-                }
-            });
-
-            Assert.Empty(failures);
+            Assert.Contains(result.FitIssues, i => i.Kind == FitIssueKind.NumberTooWide && i.Cell == CellAddress.Parse("F12"));
         }
 
         [Fact]
@@ -275,23 +194,20 @@ namespace Utsushi.Golden.Tests
         public void 両立しない設定はコンストラクタでエラーにする()
         {
             Assert.Throws<ArgumentException>(() => new Excel2Pdf(" "));
-            Assert.Throws<ArgumentException>(
-                () => new Excel2Pdf(Invoice, "invoice", TestPaths.SampleReportsRoot, new Excel2PdfOptions { MaxDigitWidthPx = 8 }));
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { SheetName = " " }));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { MaxDigitWidthPx = 0 }));
 
-            using var converter = ReportPdfConverter.CreateDefault(FontResolverOptions.AllowFallback());
-            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, converter, options: FallbackFonts()));
+            using var engine = Excel2PdfEngine.Create(FontResolverOptions.AllowFallback());
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, engine, FallbackFonts()));
         }
 
         [Fact]
-        public void 帳票定義で折り返しを指定したセルに数値を設定しても行数の検証でエラーにならない()
+        public void 折り返し表示のセルに数値を設定しても行数の検証でエラーにならない()
         {
-            // 請求書の Remarks(A29)は overflow: wrap。文字列なら折り返し、行数が高さを超えるとエラー(要件2.14)になるが、
+            // 請求書の備考(A29)は「折り返して全体を表示する」。文字列なら折り返し、行数が高さを超えるとエラー(要件2.14)になるが、
             // 数値は折り返さない(Excel と同じ)。
-            using var pdf = new Excel2Pdf(Invoice, "invoice", TestPaths.SampleReportsRoot, FallbackFonts());
-            pdf.SetField("CustomerName", "株式会社テスト製作所 御中")
-               .SetField("InvoiceNo", "INV-0001")
-               .SetField("TotalAmount", "¥1,000")
-               .SetValue("A29", 1234.5);
+            using var pdf = new Excel2Pdf(Invoice, FallbackFonts());
+            pdf.SetValue("A29", 1234.5);
 
             Assert.Single(Texts(pdf), t => t == "1234.5");
         }
@@ -329,24 +245,11 @@ namespace Utsushi.Golden.Tests
         public void 保存に失敗したときは出力ファイルを残さない()
         {
             var output = Path.Combine(Path.GetTempPath(), "utsushi-test-" + Guid.NewGuid().ToString("N") + ".pdf");
-            using var pdf = new Excel2Pdf(Invoice, "invoice", TestPaths.SampleReportsRoot, FallbackFonts());
+            using var pdf = new Excel2Pdf(Invoice, FallbackFonts());
+            pdf.SetText("F3", "INV\t0001");   // 制御文字は書き込めない(要件2.10)
 
-            Assert.Throws<RequiredSubstitutionValueMissingException>(() => pdf.Save(output));
+            Assert.Throws<InvalidSubstitutionValueException>(() => pdf.Save(output));
             Assert.False(File.Exists(output));
-        }
-
-        [Fact]
-        public void 帳票定義のルートを持つコンバータを渡して帳票定義ありで使える()
-        {
-            using var converter = ReportPdfConverter.CreateDefault(TestPaths.SampleReportsRoot, FontResolverOptions.AllowFallback());
-            using var pdf = new Excel2Pdf(Invoice, converter, "invoice");
-            pdf.SetField("CustomerName", "株式会社テスト製作所 御中")
-               .SetField("InvoiceNo", "INV-0001")
-               .SetField("TotalAmount", "¥1,000");
-
-            pdf.Save(new MemoryStream());
-
-            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, converter, " "));
         }
 
         // ---- 要件14.10: バイト列・ストリームの入力、バイト列の出力 ----
@@ -365,21 +268,19 @@ namespace Utsushi.Golden.Tests
 
             Assert.Equal("%PDF", Encoding.ASCII.GetString(bytes, 0, 4));
             Assert.Null(pdf.XlsxPath);
-            Assert.Equal(string.Empty, pdf.ComputeLayout(checkFit: false).ReportCode);   // 文書名の既定は空文字列(要件12.5)
+            Assert.Equal(string.Empty, pdf.ComputeLayout(checkFit: false).DocumentName);   // 文書名の既定は空文字列(要件12.5)
         }
 
         [Fact]
         public void ストリームから作るとストリームは読み終えるが閉じない()
         {
             using var stream = File.OpenRead(Invoice);
-            using var pdf = new Excel2Pdf(stream, "invoice", TestPaths.SampleReportsRoot, FallbackFonts());
+            using var pdf = new Excel2Pdf(stream, FallbackFonts());
 
             Assert.True(stream.CanRead);
             Assert.Equal(stream.Length, stream.Position);
 
-            pdf.SetField("CustomerName", "株式会社テスト製作所 御中")
-               .SetField("InvoiceNo", "INV-0001")
-               .SetField("TotalAmount", "¥1,000");
+            pdf.SetText("A3", "株式会社テスト製作所 御中");
 
             // 同じ内容から何度でも変換できる。
             Assert.True(pdf.ToPdfBytes().Length > 0);
@@ -393,7 +294,7 @@ namespace Utsushi.Golden.Tests
 
             var ex = Assert.Throws<InvalidExcelFileException>(() => Excel2Pdf.TemplateSource.FromStream(stream, "invoice", limit: 1000));
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
-            Assert.Equal("invoice", ex.ReportCode);
+            Assert.Equal("invoice", ex.DocumentName);
 
             // シークできるストリームは、読み始める前に残りの長さで拒否する。
             Assert.Equal(0, stream.Position);
@@ -411,15 +312,19 @@ namespace Utsushi.Golden.Tests
         {
             using var stream = File.OpenRead(Invoice);
 
-            Assert.Throws<ArgumentException>(() => new Excel2Pdf(
-                stream, "invoice", TestPaths.SampleReportsRoot, new Excel2PdfOptions { SheetName = "請求書" }));
-            Assert.Throws<ArgumentNullException>(() => new Excel2Pdf(stream, "invoice", null!));
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(stream, new Excel2PdfOptions { SheetName = " " }));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new Excel2Pdf(stream, new Excel2PdfOptions { MaxDigitWidthPx = -1 }));
 
-            // コンバータを渡したうえでフォント・PDF出力の設定を指定する誤りも、読み始める前に検出する。
-            using var converter = ReportPdfConverter.CreateDefault(FontResolverOptions.AllowFallback());
-            Assert.Throws<ArgumentException>(() => new Excel2Pdf(stream, converter, options: FallbackFonts()));
+            // エンジンを渡したうえでフォント・PDF出力の設定を指定する誤りも、読み始める前に検出する。
+            using var engine = Excel2PdfEngine.Create(FontResolverOptions.AllowFallback());
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(stream, engine, FallbackFonts()));
             Assert.Throws<ArgumentException>(() => new Excel2Pdf(
-                stream, converter, options: new Excel2PdfOptions { Render = PdfRenderOptions.Default }));
+                stream, engine, new Excel2PdfOptions { Render = PdfRenderOptions.Default }));
+
+            // 破棄したエンジンを渡す誤りも、読み始める前に検出する。
+            var disposed = Excel2PdfEngine.Create(FontResolverOptions.AllowFallback());
+            disposed.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => new Excel2Pdf(stream, disposed));
 
             Assert.Equal(0, stream.Position);
         }
@@ -468,7 +373,7 @@ namespace Utsushi.Golden.Tests
             Path.Combine(TestPaths.EdgeCaseSamplesRoot, "edge-order-form", "template.xlsx");
 
         [Fact]
-        public void 帳票定義なしではシート名を指定してアクティブシート以外を変換できる()
+        public void シート名を指定してアクティブシート以外を変換できる()
         {
             // edge-order-form は「表紙」「注文書」「マスタ(非表示)」の3シートで、アクティブシートは「注文書」。
             using var active = new Excel2Pdf(OrderForm, FallbackFonts());
@@ -492,7 +397,7 @@ namespace Utsushi.Golden.Tests
             Assert.Contains("コピー用紙", Texts(hidden));
 
             // 収まりの確認も指定したシートで行う。
-            Assert.NotNull(cover.CheckFit());
+            Assert.NotNull(cover.Check());
         }
 
         [Fact]
@@ -510,10 +415,17 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
-        public void 帳票定義ありではシート名を指定できない()
+        public void 規則に合わないシート名と文書名は作る時点でエラーにする()
         {
-            Assert.Throws<ArgumentException>(() => new Excel2Pdf(
-                Invoice, "invoice", TestPaths.SampleReportsRoot, new Excel2PdfOptions { SheetName = "請求書" }));
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { SheetName = "zz\nFAKE" }));
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { SheetName = new string('a', 32) }));
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { DocumentName = "a\r\nFAKE" }));
+            Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { DocumentName = new string('a', 256) }));
+        }
+
+        [Fact]
+        public void 空のシート名は指定できない()
+        {
             Assert.Throws<ArgumentException>(() => new Excel2Pdf(Invoice, new Excel2PdfOptions { SheetName = " " }));
         }
 
@@ -540,33 +452,6 @@ namespace Utsushi.Golden.Tests
             pdf.Dispose();
             Assert.Throws<ObjectDisposedException>(() => pdf.Clear());
             Assert.Throws<ObjectDisposedException>(() => pdf.ToPdfBytes());
-        }
-
-        [Fact]
-        public void 置換キーの設定を1つずつ消せる()
-        {
-            using var pdf = new Excel2Pdf(Invoice, "invoice", TestPaths.SampleReportsRoot, FallbackFonts());
-            pdf.SetField("CustomerName", "株式会社テスト製作所 御中")
-               .SetField("InvoiceNo", "INV-0001")
-               .SetField("TotalAmount", "¥1,000")
-               .SetField("Subject", "件名: 消す値");
-
-            pdf.ClearField("Subject").ClearField("NotSet");
-
-            Assert.DoesNotContain("件名: 消す値", Texts(pdf));
-        }
-
-        [Fact]
-        public void すべての設定を消すと置換キーの設定も消える()
-        {
-            using var pdf = new Excel2Pdf(Invoice, "invoice", TestPaths.SampleReportsRoot, FallbackFonts());
-            pdf.SetField("CustomerName", "株式会社テスト製作所 御中")
-               .SetField("InvoiceNo", "INV-0001")
-               .SetField("TotalAmount", "¥1,000");
-
-            pdf.Clear();
-
-            Assert.Throws<RequiredSubstitutionValueMissingException>(() => pdf.Save(new MemoryStream()));
         }
 
         [Fact]

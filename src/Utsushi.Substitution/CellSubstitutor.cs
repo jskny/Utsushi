@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.Parsing.Model;
@@ -10,15 +9,10 @@ using Utsushi.ReportDefinitions.Model;
 namespace Utsushi.Substitution
 {
     /// <summary>
-    /// 帳票定義に基づくセル値置換の既定実装。
+    /// セル番地を指定した値の書き込みの既定実装(要件2.7、14.2・14.3)。
     /// </summary>
     /// <remarks>
-    /// <para>書式(フォント・配置・罫線・数値書式)には一切触れない(要件2.2)。</para>
-    /// <para>
-    /// はみ出し時の挙動(shrink/clip/wrap/overflow)はここでは計算せず、
-    /// 帳票定義の指定値を <see cref="ReportModel.OverflowByCell"/> に載せて
-    /// Layout レイヤーへ引き渡すのみとする(要件2.5、design.md「Substitution レイヤー」)。
-    /// </para>
+    /// <para>書式(フォント・配置・罫線・数値書式)には一切触れない(要件2.2)。はみ出し時の挙動はセルの書式に従う。</para>
     /// </remarks>
     public sealed class CellSubstitutor : ICellSubstitutor
     {
@@ -41,57 +35,6 @@ namespace Utsushi.Substitution
         /// メモリと処理時間を際限なく消費できてしまうため、件数にも上限を設ける。
         /// </remarks>
         internal const int MaxCellOverrideCount = 10000;
-
-        /// <inheritdoc />
-        public ReportModel Apply(ReportModel report, IReadOnlyDictionary<string, string> values)
-        {
-            if (report is null)
-            {
-                throw new ArgumentNullException(nameof(report));
-            }
-
-            if (values is null)
-            {
-                throw new ArgumentNullException(nameof(values));
-            }
-
-            var definition = report.Definition;
-            var sheet = report.Sheet;
-
-            ValidateKnownKeys(definition, sheet.Name, values);
-            var normalizedValues = NormalizeFieldValues(definition, sheet.Name, values);
-            ValidateRequiredValues(definition, sheet.Name, normalizedValues);
-
-            var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
-            var overflowByCell = new Dictionary<CellAddress, OverflowBehavior>(report.OverflowByCell);
-            var substitutedCells = new HashSet<CellAddress>(report.SubstitutedCells);
-
-            foreach (var field in definition.SubstitutionFields)
-            {
-                // 任意フィールドで値が渡されていない場合は、テンプレートの既存値をそのまま残す。
-                if (!normalizedValues.TryGetValue(field.Key, out var replacement))
-                {
-                    continue;
-                }
-
-                var existing = sheet.GetCell(field.Cell);
-                // セルが無い位置は、行・列・ブックの標準の書式で新しいセルを作る(要件1.10。Excel で入力した場合と同じ書式)。
-                cells[field.Cell] = existing is null
-                    ? new CellModel(replacement, CellValueKind.Text, sheet.GetEffectiveStyle(field.Cell), replacement)
-                    : existing.WithText(replacement);
-                MarkSubstituted(substitutedCells, field.Cell, replacement);
-
-                // 帳票定義がはみ出し挙動を明示している場合だけ Layout レイヤーへ伝える(要件2.5)。
-                // 未指定(null)のときは記録せず、Excel 側のセル書式を Layout がそのまま使う。
-                if (field.Overflow is { } overflow)
-                {
-                    overflowByCell[field.Cell] = overflow;
-                }
-            }
-
-            var updatedSheet = sheet with { Cells = cells };
-            return report with { Sheet = updatedSheet, OverflowByCell = overflowByCell, SubstitutedCells = substitutedCells };
-        }
 
         /// <inheritdoc />
         public ReportModel ApplyNumericCellOverrides(ReportModel report, IReadOnlyDictionary<string, double> numericOverrides)
@@ -118,7 +61,7 @@ namespace Utsushi.Substitution
                 throw new InvalidSubstitutionValueException(
                     "cellOverrides",
                     $"セル番地の直接指定が文字列・数値の合計で {total} 件あり、上限({MaxCellOverrideCount} 件)を超えています。",
-                    report.Definition.ReportCode,
+                    report.Settings.DocumentName,
                     report.Sheet.Name);
             }
 
@@ -130,7 +73,7 @@ namespace Utsushi.Substitution
                     throw new InvalidSubstitutionValueException(
                         addressText ?? string.Empty,
                         $"セル番地 '{addressText}' に指定した数値 {value.ToString(CultureInfo.InvariantCulture)} はセルに表示できません。",
-                        report.Definition.ReportCode,
+                        report.Settings.DocumentName,
                         report.Sheet.Name,
                         CellAddress.TryParse(addressText, out var invalidAt) ? invalidAt : null);
                 }
@@ -138,8 +81,8 @@ namespace Utsushi.Substitution
                 asText[addressText!] = value.ToString("R", CultureInfo.InvariantCulture);
             }
 
-            // 番地の検証(A1形式・同じセルの重複・結合範囲の内側)、差し込みセルの記録、overflow 指定の解除は
-            // 文字列の直接指定と同じ(要件14.2)。そのうえで、置き換えたセルを数値のセルにする。
+            // 番地の検証(A1形式・同じセルの重複・結合範囲の内側)と差し込みセルの記録は、文字列の直接指定と同じ(要件14.2)。
+            //そのうえで、置き換えたセルを数値のセルにする。
             var overridden = ApplyCellOverrides(report, asText);
 
             var sheet = overridden.Sheet;
@@ -149,10 +92,8 @@ namespace Utsushi.Substitution
                 var address = CellAddress.Parse(addressText);
                 var cell = cells[address];
                 var format = cell.Style.NumberFormat;
-                cells[address] = cell.WithNumber(
-                    asText[addressText],
-                    Parsing.NumberFormatting.Format(value, format),
-                    Parsing.NumberFormatting.ResolveColor(value, format));
+                var formatted = Parsing.NumberFormatting.FormatWithFallback(value, format);
+                cells[address] = cell.WithNumber(asText[addressText], formatted.Text, formatted.Color, formatted.Fallback);
             }
 
             return overridden with { Sheet = sheet with { Cells = cells } };
@@ -176,7 +117,7 @@ namespace Utsushi.Substitution
                 return report;
             }
 
-            var definition = report.Definition;
+            var settings = report.Settings;
             var sheet = report.Sheet;
 
             if (cellOverrides.Count > MaxCellOverrideCount)
@@ -184,15 +125,14 @@ namespace Utsushi.Substitution
                 throw new InvalidSubstitutionValueException(
                     "cellOverrides",
                     $"セル番地の直接指定が {cellOverrides.Count} 件あり、上限({MaxCellOverrideCount} 件)を超えています。",
-                    definition.ReportCode,
+                    settings.DocumentName,
                     sheet.Name);
             }
 
-            // Apply と同様、まず全入力を検証してから一括で書き換える(要件2.8, 2.9)。
-            var parsed = ParseAndValidateAddresses(definition, sheet, cellOverrides);
+            // まず全入力を検証してから一括で書き換える(要件2.8, 2.9)。
+            var parsed = ParseAndValidateAddresses(settings, sheet, cellOverrides);
 
             var cells = new Dictionary<CellAddress, CellModel>(sheet.Cells);
-            var overflowByCell = new Dictionary<CellAddress, OverflowBehavior>(report.OverflowByCell);
             var substitutedCells = new HashSet<CellAddress>(report.SubstitutedCells);
             var overriddenCells = new HashSet<CellAddress>(report.OverriddenCells);
 
@@ -204,14 +144,10 @@ namespace Utsushi.Substitution
                     ? new CellModel(replacement, CellValueKind.Text, sheet.GetEffectiveStyle(address), replacement)
                     : existing.WithText(replacement);
                 MarkSubstituted(substitutedCells, address, replacement);
-
-                // この経路は帳票定義のoverflow指定を経由しないため、名前付きキー方式(Apply)が
-                // 同じセルに残した指定があれば取り除き、常にExcel側のセル書式に従わせる(design.md)。
-                overflowByCell.Remove(address);
             }
 
             var updatedSheet = sheet with { Cells = cells };
-            return report with { Sheet = updatedSheet, OverflowByCell = overflowByCell, SubstitutedCells = substitutedCells, OverriddenCells = overriddenCells };
+            return report with { Sheet = updatedSheet, SubstitutedCells = substitutedCells, OverriddenCells = overriddenCells };
         }
 
         /// <summary>
@@ -229,23 +165,8 @@ namespace Utsushi.Substitution
             substitutedCells.Add(address);
         }
 
-        /// <summary>置換キー経由の値をすべて検証・正規化する(要件2.10, 2.11)。</summary>
-        private static Dictionary<string, string> NormalizeFieldValues(
-            ReportDefinition definition, string sheetName, IReadOnlyDictionary<string, string> values)
-        {
-            var normalized = new Dictionary<string, string>(values.Count, StringComparer.Ordinal);
-
-            foreach (var (key, value) in values)
-            {
-                CellAddress? cell = definition.TryGetField(key, out var field) ? field.Cell : null;
-                normalized[key] = NormalizeValue(value, $"置換キー '{key}'", key, definition, sheetName, cell);
-            }
-
-            return normalized;
-        }
-
         /// <summary>
-        /// 置換値を検証し、改行コードを LF に統一して返す(要件2.10, 2.11)。
+        /// 書き込む値を検証し、改行コードを LF に統一して返す(要件2.10, 2.11)。
         /// </summary>
         /// <remarks>
         /// 改行(LF/CR)以外の制御文字(タブを含む)・不可視の書式文字(Unicodeの Cf)はフォントに字形が無く、PDF上で豆腐や空白になる。
@@ -256,7 +177,7 @@ namespace Utsushi.Substitution
             string? value,
             string description,
             string target,
-            ReportDefinition definition,
+            ConversionSettings settings,
             string sheetName,
             CellAddress? cell)
         {
@@ -265,7 +186,7 @@ namespace Utsushi.Substitution
                 throw new InvalidSubstitutionValueException(
                     target,
                     $"{description} の値が null です。空欄にする場合は空文字を渡してください。",
-                    definition.ReportCode,
+                    settings.DocumentName,
                     sheetName,
                     cell);
             }
@@ -275,7 +196,7 @@ namespace Utsushi.Substitution
                 throw new InvalidSubstitutionValueException(
                     target,
                     $"{description} の値が {value.Length} 文字あり、上限({MaxValueLength} 文字。Excelのセルに入れられる文字数)を超えています。",
-                    definition.ReportCode,
+                    settings.DocumentName,
                     sheetName,
                     cell);
             }
@@ -316,7 +237,7 @@ namespace Utsushi.Substitution
                         target,
                         $"{description} の値の {i + 1} 文字目に{problem}が含まれています。"
                             + "PDFに文字として描画できないため、呼び出し元で除去または置き換えてください。",
-                        definition.ReportCode,
+                        settings.DocumentName,
                         sheetName,
                         cell);
                 }
@@ -332,7 +253,7 @@ namespace Utsushi.Substitution
         /// セル番地文字列をパースし、結合セル範囲内の非アンカー位置を指定していないかを検証する(要件2.8, 2.9)。
         /// </summary>
         private static List<(CellAddress Address, string Replacement)> ParseAndValidateAddresses(
-            ReportDefinition definition, SheetModel sheet, IReadOnlyDictionary<string, string> cellOverrides)
+            ConversionSettings settings, SheetModel sheet, IReadOnlyDictionary<string, string> cellOverrides)
         {
             var parsed = new List<(CellAddress, string)>(cellOverrides.Count);
             var addressTextByCell = new Dictionary<CellAddress, string>(cellOverrides.Count);
@@ -344,7 +265,7 @@ namespace Utsushi.Substitution
                     throw new InvalidCellOverrideAddressException(
                         addressText,
                         $"セル番地 '{addressText}' はA1形式として解釈できません。",
-                        definition.ReportCode,
+                        settings.DocumentName,
                         sheet.Name);
                 }
 
@@ -356,7 +277,7 @@ namespace Utsushi.Substitution
                         addressText,
                         $"セル番地 '{addressText}' と '{otherText}' が同じセル {address} を指しています。"
                             + "1つのセルへの直接指定は1つにしてください。",
-                        definition.ReportCode,
+                        settings.DocumentName,
                         sheet.Name);
                 }
 
@@ -369,74 +290,17 @@ namespace Utsushi.Substitution
                         merged!.Anchor,
                         $"セル '{address}' は結合セル範囲の先頭(アンカー: '{merged.Anchor}')ではないため、"
                             + "直接指定して上書きすることはできません。アンカーのセル番地を指定してください。",
-                        definition.ReportCode,
+                        settings.DocumentName,
                         sheet.Name);
                 }
 
                 var normalized = NormalizeValue(
-                    replacement, $"セル {address} の直接指定", addressText, definition, sheet.Name, address);
-
-                // 必須キーのセルを直接指定で空にすると、要件2.12の検証をすり抜けてしまう。
-                var requiredField = definition.RequiredFields.FirstOrDefault(f => f.Cell == address);
-                if (requiredField is not null && string.IsNullOrWhiteSpace(normalized))
-                {
-                    throw new RequiredSubstitutionValueMissingException(
-                        requiredField.Key,
-                        $"必須の置換キー '{requiredField.Key}'(セル {address})を、セル番地の直接指定で空にすることはできません。",
-                        definition.ReportCode,
-                        sheet.Name,
-                        address);
-                }
+                    replacement, $"セル {address} の直接指定", addressText, settings, sheet.Name, address);
 
                 parsed.Add((address, normalized));
             }
 
             return parsed;
-        }
-
-        /// <summary>帳票定義に存在しない置換キーが渡されていないかを検証する(要件2.3)。</summary>
-        private static void ValidateKnownKeys(
-            ReportDefinition definition, string sheetName, IReadOnlyDictionary<string, string> values)
-        {
-            foreach (var key in values.Keys)
-            {
-                if (definition.TryGetField(key, out _))
-                {
-                    continue;
-                }
-
-                throw new SubstitutionKeyNotFoundException(
-                    key,
-                    $"置換キー '{key}' は帳票 '{definition.ReportCode}' の帳票定義に存在しません。",
-                    definition.ReportCode,
-                    sheetName);
-            }
-        }
-
-        /// <summary>
-        /// 必須の置換キーに値が渡されているかを検証する(要件2.4)。空文字・空白のみの値も
-        /// 「値が無い」ものとして扱う(要件2.12)。
-        /// </summary>
-        private static void ValidateRequiredValues(
-            ReportDefinition definition, string sheetName, IReadOnlyDictionary<string, string> values)
-        {
-            foreach (var field in definition.RequiredFields)
-            {
-                var found = values.TryGetValue(field.Key, out var value);
-                if (found && !string.IsNullOrWhiteSpace(value))
-                {
-                    continue;
-                }
-
-                throw new RequiredSubstitutionValueMissingException(
-                    field.Key,
-                    found
-                        ? $"必須の置換キー '{field.Key}'(セル {field.Cell})の値が空です。"
-                        : $"必須の置換キー '{field.Key}'(セル {field.Cell})に対応する値が渡されていません。",
-                    definition.ReportCode,
-                    sheetName,
-                    field.Cell);
-            }
         }
     }
 }

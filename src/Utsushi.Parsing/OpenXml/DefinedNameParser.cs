@@ -56,6 +56,12 @@ namespace Utsushi.Parsing.OpenXml
             foreach (var reference in SplitReferences(definition))
             {
                 var range = StripSheetName(reference).Replace("$", string.Empty);
+                if (range.Length > 64)
+                {
+                    // 有効な行・列の範囲より長い参照は、分割せずに読み飛ばす(security-reviewer指摘)。
+                    continue;
+                }
+
                 var parts = range.Split(':');
                 if (parts.Length != 2)
                 {

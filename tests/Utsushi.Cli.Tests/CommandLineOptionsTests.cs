@@ -1,416 +1,261 @@
-using System;
-using System.IO;
+using Utsushi.Core;
+using Utsushi.Rendering;
 using Xunit;
-using Options = Utsushi.Cli.Program.CommandLineOptions;
 
 namespace Utsushi.Cli.Tests
 {
     /// <summary>
-    /// CLI の引数解釈(<see cref="Options.Parse"/>)の検証。
-    /// 帳票定義なしの変換(要件12.7)で <c>--report</c> を省略できること、定義なしでは使えない <c>--set</c>・<c>--definitions</c>
-    /// の組み合わせを使い方エラーにすること、<c>--max-digit-width</c>(要件12.3)を定義なしでのみ受け付けることを中心に確かめる。
+    /// CLI の引数解釈(<see cref="CommandLineOptions.Parse"/>)の検証(excel2pdf-consolidation 要件5.4〜5.6・5.8)。
     /// </summary>
     public sealed class CommandLineOptionsTests
     {
         private const string Input = "in.xlsx";
         private const string Output = "out.pdf";
 
-        private static Options Parse(params string[] args)
+        private static CommandLineOptions Parse(params string[] args)
         {
-            var options = Options.Parse(args, out var error);
+            var options = CommandLineOptions.Parse(args, out var error);
             Assert.Null(error);
-            return Assert.IsType<Options>(options);
+            return Assert.IsType<CommandLineOptions>(options);
         }
 
         private static string ParseError(params string[] args)
         {
-            var options = Options.Parse(args, out var error);
+            var options = CommandLineOptions.Parse(args, out var error);
             Assert.Null(options);
             return Assert.IsType<string>(error);
         }
 
-        private static string[] WithDefinitionArgs(params string[] extra) =>
-            Concat(new[] { "--report", "invoice", "--input", Input, "--output", Output }, extra);
-
-        private static string[] WithoutDefinitionArgs(params string[] extra) =>
-            Concat(new[] { "--input", Input, "--output", Output }, extra);
-
-        private static string[] Concat(string[] first, string[] second)
+        [Fact]
+        public void checkは入力のパスだけを受け取る()
         {
-            var result = new string[first.Length + second.Length];
-            first.CopyTo(result, 0);
-            second.CopyTo(result, first.Length);
-            return result;
+            var options = Parse("check", Input);
+
+            Assert.Equal(CliCommand.Check, options.Command);
+            Assert.Equal(Input, options.InputPath);
+            Assert.Null(options.OutputPath);
         }
 
-        // -- ヘルプ -----------------------------------------------------------------------------
+        [Fact]
+        public void convertは入力と出力のパスを受け取る()
+        {
+            var options = Parse("convert", Input, Output);
+
+            Assert.Equal(CliCommand.Convert, options.Command);
+            Assert.Equal(Input, options.InputPath);
+            Assert.Equal(Output, options.OutputPath);
+        }
 
         [Theory]
-        [InlineData(new object[] { new string[0] })]
-        [InlineData(new object[] { new[] { "--help" } })]
-        [InlineData(new object[] { new[] { "-h" } })]
-        [InlineData(new object[] { new[] { "--input", "in.xlsx", "--help" } })]
-        [InlineData(new object[] { new[] { "--report", "invoice", "-h", "--input", "in.xlsx" } })]
-        public void ヘルプ要求と引数なしはoptionsもerrorもnull(string[] args)
+        [InlineData("--help")]
+        [InlineData("-h")]
+        public void ヘルプはどの位置に書いても使い方の表示にする(string help)
         {
-            var options = Options.Parse(args, out var error);
-
-            Assert.Null(options);
+            Assert.Null(CommandLineOptions.Parse(new[] { help }, out var error));
+            Assert.Null(error);
+            Assert.Null(CommandLineOptions.Parse(new[] { "convert", Input, Output, "--text", "A1=x", help }, out error));
             Assert.Null(error);
         }
 
-        // -- --report ---------------------------------------------------------------------------
+        [Fact]
+        public void コマンドが無ければ使い方エラーにする()
+        {
+            Assert.Contains("コマンド", ParseError());
+        }
 
         [Fact]
-        public void reportを省略すると帳票コードはnullになり定義なしの変換になる()
+        public void 不明なコマンドは使い方エラーにする()
         {
-            var options = Parse(WithoutDefinitionArgs());
+            Assert.Contains("'render'", ParseError("render", Input));
+        }
 
-            Assert.Null(options.ReportCode);
-            Assert.Equal(Input, options.InputPath);
-            Assert.Equal(Output, options.OutputPath);
-            Assert.Empty(options.Values);
-            Assert.Empty(options.CellOverrides);
-            Assert.Null(options.MaxDigitWidthPx);
+        [Theory]
+        [InlineData("check")]
+        [InlineData("convert", Input)]
+        [InlineData("convert", Input, "--text", "A1=x")]
+        public void 必須のパスが無ければ使い方エラーにする(params string[] args)
+        {
+            Assert.Contains("パス", ParseError(args));
+        }
+
+        [Fact]
+        public void 余分なパスは使い方エラーにする()
+        {
+            Assert.Contains("'extra.pdf'", ParseError("check", Input, "extra.pdf"));
+        }
+
+        [Fact]
+        public void オプションの後ろのパスは使い方エラーにする()
+        {
+            // --allow-font-fallback の書体名と取り違えないよう、パスはコマンドの直後に限る。
+            Assert.Contains("コマンドの直後", ParseError("check", Input, "--ignore-unsupported", "other.xlsx"));
+        }
+
+        [Fact]
+        public void NUL文字を含むパスは使い方エラーにする()
+        {
+            Assert.Contains("NUL", ParseError("convert", Input, "out\0.pdf"));
         }
 
         [Theory]
         [InlineData("--report")]
-        [InlineData("-r")]
-        public void reportを指定すると帳票コードになる(string option)
-        {
-            var options = Parse(option, "invoice", "--input", Input, "--output", Output);
-
-            Assert.Equal("invoice", options.ReportCode);
-        }
-
-        [Theory]
-        [InlineData("")]
-        [InlineData(" ")]
-        [InlineData("\t")]
-        public void reportの値が空ならエラー(string reportCode)
-        {
-            var error = ParseError("--report", reportCode, "--input", Input, "--output", Output);
-
-            Assert.Contains("--report", error, StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public void reportの値が無ければエラー()
-        {
-            var error = ParseError("--input", Input, "--output", Output, "--report");
-
-            Assert.Contains("--report には値が必要です", error, StringComparison.Ordinal);
-        }
-
-        // -- --set ------------------------------------------------------------------------------
-
-        [Theory]
-        [InlineData("--set")]
-        [InlineData("-s")]
-        public void reportなしのsetはエラー(string option)
-        {
-            var error = ParseError(WithoutDefinitionArgs(option, "InvoiceNo=A-001"));
-
-            Assert.Contains("--set", error, StringComparison.Ordinal);
-            Assert.Contains("--report", error, StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public void reportありのsetは置換キーと値になる()
-        {
-            var options = Parse(WithDefinitionArgs(
-                "--set", "InvoiceNo=A-001",
-                "-s", "Formula=a=b",          // 値の中の '=' はそのまま
-                "--set", "Remarks="));        // 空の値
-
-            Assert.Equal(3, options.Values.Count);
-            Assert.Equal("A-001", options.Values["InvoiceNo"]);
-            Assert.Equal("a=b", options.Values["Formula"]);
-            Assert.Equal(string.Empty, options.Values["Remarks"]);
-        }
-
-        [Theory]
-        [InlineData("InvoiceNo")]
-        [InlineData("=A-001")]
-        [InlineData("")]
-        public void setがキーと値の形式でなければエラー(string pair)
-        {
-            var error = ParseError(WithDefinitionArgs("--set", pair));
-
-            Assert.Contains("--set", error, StringComparison.Ordinal);
-        }
-
-        // -- --definitions ----------------------------------------------------------------------
-
-        [Theory]
         [InlineData("--definitions")]
-        [InlineData("-d")]
-        public void reportなしのdefinitionsはエラー(string option)
+        [InlineData("--set")]
+        [InlineData("--override")]
+        [InlineData("--input")]
+        public void 帳票定義と以前の形式のオプションは持たない(string option)
         {
-            var error = ParseError(WithoutDefinitionArgs(option, "samples/reports"));
-
-            Assert.Contains("--definitions", error, StringComparison.Ordinal);
-            Assert.Contains("--report", error, StringComparison.Ordinal);
+            Assert.Contains("不明なオプション", ParseError("convert", Input, Output, option, "x"));
         }
 
         [Fact]
-        public void reportありのdefinitionsは定義ルートになる()
+        public void 文字列と数値のセルの指定を受け取る()
         {
-            var options = Parse(WithDefinitionArgs("--definitions", "samples/reports"));
+            var options = Parse(
+                "convert", Input, Output,
+                "--text", "A3=株式会社サンプル 御中",
+                "--text", "B4=式は=を含められる",
+                "--number", "F12=-1234.5",
+                "--number", "c8=1e3");
 
-            Assert.Equal("samples/reports", options.DefinitionRoot);
+            Assert.Equal("株式会社サンプル 御中", options.Texts[CellAddress.Parse("A3")]);
+            Assert.Equal("式は=を含められる", options.Texts[CellAddress.Parse("B4")]);
+            Assert.Equal(-1234.5, options.Numbers[CellAddress.Parse("F12")]);
+            Assert.Equal(1000.0, options.Numbers[CellAddress.Parse("C8")]);
         }
 
         [Fact]
-        public void definitionsを省略すると定義ルートはカレントディレクトリのreportsになる()
+        public void 空の文字列を書き込める()
         {
-            var options = Parse(WithDefinitionArgs());
-
-            Assert.Equal(Path.Combine(Directory.GetCurrentDirectory(), "reports"), options.DefinitionRoot);
+            Assert.Equal(string.Empty, Parse("check", Input, "--text", "A1=").Texts[CellAddress.Parse("A1")]);
         }
-
-        // -- --max-digit-width ------------------------------------------------------------------
 
         [Theory]
-        [InlineData("8", 8.0)]
-        [InlineData("7", 7.0)]
-        [InlineData("7.5", 7.5)]
-        [InlineData("0.5", 0.5)]
-        [InlineData("1e1", 10.0)]
-        public void reportなしのmaxDigitWidthは正の数を受け付ける(string text, double expected)
+        [InlineData("--text", "A1=x", "--text", "A1=y")]
+        [InlineData("--text", "A1=x", "--number", "a1=1")]
+        [InlineData("--number", "$B$2=1", "--text", "B2=x")]
+        public void 同じセルを重複して指定すると使い方エラーにする(string option1, string value1, string option2, string value2)
         {
-            var options = Parse(WithoutDefinitionArgs("--max-digit-width", text));
-
-            Assert.Null(options.ReportCode);
-            Assert.Equal(expected, options.MaxDigitWidthPx);
+            Assert.Contains("重複", ParseError("check", Input, option1, value1, option2, value2));
         }
 
-        [Fact]
-        public void reportありのmaxDigitWidthはエラー()
+        [Theory]
+        [InlineData("--text", "A1")]
+        [InlineData("--text", "=x")]
+        [InlineData("--text", "1A=x")]
+        [InlineData("--number", "A1=1,5")]
+        [InlineData("--number", "A1=NaN")]
+        [InlineData("--number", "A1=Infinity")]
+        [InlineData("--number", "A1=")]
+        public void セルの指定の形式が不正なら使い方エラーにする(string option, string value)
         {
-            var error = ParseError(WithDefinitionArgs("--max-digit-width", "8"));
+            Assert.Contains(option, ParseError("check", Input, option, value));
+        }
 
-            Assert.Contains("--max-digit-width", error, StringComparison.Ordinal);
-            Assert.Contains("maxDigitWidthPx", error, StringComparison.Ordinal);
+        [Theory]
+        [InlineData("--text")]
+        [InlineData("--number")]
+        [InlineData("--sheet")]
+        [InlineData("--document-name")]
+        [InlineData("--max-digit-width")]
+        public void 値の必要なオプションに値が無ければ使い方エラーにする(string option)
+        {
+            Assert.Contains("値が必要", ParseError("check", Input, option));
+        }
+
+        [Theory]
+        [InlineData("--sheet")]
+        [InlineData("--document-name")]
+        public void 空の名前は使い方エラーにする(string option)
+        {
+            Assert.Contains("空", ParseError("check", Input, option, " "));
         }
 
         [Theory]
         [InlineData("0")]
-        [InlineData("0.0")]
-        [InlineData("-0")]
-        [InlineData("-1")]
-        [InlineData("-7.5")]
+        [InlineData("-7")]
         [InlineData("abc")]
-        [InlineData("")]
-        [InlineData("8px")]
-        [InlineData("7,5")]        // 小数点はカルチャによらず '.'
-        [InlineData("Infinity")]
-        [InlineData("NaN")]        // 回帰テスト: double.TryParse は NaN を受け付けるため、以前はファサードで未処理例外になった
-        [InlineData("1e400")]      // double の範囲を超えて無限大になる
-        public void maxDigitWidthが0や負や数値でなければエラー(string text)
+        [InlineData("NaN")]
+        public void 最大数字幅は正の数だけを受け付ける(string value)
         {
-            var error = ParseError(WithoutDefinitionArgs("--max-digit-width", text));
-
-            Assert.Contains("--max-digit-width には正の数を指定してください", error, StringComparison.Ordinal);
+            Assert.Contains("--max-digit-width", ParseError("check", Input, "--max-digit-width", value));
         }
 
         [Fact]
-        public void maxDigitWidthの値が無ければエラー()
+        public void 設定のオプションをExcel2PdfOptionsに渡す()
         {
-            var error = ParseError(WithoutDefinitionArgs("--max-digit-width"));
+            var options = Parse(
+                "convert", Input, Output,
+                "--sheet", "請求書",
+                "--document-name", "INV-0001",
+                "--max-digit-width", "7.5",
+                "--ignore-unsupported",
+                "--allow-font-fallback", "IPAexGothic",
+                "--allow-missing-glyphs",
+                "--outline-text").ToExcel2PdfOptions();
 
-            Assert.Contains("--max-digit-width には値が必要です", error, StringComparison.Ordinal);
-        }
-
-        // -- --override -------------------------------------------------------------------------
-
-        [Fact]
-        public void overrideはセル番地と値になる()
-        {
-            var options = Parse(WithoutDefinitionArgs(
-                "--override", "A1=請求書(控)",
-                "--override", "B12=x=y",       // 値の中の '=' はそのまま
-                "--override", "C3="));         // 空の値
-
-            Assert.Equal(3, options.CellOverrides.Count);
-            Assert.Equal("請求書(控)", options.CellOverrides["A1"]);
-            Assert.Equal("x=y", options.CellOverrides["B12"]);
-            Assert.Equal(string.Empty, options.CellOverrides["C3"]);
-            Assert.Empty(options.Values);
-        }
-
-        [Fact]
-        public void overrideはreportありでも使える()
-        {
-            var options = Parse(WithDefinitionArgs("--override", "A1=請求書(控)", "--set", "InvoiceNo=A-001"));
-
-            Assert.Equal("請求書(控)", options.CellOverrides["A1"]);
-            Assert.Equal("A-001", options.Values["InvoiceNo"]);
+            Assert.Equal("請求書", options.SheetName);
+            Assert.Equal("INV-0001", options.DocumentName);
+            Assert.Equal(7.5, options.MaxDigitWidthPx);
+            Assert.Equal(UnsupportedElementPolicy.Ignore, options.UnsupportedElements);
+            Assert.Equal(FontResolutionMode.AllowFallback, options.Fonts!.Mode);
+            Assert.Equal("IPAexGothic", options.Fonts.FallbackFamilyName);
+            Assert.Equal(MissingGlyphPolicy.Render, options.Render!.MissingGlyphs);
+            Assert.Equal(PdfTextRendering.Outline, options.Render.TextRendering);
         }
 
         [Fact]
-        public void overrideのセル番地は大文字小文字を区別してそのまま渡す()
+        public void 設定のオプションを省略すると既定の設定にする()
         {
-            // 番地の正規化・検証は Substitution レイヤーの責務。CLI は文字列のまま渡す
-            // ("a1" と "A1" が同じセルを指すことは Substitution レイヤーがエラーにする)。
-            var options = Parse(WithoutDefinitionArgs("--override", "a1=x", "--override", "A1=y"));
+            var options = Parse("check", Input).ToExcel2PdfOptions();
 
-            Assert.Equal("x", options.CellOverrides["a1"]);
-            Assert.Equal("y", options.CellOverrides["A1"]);
+            Assert.Null(options.SheetName);
+            Assert.Null(options.DocumentName);
+            Assert.Null(options.MaxDigitWidthPx);
+            Assert.Equal(UnsupportedElementPolicy.Error, options.UnsupportedElements);
+            Assert.Equal(FontResolutionMode.Strict, options.Fonts!.Mode);
+            Assert.Equal(PdfRenderOptions.Default, options.Render);
         }
 
         [Theory]
-        [InlineData("A1")]
-        [InlineData("=値")]
-        [InlineData("")]
-        public void overrideがセル番地と値の形式でなければエラー(string pair)
+        [InlineData("--sheet", "a", "--sheet", "b")]
+        [InlineData("--ignore-unsupported", null, "--ignore-unsupported", null)]
+        public void テキストと数値以外のオプションを重ねて指定すると使い方エラーにする(string first, string? firstValue, string second, string? secondValue)
         {
-            var error = ParseError(WithoutDefinitionArgs("--override", pair));
+            var args = new System.Collections.Generic.List<string> { "check", Input, first };
+            if (firstValue is not null)
+            {
+                args.Add(firstValue);
+            }
 
-            Assert.Contains("--override", error, StringComparison.Ordinal);
-            Assert.Contains("<セル番地>=<値>", error, StringComparison.Ordinal);
+            args.Add(second);
+            if (secondValue is not null)
+            {
+                args.Add(secondValue);
+            }
+
+            Assert.Contains("重複", ParseError(args.ToArray()));
         }
 
         [Fact]
-        public void 同じセル番地のoverrideを重ねて指定するとエラー()
+        public void 値の代わりに次のオプションを書くと使い方エラーにする()
         {
-            // 以前は後の値だけが黙って採用されていた。
-            var error = ParseError(WithoutDefinitionArgs("--override", "A1=請求書(控)", "--override", "A1=請求書"));
-
-            Assert.Contains("--override", error, StringComparison.Ordinal);
-            Assert.Contains("'A1'", error, StringComparison.Ordinal);
-            Assert.Contains("重複", error, StringComparison.Ordinal);
+            Assert.Contains("値が必要", ParseError("check", Input, "--document-name", "--allow-font-fallback"));
         }
 
         [Fact]
-        public void 同じキーのsetを重ねて指定するとエラー()
+        public void 形式の誤りのエラーに書き込む値を出さない()
         {
-            var error = ParseError(WithDefinitionArgs("--set", "InvoiceNo=A-001", "--set", "InvoiceNo=A-002"));
-
-            Assert.Contains("--set", error, StringComparison.Ordinal);
-            Assert.Contains("'InvoiceNo'", error, StringComparison.Ordinal);
-            Assert.Contains("重複", error, StringComparison.Ordinal);
-        }
-
-        [Theory]
-        [InlineData("")]
-        [InlineData("   ")]
-        public void definitionsの値が空ならエラー(string value)
-        {
-            var error = ParseError(WithDefinitionArgs("--definitions", value));
-
-            Assert.Contains("--definitions の値が空です", error, StringComparison.Ordinal);
-        }
-
-        // -- 引数の解釈では弾けない不正な値(Main) ------------------------------------------------------
-
-        [Fact]
-        public void NUL文字を含む帳票定義ルートは使い方エラーになりプロセスは落ちない()
-        {
-            var exitCode = Program.Main(WithDefinitionArgs("--definitions", "reports\0x"));
-
-            Assert.Equal(Program.ExitUsageError, exitCode);
+            Assert.DoesNotContain("株式会社", ParseError("check", Input, "--text", "株式会社サンプル"));
         }
 
         [Fact]
-        public void NUL文字を含む入力パスは使い方エラーになりプロセスは落ちない()
+        public void 書体名を省略したフォントの代替の許可は直後のオプションを書体名にしない()
         {
-            var exitCode = Program.Main(new[] { "--input", "in\0.xlsx", "--output", Output, "--allow-font-fallback" });
-
-            Assert.Equal(Program.ExitUsageError, exitCode);
-        }
-
-        [Fact]
-        public void overrideの値が無ければエラー()
-        {
-            var error = ParseError(WithoutDefinitionArgs("--override"));
-
-            Assert.Contains("--override には値が必要です", error, StringComparison.Ordinal);
-        }
-
-        // -- 必須の --input / --output ---------------------------------------------------------------
-
-        [Theory]
-        [InlineData("--input", "--output")]
-        [InlineData("-i", "-o")]
-        [InlineData("-i", "--output")]
-        public void inputとoutputは短い形式でも指定できる(string inputOption, string outputOption)
-        {
-            var options = Parse(inputOption, Input, outputOption, Output);
-
-            Assert.Equal(Input, options.InputPath);
-            Assert.Equal(Output, options.OutputPath);
-        }
-
-        [Fact]
-        public void inputが無ければエラー()
-        {
-            Assert.Equal("--input は必須です。", ParseError("--output", Output));
-            Assert.Equal("--input は必須です。", ParseError("--report", "invoice", "--output", Output));
-        }
-
-        [Fact]
-        public void outputが無ければエラー()
-        {
-            Assert.Equal("--output は必須です。", ParseError("--input", Input));
-            Assert.Equal("--output は必須です。", ParseError("--report", "invoice", "--input", Input));
-        }
-
-        [Theory]
-        [InlineData("")]
-        [InlineData("  ")]
-        public void inputとoutputの値が空ならエラー(string value)
-        {
-            Assert.Equal("--input は必須です。", ParseError("--input", value, "--output", Output));
-            Assert.Equal("--output は必須です。", ParseError("--input", Input, "--output", value));
-        }
-
-        [Fact]
-        public void inputの値が無ければエラー()
-        {
-            Assert.Contains("--input には値が必要です", ParseError("--output", Output, "--input"), StringComparison.Ordinal);
-        }
-
-        // -- その他のオプション ------------------------------------------------------------------------
-
-        [Fact]
-        public void 不明なオプションはエラー()
-        {
-            var error = ParseError(WithoutDefinitionArgs("--unknown"));
-
-            Assert.Contains("--unknown", error, StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public void 出力オプションは既定でオフ()
-        {
-            var options = Parse(WithoutDefinitionArgs());
-
-            Assert.False(options.AllowFontFallback);
-            Assert.Null(options.FallbackFont);
-            Assert.False(options.AllowMissingGlyphs);
-            Assert.False(options.OutlineText);
-        }
-
-        [Fact]
-        public void 出力オプションは定義なしでも使える()
-        {
-            var options = Parse(WithoutDefinitionArgs("--allow-font-fallback", "--allow-missing-glyphs", "--outline-text"));
+            var options = Parse("check", Input, "--allow-font-fallback", "--outline-text");
 
             Assert.True(options.AllowFontFallback);
             Assert.Null(options.FallbackFont);
-            Assert.True(options.AllowMissingGlyphs);
-            Assert.True(options.OutlineText);
-        }
-
-        [Fact]
-        public void allowFontFallbackの直後がオプションでなければ代替フォント名になる()
-        {
-            var options = Parse(WithoutDefinitionArgs("--allow-font-fallback", "IPAexGothic", "--outline-text"));
-
-            Assert.True(options.AllowFontFallback);
-            Assert.Equal("IPAexGothic", options.FallbackFont);
             Assert.True(options.OutlineText);
         }
     }

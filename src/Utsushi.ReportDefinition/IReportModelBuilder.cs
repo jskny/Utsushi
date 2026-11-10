@@ -1,114 +1,50 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using Utsushi.Core;
-using Utsushi.Core.Exceptions;
 using Utsushi.Parsing.Model;
 using Utsushi.ReportDefinitions.Model;
 
 namespace Utsushi.ReportDefinitions
 {
     /// <summary>
-    /// <see cref="WorkbookModel"/> と帳票定義を突合して <see cref="ReportModel"/> を構築する。
+    /// <see cref="WorkbookModel"/> と変換の設定から <see cref="ReportModel"/> を構築する。
     /// </summary>
     public interface IReportModelBuilder
     {
-        /// <summary>
-        /// 帳票定義が期待するシート構成・セル番地が実在するかを検証し、<see cref="ReportModel"/> を構築する。
-        /// </summary>
-        /// <exception cref="ReportStructureMismatchException">
-        /// シート名やセル番地が一致しない場合(要件1.4)。
+        /// <summary>変換の設定が指すシートを取り出し、<see cref="ReportModel"/> を構築する。</summary>
+        /// <exception cref="InvalidOperationException">
+        /// 設定のシートがブックに無い場合(読み込みは対象のシートだけを返すため、通常は起きない)。
         /// </exception>
-        ReportModel Build(WorkbookModel workbook, ReportDefinition definition);
+        ReportModel Build(WorkbookModel workbook, ConversionSettings settings);
     }
 
     /// <inheritdoc />
     public sealed class ReportModelBuilder : IReportModelBuilder
     {
         /// <inheritdoc />
-        public ReportModel Build(WorkbookModel workbook, ReportDefinition definition)
+        public ReportModel Build(WorkbookModel workbook, ConversionSettings settings)
         {
             if (workbook is null)
             {
                 throw new ArgumentNullException(nameof(workbook));
             }
 
-            if (definition is null)
+            if (settings is null)
             {
-                throw new ArgumentNullException(nameof(definition));
+                throw new ArgumentNullException(nameof(settings));
             }
 
-            var sheet = workbook.FindSheet(definition.SheetName);
+            var sheet = workbook.FindSheet(settings.SheetName);
             if (sheet is null)
             {
+                // 読み込み(Parsing)は変換対象のシートだけを返し、無ければ InvalidExcelFileException にする。
+                // ここに来るのは、契約に反する IWorkbookReader が差し替えられた場合だけである。
                 var available = string.Join(", ", workbook.Sheets.Select(s => "'" + s.Name + "'"));
-                throw new ReportStructureMismatchException(
-                    $"帳票定義が期待するシート '{definition.SheetName}' がブックに存在しません。"
-                    + $"ブック内のシート: {(available.Length == 0 ? "(なし)" : available)}",
-                    definition.ReportCode,
-                    definition.SheetName);
+                throw new InvalidOperationException(
+                    $"変換するシート '{settings.SheetName}' がブックに存在しません。"
+                    + $"ブック内のシート: {(available.Length == 0 ? "(なし)" : available)}");
             }
 
-            ValidateSubstitutionCells(sheet, definition);
-            ValidatePrintArea(sheet, definition);
-
-            return ReportModel.Create(definition, sheet, workbook.DefaultFont);
-        }
-
-        /// <summary>
-        /// 置換対象セルがシートの使用範囲内に存在するかを検証する(要件1.4)。
-        /// </summary>
-        /// <remarks>
-        /// 値が空のセルは <c>Cells</c> に現れないことがあるため、セルの存在ではなく
-        /// 「使用範囲に含まれるか」「結合セルの左上か」を判定基準とする。
-        /// </remarks>
-        private static void ValidateSubstitutionCells(SheetModel sheet, ReportDefinition definition)
-        {
-            var usedRange = sheet.GetUsedRange();
-
-            foreach (var field in definition.SubstitutionFields)
-            {
-                if (usedRange is null || !usedRange.Value.Contains(field.Cell))
-                {
-                    throw new ReportStructureMismatchException(
-                        $"置換キー '{field.Key}' の対象セル {field.Cell} が、"
-                        + $"シート '{sheet.Name}' の使用範囲(値か書式のあるセルの範囲){(usedRange is null ? "(空)" : " " + usedRange.Value)}の外にあります。"
-                        + "テンプレートで、このセル自体に値か書式(罫線・フォントなど)を設定してください。行全体・列全体に設定した書式は使用範囲に含まれません(要件1.10, 1.11)。",
-                        definition.ReportCode,
-                        sheet.Name,
-                        field.Cell);
-                }
-
-                if (sheet.IsNonAnchorMergedCell(field.Cell, out var merged))
-                {
-                    throw new ReportStructureMismatchException(
-                        $"置換キー '{field.Key}' の対象セル {field.Cell} は結合範囲 {merged!.Range} の内側にあります。"
-                        + $"結合範囲の左上セル {merged.Anchor} を指定してください。",
-                        definition.ReportCode,
-                        sheet.Name,
-                        field.Cell);
-                }
-            }
-        }
-
-        /// <summary>
-        /// 帳票定義の印刷範囲上書きが使用範囲と矛盾しないことを確認する。
-        /// </summary>
-        private static void ValidatePrintArea(SheetModel sheet, ReportDefinition definition)
-        {
-            if (definition.PrintAreaOverride is not { } printArea)
-            {
-                return;
-            }
-
-            var usedRange = sheet.GetUsedRange();
-            if (usedRange is null)
-            {
-                throw new ReportStructureMismatchException(
-                    $"帳票定義が印刷範囲 {printArea} を指定していますが、シート '{sheet.Name}' にセルがありません。",
-                    definition.ReportCode,
-                    sheet.Name);
-            }
+            return ReportModel.Create(settings, sheet, workbook.DefaultFont);
         }
     }
 }

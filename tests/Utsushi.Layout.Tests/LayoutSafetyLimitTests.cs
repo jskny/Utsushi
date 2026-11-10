@@ -58,7 +58,7 @@ namespace Utsushi.Layout.Tests
                     ranges.Select(CellRange.Parse).ToList(), maxCells, "report", "シート1"));
 
             Assert.Equal(ProcessingStage.Layout, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Equal("シート1", ex.SheetName);
         }
 
@@ -123,7 +123,7 @@ namespace Utsushi.Layout.Tests
                     new PrintTitles(firstRow, lastRow, firstColumn, lastColumn)));
 
             Assert.Equal(ProcessingStage.Layout, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Equal("シート1", ex.SheetName);
         }
 
@@ -163,7 +163,7 @@ namespace Utsushi.Layout.Tests
                 () => ReportLayoutEngine.EnsurePageCountWithinLimit(pageCount, maxPages, "report", "シート1"));
 
             Assert.Equal(ProcessingStage.Layout, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Equal("シート1", ex.SheetName);
         }
 
@@ -180,18 +180,20 @@ namespace Utsushi.Layout.Tests
 
             var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet));
 
-            Assert.Equal("test-report", ex.ReportCode);
+            Assert.Equal("test-report", ex.DocumentName);
             Assert.Equal("テストシート", ex.SheetName);
             Assert.Contains("印刷範囲", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]
-        public void 帳票定義で指定した巨大な印刷範囲もLayoutComputationExceptionになる()
+        public void シート全体の巨大な印刷範囲はLayoutComputationExceptionになる()
         {
-            var sheet = SparseSheet(new[] { CellAddress.Parse("A1") }, defaultRowHeightPt: 20.0, pageSetup: NoMarginA4());
+            var sheet = SparseSheet(
+                new[] { CellAddress.Parse("A1") },
+                defaultRowHeightPt: 20.0,
+                pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("A1:XFD1048576") }));
 
-            var ex = Assert.Throws<LayoutComputationException>(
-                () => Compute(sheet, Definition(printAreaOverride: CellRange.Parse("A1:XFD1048576"))));
+            var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet, Settings()));
 
             Assert.Contains("印刷範囲", ex.Message, StringComparison.Ordinal);
         }
@@ -225,7 +227,7 @@ namespace Utsushi.Layout.Tests
 
             var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet));
 
-            Assert.Equal("test-report", ex.ReportCode);
+            Assert.Equal("test-report", ex.DocumentName);
             Assert.Equal("テストシート", ex.SheetName);
             Assert.Contains("印刷範囲", ex.Message, StringComparison.Ordinal);
         }
@@ -312,8 +314,8 @@ namespace Utsushi.Layout.Tests
 
         // --- ヘルパー ----------------------------------------------------------------
 
-        private PagedLayout Compute(SheetModel sheet, ReportDefinition? definition = null) =>
-            _engine.Compute(ReportModel.Create(definition ?? Definition(), sheet));
+        private PagedLayout Compute(SheetModel sheet, ConversionSettings? settings = null) =>
+            _engine.Compute(ReportModel.Create(settings ?? Settings(), sheet));
 
         /// <summary>指定したセルだけを持ち、行高・列幅はすべて既定値のシート(大規模な範囲を少ないメモリで表す)。</summary>
         private static SheetModel SparseSheet(

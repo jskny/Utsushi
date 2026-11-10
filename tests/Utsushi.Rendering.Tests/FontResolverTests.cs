@@ -40,6 +40,54 @@ namespace Utsushi.Rendering.Tests
         }
 
         [Fact]
+        public void 代替したフォントは代替の書体名を返す()
+        {
+            using var resolver = new FontResolver(FontResolverOptions.AllowFallback());
+
+            var family = resolver.GetSubstitution(Font("存在しないフォント-ZZZ", bold: true));
+
+            Assert.Equal(Fonts.BundledFonts.JapaneseGothicFamily, family);
+        }
+
+        [Fact]
+        public void 代替の書体名は解決済みのフォントでも返す()
+        {
+            using var resolver = new FontResolver(FontResolverOptions.AllowFallback());
+            resolver.Resolve(Font("存在しないフォント-ZZZ"));
+
+            Assert.Equal(Fonts.BundledFonts.JapaneseGothicFamily, resolver.GetSubstitution(Font("存在しないフォント-ZZZ")));
+            Assert.Equal(Fonts.BundledFonts.JapaneseGothicFamily, resolver.GetSubstitution(Font("存在しないフォント-ZZZ")));
+        }
+
+        [Fact]
+        public void 指定した名前で見つかったフォントは代替にならない()
+        {
+            using var resolver = new FontResolver(FontResolverOptions.AllowFallback());
+
+            Assert.Null(resolver.GetSubstitution(Font(Fonts.BundledFonts.JapaneseGothicFamily)));
+        }
+
+        [Fact]
+        public void 厳格モードでは代替せず問い合わせも例外になる()
+        {
+            using var resolver = new FontResolver(FontResolverOptions.Strict);
+
+            Assert.Null(resolver.GetSubstitution(Font(Fonts.BundledFonts.JapaneseGothicFamily)));
+            Assert.Throws<FontNotAvailableException>(() => resolver.GetSubstitution(Font("存在しないフォント-ZZZ")));
+        }
+
+        [Fact]
+        public void 外字の補いは代替として返さない()
+        {
+            using var resolver = new FontResolver(FontResolverOptions.AllowFallback());
+
+            // 外字用の代替書体(IPAmj明朝など)が入っていなくても、外字の補いの探索は代替として記録しない(要件3.4)。
+            resolver.ResolveGlyphFallbacks(bold: false, italic: false);
+
+            Assert.Null(resolver.GetSubstitution(Font(Fonts.BundledFonts.JapaneseGothicFamily)));
+        }
+
+        [Fact]
         public void 事前検証で未検出フォントをまとめて検出できる()
         {
             using var resolver = new FontResolver(FontResolverOptions.Strict);

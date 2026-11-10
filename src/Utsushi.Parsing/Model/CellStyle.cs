@@ -111,6 +111,21 @@ namespace Utsushi.Parsing.Model
         bool ShrinkToFit,
         int Indent)
     {
+        /// <summary>
+        /// 文字の方向・回転(<c>alignment/@textRotation</c>)。0〜90は反時計回りの角度、91〜180は時計回りに(値−90)度、255は縦書き。
+        /// Utsushi は回転・縦書きを再現せず横書きで描く(書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(a))。
+        /// </summary>
+        public int TextRotation { get; init; }
+
+        /// <summary>
+        /// 塗りつぶしを近似した場合の種類(網かけ・グラデーション)。近似していなければ null
+        /// (書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(f))。
+        /// </summary>
+        public Core.FormatApproximationKind? FillApproximation { get; init; }
+
+        /// <summary><see cref="FillApproximation"/> の補足の情報(網かけの種類など)。</summary>
+        public string? FillApproximationDetail { get; init; }
+
         /// <summary>既定の書式(罫線・背景なし、既定フォント)。</summary>
         public static CellStyle Default { get; } = new(
             FontStyle.Default,

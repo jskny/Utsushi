@@ -49,20 +49,20 @@ namespace Utsushi.Rendering
         private SKPaint? _linePaint;
 
         private RenderContext(
-            string reportCode,
+            string documentName,
             string sheetName,
             Dictionary<(FontStyle, string), ShapedText> shaped,
             Dictionary<SKTypeface, SubsetGroup> subsets,
             HashSet<byte[]> repeatedImages)
         {
-            ReportCode = reportCode;
+            DocumentName = documentName;
             SheetName = sheetName;
             _shaped = shaped;
             _subsets = subsets;
             _repeatedImages = repeatedImages;
         }
 
-        public string ReportCode { get; }
+        public string DocumentName { get; }
 
         public string SheetName { get; }
 
@@ -85,7 +85,7 @@ namespace Utsushi.Rendering
                     var result = shaper.Shape(font, text);
                     if (result.Missing is not null && options.MissingGlyphs == MissingGlyphPolicy.Error)
                     {
-                        throw SkiaPdfRenderer.CreateMissingGlyphException(result, text, layout.ReportCode, layout.SheetName);
+                        throw SkiaPdfRenderer.CreateMissingGlyphException(result, text, layout.DocumentName, layout.SheetName);
                     }
 
                     shaped[(font, text)] = result;
@@ -106,7 +106,7 @@ namespace Utsushi.Rendering
                 }
             }
 
-            return new RenderContext(layout.ReportCode, layout.SheetName, shaped, subsets, FindRepeatedImages(layout));
+            return new RenderContext(layout.DocumentName, layout.SheetName, shaped, subsets, FindRepeatedImages(layout));
         }
 
         /// <summary>全ページを通して2回以上描く画像のバイナリ(同じ配列かどうかで比べる)。</summary>

@@ -178,7 +178,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 非対応プリセットの図形はunsupportedElementsがignoreなら無視される()
+        public void 非対応プリセットの図形は読み込みでは無視される()
         {
             var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.FlowChartPreparation);
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
@@ -194,17 +194,17 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 非対応プリセットの図形はunsupportedElementsがerrorなら例外になる()
+        public void 非対応プリセットの図形は未対応要素として記録する()
         {
             var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.FlowChartPreparation);
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("UnsupportedShapePreset", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedShapePreset);
             }
             finally
             {
@@ -213,16 +213,16 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 図形のみのシートはunsupportedElementsがerrorでも例外にならない()
+        public void 図形のみのシートは未対応要素として記録しない()
         {
             var anchor = ShapeWorkbookFixtures.ShapeAnchor(A.ShapeTypeValues.Rectangle);
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<ShapeModel>());
             }
             finally
@@ -366,7 +366,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 図形の数が上限を超える場合はunsupportedElementsがignoreなら上限までしか読み取らない()
+        public void 図形の数が上限を超える場合は読み込みでは上限までしか読み取らない()
         {
             var count = OpenXmlWorkbookReader.MaxShapesPerSheet + 5;
             var anchors = Enumerable.Range(0, count)
@@ -385,7 +385,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 図形の数が上限を超える場合はunsupportedElementsがerrorなら例外になる()
+        public void 図形の数が上限を超える場合は未対応要素として記録する()
         {
             var count = OpenXmlWorkbookReader.MaxShapesPerSheet + 5;
             var anchors = Enumerable.Range(0, count)
@@ -394,11 +394,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchors);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("TooManyShapes", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.LimitExceeded, "TooManyShapes");
             }
             finally
             {
@@ -407,7 +407,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 図形内テキストの文字数が上限を超える場合はunsupportedElementsがignoreなら無視される()
+        public void 図形内テキストの文字数が上限を超える場合は読み込みでは無視される()
         {
             var longText = new string('あ', 2001);
             var anchor = ShapeWorkbookFixtures.ShapeAnchor(
@@ -426,7 +426,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 図形内テキストの文字数が上限を超える場合はunsupportedElementsがerrorなら例外になる()
+        public void 図形内テキストの文字数が上限を超える場合は未対応要素として記録する()
         {
             var longText = new string('あ', 2001);
             var anchor = ShapeWorkbookFixtures.ShapeAnchor(
@@ -435,11 +435,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("ShapeTextTooLong", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.LimitExceeded, "ShapeTextTooLong");
             }
             finally
             {
@@ -452,8 +452,8 @@ namespace Utsushi.Parsing.Tests
         {
             // xdr:grpSpは要件10.10により構造的にサポート対象となったため「Drawing」例外は
             // もう発生しない。ただしa:xfrm(グループの子座標空間)が無ければ位置・サイズが
-            // 決定できないため、ToMarker/Extent欠落時の画像・図形と同じ方針(壊れたアンカーは
-            // Error/Ignoreいずれのモードでも静かに無視する)に従う。
+            // 決定できないため、ToMarker/Extent欠落時の画像・図形と同じく出力せず、
+            // 位置・大きさの壊れた描画オブジェクトとして記録する(excel2pdf-consolidation 要件2.7(g))。
             var groupShape = new DocumentFormat.OpenXml.Drawing.Spreadsheet.GroupShape(
                 new DocumentFormat.OpenXml.Drawing.Spreadsheet.NonVisualGroupShapeProperties(
                     new DocumentFormat.OpenXml.Drawing.Spreadsheet.NonVisualDrawingProperties { Id = 2U, Name = "Group" },
@@ -473,11 +473,9 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
-                using var stream = File.OpenRead(path);
-
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadFile(path);
                 Assert.Empty(workbook.Sheets[0].DrawingObjects);
+                Assert.Equal(UnsupportedElementKind.MalformedDrawingObject, Assert.Single(workbook.UnsupportedElements).Kind);
             }
             finally
             {

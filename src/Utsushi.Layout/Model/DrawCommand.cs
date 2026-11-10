@@ -170,9 +170,9 @@ namespace Utsushi.Layout.Model
 
     /// <summary>ページ分割・座標計算済みのレイアウト結果。</summary>
     /// <param name="Pages">印刷順に並んだページ。</param>
-    /// <param name="ReportCode">帳票コード(診断用)。</param>
+    /// <param name="DocumentName">文書名(診断用)。</param>
     /// <param name="SheetName">シート名(診断用)。</param>
-    public sealed record PagedLayout(IReadOnlyList<PageLayout> Pages, string ReportCode, string SheetName)
+    public sealed record PagedLayout(IReadOnlyList<PageLayout> Pages, string DocumentName, string SheetName)
     {
         public int PageCount => Pages.Count;
 
@@ -186,5 +186,14 @@ namespace Utsushi.Layout.Model
 
         /// <summary><see cref="FitIssues"/> が件数の上限(10,000件)で打ち切られているかどうか。</summary>
         public bool FitIssuesTruncated { get; init; }
+
+        /// <summary>
+        /// 書式の近似(excel2pdf-consolidation 要件7)。描画には使わない。確認を省いた場合(保存)は空。
+        /// </summary>
+        public IReadOnlyList<Utsushi.Core.FormatApproximation> FormatApproximations { get; init; } =
+            System.Array.Empty<Utsushi.Core.FormatApproximation>();
+
+        /// <summary><see cref="FormatApproximations"/> がいずれかの種類の件数の上限で打ち切られているかどうか。</summary>
+        public bool FormatApproximationsTruncated { get; init; }
     }
 }

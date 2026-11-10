@@ -45,7 +45,7 @@ namespace Utsushi.Parsing.Tests
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
             Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Contains("テスト文字列", ex.Message, StringComparison.Ordinal);
         }
 
@@ -303,11 +303,11 @@ namespace Utsushi.Parsing.Tests
         {
             using var stream = File.OpenRead(path);
             var ex = Assert.Throws<InvalidExcelFileException>(
-                () => _reader.Read(stream, new WorkbookReadOptions(ReportCode: "report")));
+                () => _reader.Read(stream, new WorkbookReadOptions(DocumentName: "report")));
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
             Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Contains(expectedInMessage, ex.Message, StringComparison.Ordinal);
         }
 

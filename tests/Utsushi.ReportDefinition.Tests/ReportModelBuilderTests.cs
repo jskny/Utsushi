@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Utsushi.Core;
-using Utsushi.Core.Exceptions;
 using Utsushi.Parsing.Model;
 using Utsushi.ReportDefinitions;
 using Utsushi.ReportDefinitions.Model;
@@ -10,28 +9,14 @@ using Xunit;
 namespace Utsushi.ReportDefinition.Tests
 {
     /// <summary>
-    /// 帳票定義とワークブックの突合(要件1.4、タスク3.2)の検証。
+    /// 変換の設定とワークブックからの帳票モデルの構築の検証。
     /// </summary>
     public sealed class ReportModelBuilderTests
     {
         private readonly ReportModelBuilder _builder = new();
 
-        private static ReportDefinitions.Model.ReportDefinition Definition(
-            string sheetName, params (string Key, string Cell)[] fields)
-        {
-            var list = new List<SubstitutionFieldDefinition>();
-            foreach (var (key, cell) in fields)
-            {
-                list.Add(new SubstitutionFieldDefinition(key, CellAddress.Parse(cell), false, Overflow: null));
-            }
-
-            return new ReportDefinitions.Model.ReportDefinition(
-                "test", sheetName, list,
-                ReportDefinitions.Model.ReportDefinition.DefaultToleranceMm,
-                UnsupportedElementPolicy.Ignore,
-                ReportDefinitions.Model.ReportDefinition.DefaultMaxDigitWidthPx,
-                null);
-        }
+        private static ReportDefinitions.Model.ConversionSettings Settings(string sheetName) =>
+            new("test", sheetName, ReportDefinitions.Model.ConversionSettings.DefaultMaxDigitWidthPx);
 
         private static WorkbookModel Workbook(
             string sheetName, IEnumerable<string> cellAddresses, params CellRange[] mergedRanges)
@@ -60,83 +45,27 @@ namespace Utsushi.ReportDefinition.Tests
         }
 
         [Fact]
-        public void 定義とシートが一致すればモデルを構築できる()
+        public void 設定のシートを取り出してモデルを構築する()
         {
-            var definition = Definition("請求書", ("InvoiceNo", "C3"));
+            var definition = Settings("請求書");
             var workbook = Workbook("請求書", new[] { "A1", "C3", "F10" });
 
             var report = _builder.Build(workbook, definition);
 
-            Assert.Same(definition, report.Definition);
+            Assert.Same(definition, report.Settings);
             Assert.Equal("請求書", report.Sheet.Name);
-            Assert.Empty(report.OverflowByCell);
         }
 
         [Fact]
-        public void 期待するシートが無ければエラーになる()
+        public void 設定のシートが無ければ実在するシート名を含むInvalidOperationExceptionにする()
         {
-            var definition = Definition("請求書");
+            // 読み込みは対象のシートだけを返すため通常は起きない。契約に反する読み込みの実装が差し替えられた場合の防御。
             var workbook = Workbook("見積書", new[] { "A1" });
 
-            var ex = Assert.Throws<ReportStructureMismatchException>(() => _builder.Build(workbook, definition));
+            var ex = Assert.Throws<InvalidOperationException>(() => _builder.Build(workbook, Settings("請求書")));
 
-            Assert.Equal("請求書", ex.SheetName);
-            Assert.Equal("test", ex.ReportCode);
-            Assert.Equal(ProcessingStage.ReportDefinition, ex.Stage);
-
-            // 実在するシート名をメッセージに含め、原因を特定できるようにする(要件6.4)。
+            Assert.Contains("請求書", ex.Message);
             Assert.Contains("見積書", ex.Message);
-        }
-
-        [Fact]
-        public void 置換対象セルが使用範囲の外ならエラーになる()
-        {
-            var definition = Definition("請求書", ("Far", "Z100"));
-            var workbook = Workbook("請求書", new[] { "A1", "C3" });
-
-            var ex = Assert.Throws<ReportStructureMismatchException>(() => _builder.Build(workbook, definition));
-
-            Assert.Equal(CellAddress.Parse("Z100"), ex.CellAddress);
-            Assert.Contains("Far", ex.Message);
-
-            // 何をすればよいかをメッセージに含める(要件1.11)。
-            Assert.Contains("値か書式", ex.Message);
-        }
-
-        [Fact]
-        public void 置換対象セルが結合範囲の左上なら受け付ける()
-        {
-            var definition = Definition("請求書", ("Title", "A1"));
-            var workbook = Workbook("請求書", new[] { "A1", "F10" }, CellRange.Parse("A1:F1"));
-
-            var report = _builder.Build(workbook, definition);
-
-            Assert.NotNull(report);
-        }
-
-        [Fact]
-        public void 置換対象セルが結合範囲の内側ならエラーになる()
-        {
-            // B1 は A1:F1 の内側。Excel 上で値を持てるのは左上の A1 だけなので拒否する。
-            var definition = Definition("請求書", ("Title", "B1"));
-            var workbook = Workbook("請求書", new[] { "A1", "B1", "F10" }, CellRange.Parse("A1:F1"));
-
-            var ex = Assert.Throws<ReportStructureMismatchException>(() => _builder.Build(workbook, definition));
-
-            Assert.Equal(CellAddress.Parse("B1"), ex.CellAddress);
-            Assert.Contains("A1", ex.Message);
-        }
-
-        [Fact]
-        public void 値が空のセルでも使用範囲内なら受け付ける()
-        {
-            // 置換先が空セル(Cells に現れない)でも、使用範囲に含まれていれば有効とする。
-            var definition = Definition("請求書", ("Empty", "C3"));
-            var workbook = Workbook("請求書", new[] { "A1", "F10" });
-
-            var report = _builder.Build(workbook, definition);
-
-            Assert.Null(report.Sheet.GetCell(CellAddress.Parse("C3")));
         }
     }
 }

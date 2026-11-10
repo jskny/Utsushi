@@ -28,14 +28,20 @@ namespace Utsushi.Layout.HeaderFooter
         private readonly double _pageWidthPt;
         private readonly double _pageHeightPt;
         private readonly double _scale;
+        private readonly FormatApproximationCollector? _approximations;
+        private readonly string _sheetName;
 
         public HeaderFooterCommandBuilder(
             IFontMetricsProvider fontMetrics,
             PageMargins margins,
             double pageWidthPt,
             double pageHeightPt,
-            double scale)
+            double scale,
+            FormatApproximationCollector? approximations = null,
+            string sheetName = "")
         {
+            _approximations = approximations;
+            _sheetName = sheetName;
             _fontMetrics = fontMetrics;
             _margins = margins;
             _pageWidthPt = pageWidthPt;
@@ -56,33 +62,55 @@ namespace Utsushi.Layout.HeaderFooter
             var fontScale = headerFooter.ScaleWithDocument ? _scale : 1.0;
             var isFirstPage = context.IsFirstPage ?? context.PageNumber == 1;
 
+            // 先頭ページ用・偶数ページ用のヘッダー/フッターを使うページでは、診断の識別にその別を含める(GetHeader と同じ優先順位)。
+            var variant = headerFooter.DifferentFirst && isFirstPage ? "first"
+                : headerFooter.DifferentOddEven && context.PageNumber % 2 == 0 ? "even"
+                : string.Empty;
+
             AppendSections(
                 commands,
                 HeaderFooterParser.Parse(headerFooter.GetHeader(context.PageNumber, isFirstPage), context),
                 fontScale,
-                isHeader: true);
+                isHeader: true,
+                variant.Length == 0 ? "header" : variant + "Header");
 
             AppendSections(
                 commands,
                 HeaderFooterParser.Parse(headerFooter.GetFooter(context.PageNumber, isFirstPage), context),
                 fontScale,
-                isHeader: false);
+                isHeader: false,
+                variant.Length == 0 ? "footer" : variant + "Footer");
 
             return commands;
         }
 
         private void AppendSections(
-            List<DrawCommand> commands, IReadOnlyList<HeaderFooterPart> parts, double fontScale, bool isHeader)
+            List<DrawCommand> commands, IReadOnlyList<HeaderFooterPart> parts, double fontScale, bool isHeader, string kind)
         {
             foreach (var part in parts)
             {
-                AppendPart(commands, part, fontScale, isHeader);
+                AppendPart(commands, part, fontScale, isHeader, kind);
             }
         }
 
-        private void AppendPart(List<DrawCommand> commands, HeaderFooterPart part, double fontScale, bool isHeader)
+        /// <param name="kind">診断の識別に使う種類(<c>header</c>・<c>footer</c>・<c>firstHeader</c>・<c>evenFooter</c> など)。</param>
+        private void AppendPart(List<DrawCommand> commands, HeaderFooterPart part, double fontScale, bool isHeader, string kind)
         {
-            var scaledRuns = ScaleRuns(part.Runs, fontScale);
+            var scaledRuns = ScaleRuns(part.Runs, fontScale, out var removedLineBreak);
+            if (removedLineBreak && _approximations is not null)
+            {
+                // 複数行のヘッダー/フッター(excel2pdf-consolidation 要件7.2(i))。ヘッダー/フッター(先頭ページ用・偶数ページ用の別を含む)と
+                // 左・中央・右の別を要素の識別にする。
+                var position = kind + "/" + part.Section.ToString().ToLowerInvariant();
+                _approximations.Add(
+                    FormatApproximationKind.MultiLineHeaderFooter,
+                    _sheetName,
+                    null,
+                    position,
+                    position,
+                    "複数行のヘッダー/フッターは、改行を取り除いて1行で描きます。");
+            }
+
             if (scaledRuns.Count == 0)
             {
                 return;
@@ -125,8 +153,9 @@ namespace Utsushi.Layout.HeaderFooter
             _ => _margins.LeftPt,
         };
 
-        private static List<HeaderFooterRun> ScaleRuns(IReadOnlyList<HeaderFooterRun> runs, double fontScale)
+        private static List<HeaderFooterRun> ScaleRuns(IReadOnlyList<HeaderFooterRun> runs, double fontScale, out bool removedLineBreak)
         {
+            removedLineBreak = false;
             var scaled = new List<HeaderFooterRun>(runs.Count);
             foreach (var original in runs)
             {
@@ -135,6 +164,7 @@ namespace Utsushi.Layout.HeaderFooter
                 var run = original.Text.IndexOf('\n') < 0 && original.Text.IndexOf('\r') < 0
                     ? original
                     : original with { Text = original.Text.Replace("\r", string.Empty).Replace("\n", string.Empty) };
+                removedLineBreak |= !ReferenceEquals(run, original);
 
                 if (run.Text.Length == 0)
                 {

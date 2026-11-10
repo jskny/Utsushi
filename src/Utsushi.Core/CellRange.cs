@@ -73,16 +73,20 @@ namespace Utsushi.Core
             return range;
         }
 
+        /// <summary>解釈する範囲の文字列の最大の長さ(<c>$XFD$1048576:$XFD$1048576</c> は25文字。前後の空白に余裕を持たせる)。</summary>
+        internal const int MaxTextLength = 64;
+
         /// <summary>"A1:D10" 形式(単一セル "A1" も可)の範囲文字列の解釈を試みる。</summary>
         public static bool TryParse(string? text, out CellRange range)
         {
             range = default;
-            if (string.IsNullOrWhiteSpace(text))
+            // 有効な範囲より十分長い文字列は、分割せずに拒否する(ファイル由来の値で巨大な配列を作らせない。security-reviewer指摘)。
+            if (string.IsNullOrWhiteSpace(text) || text!.Length > MaxTextLength)
             {
                 return false;
             }
 
-            var parts = text!.Split(':');
+            var parts = text.Split(':');
             if (parts.Length == 1)
             {
                 if (!CellAddress.TryParse(parts[0], out var single))

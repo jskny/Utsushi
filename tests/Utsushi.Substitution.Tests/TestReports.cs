@@ -9,19 +9,8 @@ namespace Utsushi.Substitution.Tests
     /// <summary>テスト用の帳票モデルを組み立てるヘルパー。</summary>
     internal static class TestReports
     {
-        public static ReportDefinition Definition(params SubstitutionFieldDefinition[] fields) =>
-            new(
-                ReportCode: "test-report",
-                SheetName: "テストシート",
-                SubstitutionFields: fields,
-                ToleranceMm: ReportDefinition.DefaultToleranceMm,
-                UnsupportedElements: UnsupportedElementPolicy.Ignore,
-                MaxDigitWidthPx: ReportDefinition.DefaultMaxDigitWidthPx,
-                PrintAreaOverride: null);
-
-        public static SubstitutionFieldDefinition Field(
-            string key, string cell, bool required = false, OverflowBehavior? overflow = null) =>
-            new(key, CellAddress.Parse(cell), required, overflow);
+        public static ConversionSettings Settings() =>
+            new(DocumentName: "test-report", SheetName: "テストシート", MaxDigitWidthPx: ConversionSettings.DefaultMaxDigitWidthPx);
 
         /// <summary>指定セルに値と書式を持つシートを作る。</summary>
         public static SheetModel Sheet(params (string Cell, string? Value, CellStyle? Style)[] cells)
@@ -51,7 +40,7 @@ namespace Utsushi.Substitution.Tests
                 DrawingObjects: Array.Empty<DrawingObjectModel>());
         }
 
-        public static ReportModel Report(ReportDefinition definition, SheetModel sheet) =>
+        public static ReportModel Report(ConversionSettings definition, SheetModel sheet) =>
             ReportModel.Create(definition, sheet);
     }
 }

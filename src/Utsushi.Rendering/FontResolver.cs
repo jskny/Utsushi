@@ -44,7 +44,8 @@ namespace Utsushi.Rendering
         private readonly List<SKTypeface> _owned = new();
         private readonly object _registrationLock = new();
         private readonly object _resolveLock = new();
-        private readonly HashSet<FontKey> _substituted = new();
+        /// <summary>代替した書体のファミリ名(見つからずに代替で解決したフォントだけ。キャッシュと同じ寿命)。</summary>
+        private readonly Dictionary<FontKey, string> _substituted = new();
         private bool _disposed;
 
         public FontResolver(FontResolverOptions? options = null)
@@ -148,7 +149,7 @@ namespace Utsushi.Rendering
                 ThrowIfDisposed();
                 if (_cache.TryGetValue(key, out cached))
                 {
-                    return optional && _substituted.Contains(key) ? null : cached;
+                    return optional && _substituted.ContainsKey(key) ? null : cached;
                 }
 
                 var resolved = ResolveCore(font);
@@ -160,7 +161,7 @@ namespace Utsushi.Rendering
                     }
 
                     resolved = HandleMissingFont(font);
-                    _substituted.Add(key);
+                    _substituted[key] = resolved.Typeface.FamilyName;
                 }
 
                 _cache[key] = resolved;
@@ -172,7 +173,35 @@ namespace Utsushi.Rendering
         {
             lock (_resolveLock)
             {
-                return _substituted.Contains(key);
+                return _substituted.ContainsKey(key);
+            }
+        }
+
+        /// <summary>
+        /// 指定のフォントを解決し(解決済みならその結果を使う)、テンプレートが指定したフォントが見つからずに別の書体で代替したなら
+        /// その書体のファミリ名を、そうでなければ <c>null</c> を返す(excel2pdf-consolidation 要件3)。
+        /// </summary>
+        /// <remarks>
+        /// 問い合わせの時点で解決するため、レイアウトの計測にこの <see cref="FontResolver"/> を使わない構成でも、未解決のフォントを漏らさない。
+        /// 外字を別の書体で補うこと(<see cref="ResolveGlyphFallbacks"/>)は代替に含めない。
+        /// 書体名は書体のデータが持つファミリ名で、同梱のフォントでは英語名(<c>BIZ UDPGothic</c> など)になりうる。
+        /// </remarks>
+        /// <exception cref="FontNotAvailableException">厳格モードでフォントが見つからない場合(<see cref="Resolve(FontStyle)"/> と同じ)。</exception>
+        public string? GetSubstitution(FontStyle font)
+        {
+            if (font is null)
+            {
+                throw new ArgumentNullException(nameof(font));
+            }
+
+            ThrowIfDisposed();
+            var key = new FontKey(font.Name, font.Bold, font.Italic);
+
+            // 解決と辞書の参照を同じロックの下で行う(フォントの登録でキャッシュが消える競合を避けるため。design.md 9)。
+            lock (_resolveLock)
+            {
+                Resolve(font, optional: false);
+                return _substituted.TryGetValue(key, out var family) ? family : null;
             }
         }
 

@@ -23,7 +23,7 @@ tools: Read, Grep, Glob, Bash
 ### 2. レイヤー責務の分離
 - 下位レイヤーの型(特に `DocumentFormat.OpenXml` の `SpreadsheetDocument` 等)が `Utsushi.Parsing` の外に漏れていないか。
 - `Utsushi.Rendering` が `Utsushi.Parsing` や `ReportDefinition` に直接依存していないか(必ず `Layout` の出力 `PagedLayout` のみを介すること)。
-- 帳票固有の分岐(`if (reportCode == "invoice")` 等)が共通レイヤーのコードに紛れ込んでいないか。帳票固有の情報は帳票定義(JSON)側に寄せるべき。
+- 帳票固有の分岐(`if (reportCode == "invoice")` 等)が共通レイヤーのコードに紛れ込んでいないか。帳票ごとの差異はテンプレート(Excelの書式・印刷設定)と呼び出し元が書き込む値で表すべき。
 
 ### 3. 技術制約への準拠
 - 新規パッケージ参照がある場合、ライセンスが商用・課金対象でないか(`.kiro/steering/tech.md` の対象表と突き合わせる)。
@@ -31,7 +31,7 @@ tools: Read, Grep, Glob, Bash
 
 ### 4. 保守性・拡張性
 - 新しい帳票を追加する際に、この変更が「定義データの追加のみ」で完結する設計を壊していないか(要件8.1)。
-- 例外が `UtsushiException` 系統に統一され、帳票コード・シート名・セル番地・処理段階を含んでいるか(design.mdのエラーハンドリング方針)。
+- 例外が `UtsushiException` 系統に統一され、文書名(`DocumentName`)・シート名・セル番地・処理段階を含んでいるか(design.mdのエラーハンドリング方針)。
 
 ### 5. コーディング規約
 - Nullable参照型が有効化された状態で警告が出ていないか。

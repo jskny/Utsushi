@@ -1,13 +1,13 @@
 using System;
 using Xunit;
-using Definition = Utsushi.ReportDefinitions.Model.ReportDefinition;
+using Definition = Utsushi.ReportDefinitions.Model.ConversionSettings;
 
 namespace Utsushi.ReportDefinition.Tests
 {
     /// <summary>
-    /// 帳票定義なしモードの最大数字幅(要件12.3、タスク27.2)の検証。
+    /// 列幅の換算に使う最大数字幅(要件12.3、タスク27.2)の検証。
     /// ブックの標準フォントからの見積もり(<see cref="Definition.EstimateMaxDigitWidthPx"/>)と、
-    /// 呼び出し元が指定した値の検証(<see cref="Definition.CreateWithoutDefinition"/>)。
+    /// 呼び出し元が指定した値の検証(<see cref="Definition.Create"/>)。
     /// </summary>
     public sealed class MaxDigitWidthTests
     {
@@ -73,16 +73,16 @@ namespace Utsushi.ReportDefinition.Tests
             Assert.Equal(7.0, Definition.EstimateMaxDigitWidthPx(null, sizePt));
         }
 
-        // --- CreateWithoutDefinition の maxDigitWidthPx ------------------------------------------
+        // --- Create の maxDigitWidthPx ------------------------------------------
 
         [Theory]
         [InlineData(7.0)]
         [InlineData(8.0)]
         [InlineData(0.5)]
         [InlineData(double.Epsilon)]
-        public void 正の最大数字幅はそのまま帳票定義に入る(double maxDigitWidthPx)
+        public void 正の最大数字幅はそのまま変換の設定に入る(double maxDigitWidthPx)
         {
-            var definition = Definition.CreateWithoutDefinition("doc", "Sheet1", maxDigitWidthPx);
+            var definition = Definition.Create("doc", "Sheet1", maxDigitWidthPx);
 
             Assert.Equal(maxDigitWidthPx, definition.MaxDigitWidthPx);
         }
@@ -97,7 +97,7 @@ namespace Utsushi.ReportDefinition.Tests
         public void 最大数字幅が0以下NaN無限大ならArgumentOutOfRangeException(double maxDigitWidthPx)
         {
             var ex = Assert.Throws<ArgumentOutOfRangeException>(
-                () => Definition.CreateWithoutDefinition("doc", "Sheet1", maxDigitWidthPx));
+                () => Definition.Create("doc", "Sheet1", maxDigitWidthPx));
 
             Assert.Equal("maxDigitWidthPx", ex.ParamName);
         }

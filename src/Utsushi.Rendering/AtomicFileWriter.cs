@@ -10,7 +10,7 @@ namespace Utsushi.Rendering
     /// <remarks>
     /// 書き込み途中で異常終了しても、出力先には旧ファイル(または何も)が残る(要件5.4)。
     /// <see cref="IPdfRenderer"/> の実装によらず同じ保証を提供するため、<see cref="SkiaPdfRenderer"/>
-    /// とファサード(<c>Utsushi.ReportPdfConverter</c>)の両方から使う共通処理として切り出している。
+    /// と変換の手順(<c>Utsushi.ConversionPipeline</c>)の両方から使う共通処理として切り出している。
     /// </remarks>
     public static class AtomicFileWriter
     {
@@ -19,14 +19,14 @@ namespace Utsushi.Rendering
         /// </summary>
         /// <param name="path">出力先のファイルパス。</param>
         /// <param name="content">書き出す内容(呼び出し側で完全に用意済みのストリーム)。</param>
-        /// <param name="reportCode">エラーに含める帳票コード(判明している場合)。</param>
+        /// <param name="documentName">エラーに含める文書名(判明している場合)。</param>
         /// <param name="sheetName">エラーに含めるシート名(判明している場合)。</param>
         /// <exception cref="ArgumentNullException"><paramref name="path"/> または <paramref name="content"/> が null の場合。</exception>
         /// <exception cref="PdfRenderingException">
         /// 書き込みに失敗した場合。出力先のパスが不正な場合(NUL文字を含む、途中に既存のファイルがある等)や、
         /// 出力先ディレクトリを作成できない場合も含む。
         /// </exception>
-        public static void Write(string path, Stream content, string? reportCode = null, string? sheetName = null)
+        public static void Write(string path, Stream content, string? documentName = null, string? sheetName = null)
         {
             if (path is null)
             {
@@ -52,7 +52,7 @@ namespace Utsushi.Rendering
             }
             catch (Exception ex) when (IsPathOrIoFailure(ex))
             {
-                throw new PdfRenderingException($"PDFの出力先を用意できません: {path}", reportCode, sheetName, ex);
+                throw new PdfRenderingException($"PDFの出力先を用意できません: {path}", documentName, sheetName, ex);
             }
 
             // 同一ディレクトリ上の一時ファイルへ書いてから置き換える。
@@ -76,7 +76,7 @@ namespace Utsushi.Rendering
             catch (Exception ex) when (IsPathOrIoFailure(ex))
             {
                 TryDelete(temporaryPath);
-                throw new PdfRenderingException($"PDFの書き出しに失敗しました: {fullPath}", reportCode, sheetName, ex);
+                throw new PdfRenderingException($"PDFの書き出しに失敗しました: {fullPath}", documentName, sheetName, ex);
             }
             catch
             {

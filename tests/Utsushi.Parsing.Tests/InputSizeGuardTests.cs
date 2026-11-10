@@ -40,7 +40,7 @@ namespace Utsushi.Parsing.Tests
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
             Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
         }
 
         [Fact]
@@ -66,7 +66,7 @@ namespace Utsushi.Parsing.Tests
             using var source = new NonSeekableStream(new byte[] { 1, 2, 3, 4, 5 });
             using var destination = new MemoryStream();
 
-            OpenXmlWorkbookReader.CopyWithSizeLimit(source, destination, maxBytes: 10, reportCode: "report");
+            OpenXmlWorkbookReader.CopyWithSizeLimit(source, destination, maxBytes: 10, documentName: "report");
 
             Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, destination.ToArray());
         }
@@ -78,7 +78,7 @@ namespace Utsushi.Parsing.Tests
             using var destination = new MemoryStream();
 
             var ex = Assert.Throws<InvalidExcelFileException>(
-                () => OpenXmlWorkbookReader.CopyWithSizeLimit(source, destination, maxBytes: 10, reportCode: "report"));
+                () => OpenXmlWorkbookReader.CopyWithSizeLimit(source, destination, maxBytes: 10, documentName: "report"));
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
         }
@@ -90,7 +90,7 @@ namespace Utsushi.Parsing.Tests
         {
             using var zip = CreateZipWithEntrySize(50);
 
-            OpenXmlWorkbookReader.GuardPackageSize(zip, maxBytes: 100, reportCode: "report");
+            OpenXmlWorkbookReader.GuardPackageSize(zip, maxBytes: 100, documentName: "report");
             Assert.Equal(0, zip.Position);
         }
 
@@ -100,7 +100,7 @@ namespace Utsushi.Parsing.Tests
             using var zip = CreateZipWithEntrySize(200);
 
             var ex = Assert.Throws<InvalidExcelFileException>(
-                () => OpenXmlWorkbookReader.GuardPackageSize(zip, maxBytes: 100, reportCode: "report"));
+                () => OpenXmlWorkbookReader.GuardPackageSize(zip, maxBytes: 100, documentName: "report"));
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
         }
@@ -112,7 +112,7 @@ namespace Utsushi.Parsing.Tests
 
             // InvalidDataExceptionを飲み込み、後続のSpreadsheetDocument.Openに判定を委ねる
             // (このメソッド自身は例外を送出しない)。
-            OpenXmlWorkbookReader.GuardPackageSize(garbage, maxBytes: 1, reportCode: "report");
+            OpenXmlWorkbookReader.GuardPackageSize(garbage, maxBytes: 1, documentName: "report");
         }
 
         [Fact]
@@ -120,7 +120,7 @@ namespace Utsushi.Parsing.Tests
         {
             using var source = new NonSeekableStream(new byte[100]);
 
-            OpenXmlWorkbookReader.GuardPackageSize(source, maxBytes: 1, reportCode: "report");
+            OpenXmlWorkbookReader.GuardPackageSize(source, maxBytes: 1, documentName: "report");
         }
 
         private static MemoryStream CreateZipWithEntrySize(int uncompressedByteCount)
@@ -157,7 +157,7 @@ namespace Utsushi.Parsing.Tests
             try
             {
                 using var document = SpreadsheetDocument.Open(path, isEditable: false);
-                var result = OpenXmlWorkbookReader.ReadSharedStrings(document.WorkbookPart!, maxCount: 3, reportCode: "report");
+                var result = OpenXmlWorkbookReader.ReadSharedStrings(document.WorkbookPart!, maxCount: 3, documentName: "report");
 
                 Assert.Equal(3, result.Count);
             }
@@ -176,7 +176,7 @@ namespace Utsushi.Parsing.Tests
                 using var document = SpreadsheetDocument.Open(path, isEditable: false);
 
                 var ex = Assert.Throws<InvalidExcelFileException>(
-                    () => OpenXmlWorkbookReader.ReadSharedStrings(document.WorkbookPart!, maxCount: 3, reportCode: "report"));
+                    () => OpenXmlWorkbookReader.ReadSharedStrings(document.WorkbookPart!, maxCount: 3, documentName: "report"));
 
                 Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
             }

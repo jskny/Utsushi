@@ -32,11 +32,11 @@ namespace Utsushi.Substitution.Tests
         [InlineData("C2", "游ゴシック")]   // 行・列の書式なし → ブックの標準の書式
         [InlineData("B2", "メイリオ")]     // 列の書式
         [InlineData("B3", "ＭＳ 明朝")]    // 行の書式は列の書式より優先
-        public void 置換キーでセルが無い位置に差し込むと位置の書式を使う(string cell, string expectedFont)
+        public void セルが無い位置に書き込むと行と列の書式を使う(string cell, string expectedFont)
         {
-            var report = Report(Definition(Field("Key", cell)), SheetWithPositionStyles());
+            var report = Report(Settings(), SheetWithPositionStyles());
 
-            var result = new CellSubstitutor().Apply(report, new Dictionary<string, string> { ["Key"] = "値" });
+            var result = new CellSubstitutor().ApplyCellOverrides(report, new Dictionary<string, string> { [cell] = "値" });
 
             Assert.Equal(expectedFont, result.Sheet.Cells[CellAddress.Parse(cell)].Style.Font.Name);
         }
@@ -44,7 +44,7 @@ namespace Utsushi.Substitution.Tests
         [Fact]
         public void セル番地直接指定でセルが無い位置に差し込むと位置の書式を使う()
         {
-            var report = Report(Definition(), SheetWithPositionStyles());
+            var report = Report(Settings(), SheetWithPositionStyles());
 
             var result = new CellSubstitutor().ApplyCellOverrides(report, new Dictionary<string, string> { ["B5"] = "値" });
 

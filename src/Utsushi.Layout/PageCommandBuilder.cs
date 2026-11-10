@@ -32,6 +32,9 @@ namespace Utsushi.Layout
         private readonly MergedCellIndex? _mergedIndex;
         private readonly ISet<CellAddress>? _validatedSubstitutedCells;
         private readonly FitIssueCollector? _fitIssues;
+
+        /// <summary>書式の近似(excel2pdf-consolidation 要件7)の記録先。null の場合は集めない(保存)。</summary>
+        private readonly FormatApproximationCollector? _approximations;
         private readonly int _pageNumber;
         private readonly StyledBlankPositionCounter? _styledBlanks;
 
@@ -100,7 +103,8 @@ namespace Utsushi.Layout
             ISet<CellAddress>? validatedSubstitutedCells = null,
             FitIssueCollector? fitIssues = null,
             int pageNumber = 1,
-            StyledBlankPositionCounter? styledBlanks = null)
+            StyledBlankPositionCounter? styledBlanks = null,
+            FormatApproximationCollector? approximations = null)
         {
             _report = report;
             _sheet = report.Sheet;
@@ -115,6 +119,7 @@ namespace Utsushi.Layout
             _fitIssues = fitIssues;
             _pageNumber = pageNumber;
             _styledBlanks = styledBlanks;
+            _approximations = approximations;
         }
 
         /// <summary>はみ出し表示の文字を切り取る矩形(このページの本文の矩形)。<see cref="Build"/> で決まる。</summary>
@@ -170,6 +175,8 @@ namespace Utsushi.Layout
                         {
                             continue;
                         }
+
+                        RecordMergedApproximations(merged.Range, rowIndex, columnIndex);
 
                         var anchorCell = _sheet.GetCell(merged.Anchor);
                         var borders = ResolveMergedBorders(
@@ -249,12 +256,23 @@ namespace Utsushi.Layout
         {
             var connectionTargets = BuildConnectionTargetTable(rowIndex, columnIndex, rowOffsets, columnOffsets);
 
+            // 改ページをまたぐ画像・図形の判定に使う、はみ出す向きに続きのページがあるかどうか(このページの先に印刷される行・列があるか)。
+            // 印刷範囲の末尾の非表示の行・列は印刷されないため、比べる相手は印刷される最後の行・列にする。
+            var continuesRight = columnIndex.Count > 0 && _grid.Columns.Count > 0
+                && columnIndex.Keys.Max() < _grid.Columns[_grid.Columns.Count - 1];
+            var continuesDown = rowIndex.Count > 0 && _grid.Rows.Count > 0
+                && rowIndex.Keys.Max() < _grid.Rows[_grid.Rows.Count - 1];
+
+            var ordinal = 0;
             foreach (var drawingObject in _sheet.DrawingObjects)
             {
+                ordinal++;
                 if (!TryComputeDrawingObjectRect(drawingObject, rowIndex, columnIndex, rowOffsets, columnOffsets, out var rect))
                 {
                     continue;
                 }
+
+                RecordDrawingApproximations(drawingObject, ordinal, rect, continuesRight, continuesDown);
 
                 switch (drawingObject)
                 {
@@ -279,6 +297,288 @@ namespace Utsushi.Layout
                         break;
                 }
             }
+        }
+
+        /// <summary>
+        /// 画像・図形・グループ(の中の要素)の書式の近似を記録する(excel2pdf-consolidation 要件7.2(a)(g)(h))。診断のときだけ。
+        /// 位置はトップレベルのアンカーのセル。要素の識別は描画オブジェクトのID(無ければ描画パートの中の順番)。
+        /// </summary>
+        private void RecordDrawingApproximations(
+            DrawingObjectModel drawingObject,
+            int ordinal,
+            RectPt rect,
+            bool continuesRight,
+            bool continuesDown)
+        {
+            if (_approximations is null)
+            {
+                return;
+            }
+
+            var anchor = drawingObject.AnchorCell;
+            var location = new CellRange(anchor.Row, anchor.Column, anchor.Row, anchor.Column);
+            var ordinalText = ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var id = drawingObject switch
+            {
+                ImageModel image => image.Id,
+                ShapeModel shape => shape.Id,
+                GroupShapeModel group => group.Id,
+                _ => 0u,
+            };
+
+            // 左上が属するページにだけ描くため、ページの本文の外へはみ出す部分は次のページに描かれない(要件7.2(j))。
+            // はみ出す向きに続きのページがある場合だけを数える。印刷範囲の端の外へのはみ出しは改ページをまたぐものではない。
+            if ((continuesRight && rect.Right > _pageBodyRect.Right + FitTolerancePt)
+                || (continuesDown && rect.Bottom > _pageBodyRect.Bottom + FitTolerancePt))
+            {
+                _approximations.Add(
+                    FormatApproximationKind.DrawingAcrossPageBreak,
+                    _sheet.Name,
+                    location,
+                    DrawingIdentity(id, ordinalText),
+                    null,
+                    "改ページをまたぐ画像・図形は、左上が属するページにだけ描きます(次のページにかかる部分は描きません)。");
+            }
+
+            switch (drawingObject)
+            {
+                case ImageModel image:
+                    RecordImageApproximations(
+                        image.FlipHorizontal || image.FlipVertical,
+                        image.RotationDegrees,
+                        checkRotation: true,
+                        location,
+                        DrawingIdentity(image.Id, ordinalText));
+                    break;
+                case ShapeModel shape:
+                    RecordShapeApproximations(
+                        shape.Text, shape.FillApproximation, location, DrawingIdentity(shape.Id, ordinalText));
+                    break;
+                case GroupShapeModel group:
+                    RecordGroupChildApproximations(
+                        group.Children,
+                        location,
+                        ordinalText,
+                        group.FlipHorizontal || group.FlipVertical);
+                    break;
+            }
+        }
+
+        /// <param name="flipped">外側のグループのいずれかが反転しているかどうか。</param>
+        /// <remarks>
+        /// グループの中の画像の回転は記録しない。子の <c>a:xfrm</c> の位置・大きさは回転前の矩形であり、その中心で回して描くため、
+        /// 幅と高さを入れ替えた外接矩形を表すトップレベルのアンカーとは異なり、ずれが生じない。
+        /// </remarks>
+        private void RecordGroupChildApproximations(
+            IReadOnlyList<GroupChildModel> children, CellRange location, string path, bool flipped)
+        {
+            for (var i = 0; i < children.Count; i++)
+            {
+                var childPath = path + "/" + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                switch (children[i])
+                {
+                    case GroupChildShape shape:
+                        RecordShapeApproximations(shape.Text, shape.FillApproximation, location, DrawingIdentity(shape.Id, childPath));
+                        break;
+                    case GroupChildImage image:
+                        RecordImageApproximations(
+                            flipped || image.FlipHorizontal || image.FlipVertical,
+                            image.RotationDegrees,
+                            checkRotation: false,
+                            location,
+                            DrawingIdentity(image.Id, childPath));
+                        break;
+                    case GroupChildGroup nested:
+                        RecordGroupChildApproximations(
+                            nested.Children,
+                            location,
+                            childPath,
+                            flipped || nested.FlipHorizontal || nested.FlipVertical);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 画像の反転と、トップレベルの画像の45度以上135度未満(225度以上315度未満)の回転を記録する(要件7.2(h))。
+        /// 回転は180度で折り返して判定する(Excel がこの範囲でアンカーを幅と高さを入れ替えた外接矩形として保存するとされるため。
+        /// 実機では未確認)。
+        /// </summary>
+        /// <param name="checkRotation">回転を判定するかどうか(トップレベルの画像だけ)。</param>
+        private void RecordImageApproximations(
+            bool flipped, double rotationDegrees, bool checkRotation, CellRange location, string identity)
+        {
+            if (flipped)
+            {
+                _approximations!.Add(
+                    FormatApproximationKind.ImageFlip, _sheet.Name, location, identity, null, "画像の反転は再現せず、反転せずに描きます。");
+            }
+
+            if (!checkRotation)
+            {
+                return;
+            }
+
+            var folded = rotationDegrees % 180.0;
+            if (folded < 0)
+            {
+                folded += 180.0;
+            }
+
+            if (folded >= 45.0 && folded < 135.0)
+            {
+                _approximations!.Add(
+                    FormatApproximationKind.ImageRotation,
+                    _sheet.Name,
+                    location,
+                    identity,
+                    "rot=" + rotationDegrees.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+                    "45度以上135度未満(225度以上315度未満)回転した画像は、位置・大きさがExcelとずれることがあります。");
+            }
+        }
+
+        /// <summary>
+        /// 結合範囲の書式の近似を記録する(要件7.2(j))。印刷される行・列のうちこのページに無いものがあれば改ページをまたぐ結合セル、
+        /// 最後の行・列が印刷されない(非表示・高さ0)なら外周の罫線の一部を描かない結合セル。
+        /// </summary>
+        private void RecordMergedApproximations(
+            CellRange range, IReadOnlyDictionary<int, int> rowIndex, IReadOnlyDictionary<int, int> columnIndex)
+        {
+            if (_approximations is null)
+            {
+                return;
+            }
+
+            // 印刷される行・列(昇順)のうち結合範囲にあるものの数と、このページにあるものの数が違えば、改ページをまたぐ。
+            // 範囲の行・列を1つずつ見ず、二分探索で数える(大きな結合範囲でもページごとの走査を抑える)。
+            var spans = CountWithin(_grid.Rows, range.FirstRow, range.LastRow) != CountKeysWithin(rowIndex, range.FirstRow, range.LastRow)
+                || CountWithin(_grid.Columns, range.FirstColumn, range.LastColumn)
+                    != CountKeysWithin(columnIndex, range.FirstColumn, range.LastColumn);
+
+            if (spans)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.MergedCellAcrossPageBreak,
+                    _sheet.Name,
+                    range,
+                    null,
+                    null,
+                    "改ページをまたぐ結合セルは、両方のページに同じ文字を描きます。");
+            }
+
+            // 描かれないのは、最後の行の下端(最後の列の右端)の罫線である(ResolveMergedBorders)。罫線が無ければ見た目は変わらない。
+            var lastRowHidden = range.LastRow > range.FirstRow && SheetGrid.IsRowNotPrinted(_sheet, range.LastRow)
+                && ResolveRowEdge(range.LastRow, range.FirstColumn, range.LastColumn, b => b.Bottom).IsVisible;
+            var lastColumnHidden = range.LastColumn > range.FirstColumn
+                && SheetGrid.IsColumnNotPrinted(_sheet, range.LastColumn, _report.Settings.MaxDigitWidthPx)
+                && ResolveColumnEdge(range.LastColumn, range.FirstRow, range.LastRow, b => b.Right).IsVisible;
+            if (lastRowHidden || lastColumnHidden)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.MergedCellHiddenEdge,
+                    _sheet.Name,
+                    range,
+                    null,
+                    (lastRowHidden, lastColumnHidden) switch
+                    {
+                        (true, true) => "lastRowHidden,lastColumnHidden",
+                        (true, false) => "lastRowHidden",
+                        _ => "lastColumnHidden",
+                    },
+                    "最後の行・列が非表示の結合セルは、外周の罫線の一部(下端・右端)を描きません。");
+            }
+        }
+
+        /// <summary>昇順の番号の並びのうち、<paramref name="low"/>〜<paramref name="high"/> にあるものの数(二分探索)。</summary>
+        private static int CountWithin(IReadOnlyList<int> sorted, int low, int high) =>
+            low > high ? 0 : LowerBound(sorted, high + 1) - LowerBound(sorted, low);
+
+        private static int LowerBound(IReadOnlyList<int> sorted, int value)
+        {
+            int low = 0, high = sorted.Count;
+            while (low < high)
+            {
+                var middle = low + ((high - low) / 2);
+                if (sorted[middle] < value)
+                {
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle;
+                }
+            }
+
+            return low;
+        }
+
+        /// <summary>このページの行・列の索引のうち、<paramref name="low"/>〜<paramref name="high"/> にあるものの数。</summary>
+        private static int CountKeysWithin(IReadOnlyDictionary<int, int> index, int low, int high)
+        {
+            // ページの行・列の数は限られるため、索引を走査する(範囲の大きさによらない)。
+            var count = 0;
+            foreach (var key in index.Keys)
+            {
+                if (key >= low && key <= high)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>
+        /// 配置の列挙をファイルの値の表記(<c>distributed</c>・<c>centerContinuous</c> など)にする(design.md 3.5。補足の情報は
+        /// テンプレートの担当者が Excel・XML の設定と照合するための値)。
+        /// </summary>
+        private static string XmlName<T>(T value)
+            where T : struct, Enum
+        {
+            var name = value.ToString();
+            return name.Length == 0 ? name : char.ToLowerInvariant(name[0]) + name.Substring(1);
+        }
+
+        /// <summary>要素の識別。IDがあればID、無ければ(0なら)描画パートの中の順番(design.md 9)。</summary>
+        private static string DrawingIdentity(uint id, string ordinalPath) =>
+            id != 0 ? "id=" + id.ToString(System.Globalization.CultureInfo.InvariantCulture) : "#" + ordinalPath;
+
+        private void RecordShapeApproximations(ShapeTextBody? text, string? fillApproximation, CellRange location, string identity)
+        {
+            if (fillApproximation is not null)
+            {
+                _approximations!.Add(
+                    FormatApproximationKind.ShapeFill,
+                    _sheet.Name,
+                    location,
+                    identity,
+                    fillApproximation,
+                    "図形の塗りつぶし(グラデーション・模様・画像など)は、単色で描くか塗りつぶしません。");
+            }
+
+            if (text?.StyleFont is { } styleFont)
+            {
+                _approximations!.Add(
+                    FormatApproximationKind.ShapeFont,
+                    _sheet.Name,
+                    location,
+                    identity,
+                    styleFont,
+                    styleFont.StartsWith("ea=", StringComparison.Ordinal)
+                        ? "図形の日本語の文字は、東アジアの書体(a:ea)ではなく、英数字の書体(a:latin)で描きます。"
+                        : "図形の文字のスタイル・テーマが指す書体は使わず、既定の書体で描きます。");
+            }
+
+            if (text is null || (text.Vertical is null && text.RotationDegrees == 0))
+            {
+                return;
+            }
+
+            var detail = text.Vertical is { } vertical
+                ? "vert=" + vertical
+                : "rot=" + text.RotationDegrees.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+            _approximations!.Add(
+                FormatApproximationKind.TextRotation, _sheet.Name, location, identity, detail, "図形の文字の縦書き・回転は、横書きで描きます。");
         }
 
         /// <summary>
@@ -756,7 +1056,7 @@ namespace Utsushi.Layout
 
         /// <summary>印刷範囲によらない、シート上の実際の列幅(pt)。非表示列は0。</summary>
         private double RawColumnWidthPt(int column) =>
-            SheetGrid.PrintedColumnWidthPt(_sheet, column, _report.Definition.MaxDigitWidthPx);
+            SheetGrid.PrintedColumnWidthPt(_sheet, column, _report.Settings.MaxDigitWidthPx);
 
         /// <summary>印刷範囲によらない、シート上の実際の行高(pt)。非表示行は0。</summary>
         private double RawRowHeightPt(int row) => SheetGrid.PrintedRowHeightPt(_sheet, row);
@@ -779,6 +1079,20 @@ namespace Utsushi.Layout
             if (rect.IsEmpty)
             {
                 return;
+            }
+
+            if (_approximations is not null && style.FillApproximation is { } fillApproximation)
+            {
+                // 塗りつぶしを描かないグラデーションも含めて、印刷されるセルの位置ごとに記録する(design.md 3.5)。
+                _approximations.Add(
+                    fillApproximation,
+                    _sheet.Name,
+                    mergedRange ?? new CellRange(address.Row, address.Column, address.Row, address.Column),
+                    null,
+                    style.FillApproximationDetail,
+                    fillApproximation == FormatApproximationKind.CellFillGradient
+                        ? "セルのグラデーションの塗りつぶしは描きません(塗りつぶしなし)。"
+                        : "セルの網かけは、背景色の単色で描きます。");
             }
 
             var borders = bordersOverride ?? style.Borders;
@@ -1050,7 +1364,7 @@ namespace Utsushi.Layout
         private void EmitText(
             CellAddress address, CellModel cell, CellStyle style, RectPt rect, string text, CellRange? mergedRange)
         {
-            var maxDigitWidthPx = _report.Definition.MaxDigitWidthPx;
+            var maxDigitWidthPx = _report.Settings.MaxDigitWidthPx;
             var paddingPt = ExcelUnitConverter.CellPaddingPoints * _scale;
             var indentPt = ExcelUnitConverter.IndentWidthToPoints(style.Indent, maxDigitWidthPx) * _scale;
 
@@ -1066,7 +1380,8 @@ namespace Utsushi.Layout
             }
 
             var hAlign = ResolveHorizontalAlignment(style.HAlign, cell.ValueKind);
-            var overflow = ResolveOverflow(address, style, cell.ValueKind);
+            var overflow = ResolveOverflow(style, cell.ValueKind);
+            RecordTextApproximations(address, cell, style, hAlign, mergedRange);
 
             // 拡大縮小率はフォントサイズにも適用する(座標だけを縮めると文字が収まらなくなるため)。
             // 数値書式の色の指定(要件4.12)があれば、フォントの色の代わりに使う。
@@ -1168,13 +1483,13 @@ namespace Utsushi.Layout
             }
 
             var line = lines[0];
-            if (overflow == OverflowBehavior.Clip || mergedRange is not null)
+            // 切り取り(Clip)になるのは折り返し表示のセルの数値だけで、数値は上で判定を終えている。ここに来るのは結合セルの文字だけ。
+            if (mergedRange is not null)
             {
                 if (_fitIssues!.Accepts(address, FitIssueKind.Clipped) && IsWider(line, font, contentWidthPt))
                 {
-                    var where = mergedRange is not null ? $"結合範囲 {mergedRange.Value} の幅" : "セルの幅";
                     AddFitIssue(FitIssueKind.Clipped, address, line,
-                        $"文字が{where}で切れます。列幅を広げるか、文字数を減らしてください。");
+                        $"文字が結合範囲 {mergedRange.Value} の幅で切れます。列幅を広げるか、文字数を減らしてください。");
                 }
 
                 return;
@@ -1343,24 +1658,7 @@ namespace Utsushi.Layout
         private void AddFitIssue(FitIssueKind kind, CellAddress address, string text, string description)
         {
             var isSubstituted = _report.SubstitutedCells.Contains(address);
-
-            // 置換キーで差し込んだセルだけに置換キーを付ける(セル番地直接指定で上書きしたセルは除く。要件13.4)。
-            var key = isSubstituted && !_report.OverriddenCells.Contains(address) ? FindSubstitutionKey(address) : null;
-            var subject = key is not null ? $"セル {address}(置換キー '{key}')" : $"セル {address}";
-            _fitIssues!.Add(new FitIssue(kind, address, _pageNumber, text, isSubstituted, key, $"{subject}: {description}"));
-        }
-
-        private string? FindSubstitutionKey(CellAddress address)
-        {
-            foreach (var field in _report.Definition.SubstitutionFields)
-            {
-                if (field.Cell == address)
-                {
-                    return field.Key;
-                }
-            }
-
-            return null;
+            _fitIssues!.Add(new FitIssue(kind, address, _pageNumber, text, isSubstituted, $"セル {address}: {description}"));
         }
 
         /// <summary>文字の収まりの判定の許容誤差(pt)。幅の計算の浮動小数点誤差で、ちょうど収まる文字を検出しないようにする。</summary>
@@ -1389,7 +1687,7 @@ namespace Utsushi.Layout
                 : (visibleRect.Width, visibleRect.Height);
 
             var paddingPt = ExcelUnitConverter.CellPaddingPoints * _scale;
-            var indentPt = ExcelUnitConverter.IndentWidthToPoints(style.Indent, _report.Definition.MaxDigitWidthPx) * _scale;
+            var indentPt = ExcelUnitConverter.IndentWidthToPoints(style.Indent, _report.Settings.MaxDigitWidthPx) * _scale;
             var contentWidthPt = widthPt - (paddingPt * 2) - indentPt;
 
             if (contentWidthPt <= 0 || heightPt <= 0)
@@ -1397,12 +1695,12 @@ namespace Utsushi.Layout
                 throw new LayoutComputationException(
                     $"セル {address} に値を差し込みましたが、セルの幅または高さが無いため、PDFに出力されません。"
                     + "テンプレートの列幅・行の高さを見直してください。",
-                    _report.Definition.ReportCode,
+                    _report.Settings.DocumentName,
                     _sheet.Name,
                     address);
             }
 
-            if (ResolveOverflow(address, style, kind) != OverflowBehavior.Wrap)
+            if (ResolveOverflow(style, kind) != OverflowBehavior.Wrap)
             {
                 return;
             }
@@ -1421,7 +1719,7 @@ namespace Utsushi.Layout
                         address,
                         lineCount,
                         heightPt / _scale),
-                    _report.Definition.ReportCode,
+                    _report.Settings.DocumentName,
                     _sheet.Name,
                     address);
             }
@@ -1445,6 +1743,94 @@ namespace Utsushi.Layout
             text.IndexOf('\n') < 0 && text.IndexOf('\r') < 0
                 ? text
                 : text.Replace("\r", string.Empty).Replace("\n", string.Empty);
+
+        /// <summary>
+        /// 文字を描くセルの書式の近似を記録する(excel2pdf-consolidation 要件7.2(a)(b)(d)(e))。診断のときだけ。
+        /// 位置は結合セルなら結合範囲、それ以外はそのセル。
+        /// </summary>
+        private void RecordTextApproximations(
+            CellAddress address, CellModel cell, CellStyle style, HorizontalAlignment resolvedHAlign, CellRange? mergedRange)
+        {
+            if (_approximations is null)
+            {
+                return;
+            }
+
+            var location = mergedRange ?? new CellRange(address.Row, address.Column, address.Row, address.Column);
+            var sheet = _sheet.Name;
+
+            if (style.TextRotation != 0)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.TextRotation,
+                    sheet,
+                    location,
+                    null,
+                    "textRotation=" + style.TextRotation.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    style.TextRotation == 255 ? "縦書きは横書きで描きます。" : "文字の回転は、回転せずに横書きで描きます。");
+            }
+
+            if (cell.NumberFormatFallback != Parsing.NumberFormatFallback.None)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.NumberFormat,
+                    sheet,
+                    location,
+                    null,
+                    style.NumberFormat,
+                    cell.NumberFormatFallback == Parsing.NumberFormatFallback.UnrepresentableValue
+                        ? "表示形式で表せない値(負の経過時間・明治より前の日付の和暦など)のため、標準の表示形式で表示します。"
+                        : "表示形式を解釈できない(分数・指数など)ため、標準の表示形式で表示します。");
+            }
+
+            if (cell.HasRichText)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.RichText,
+                    sheet,
+                    location,
+                    null,
+                    null,
+                    "一部の文字の書式(リッチテキスト)は反映せず、セル全体をセルの書式で描きます。");
+            }
+
+            var hMessage = style.HAlign switch
+            {
+                HorizontalAlignment.Justify or HorizontalAlignment.Distributed =>
+                    "横位置の両端揃え・均等割り付けは左揃えで描きます(Excelと配置・折り返しが異なることがあります)。",
+                HorizontalAlignment.Fill => "横位置の繰り返しは、繰り返さずに左揃えで描きます。",
+                HorizontalAlignment.CenterContinuous => "横位置の選択範囲内で中央は、そのセルの中だけで中央揃えにします(右隣のセルにまたがる場合はExcelと位置が異なります)。",
+                _ => null,
+            };
+            if (hMessage is not null)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.HorizontalAlignment, sheet, location, null, "horizontal=" + XmlName(style.HAlign), hMessage);
+            }
+
+            if (style.VAlign is VerticalAlignment.Justify or VerticalAlignment.Distributed)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.VerticalAlignment,
+                    sheet,
+                    location,
+                    null,
+                    "vertical=" + XmlName(style.VAlign),
+                    "縦位置の両端揃え・均等割り付けは中央揃えで描きます(Excelと配置・折り返しが異なることがあります)。");
+            }
+
+            if (style.Indent > 0
+                && resolvedHAlign is HorizontalAlignment.Right or HorizontalAlignment.Center or HorizontalAlignment.CenterContinuous)
+            {
+                _approximations.Add(
+                    FormatApproximationKind.Indent,
+                    sheet,
+                    location,
+                    null,
+                    "indent=" + style.Indent.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    "右揃え・中央揃えのセルのインデントは、左側に足して描きます(Excelは右揃えでは右側に足します)。");
+            }
+        }
 
         /// <summary>
         /// 水平配置を決定する。<see cref="HorizontalAlignment.General"/> は値の型で既定が変わる。
@@ -1488,7 +1874,7 @@ namespace Utsushi.Layout
         }
 
         /// <summary>
-        /// はみ出し時の挙動を決定する。帳票定義で置換対象に指定された挙動が、セル書式より優先される。
+        /// はみ出し時の挙動を、セルの書式(折り返し・縮小)と値の種類から決定する。
         /// </summary>
         /// <remarks>
         /// 数値は折り返さない(Excel は「折り返して全体を表示する」のセルでも数値を折り返さず、はみ出させもせず、収まらなければ
@@ -1496,13 +1882,11 @@ namespace Utsushi.Layout
         /// 呼び出し元が設定した数値を、差し込み値の折り返しの行数の検証(要件2.14)でエラーにしないため。収まらない数値は
         /// 文字の収まりの確認(要件13)の NumberTooWide で分かる。layout-fidelity-reviewer指摘)。
         /// </remarks>
-        private OverflowBehavior ResolveOverflow(CellAddress address, CellStyle style, CellValueKind kind)
+        private static OverflowBehavior ResolveOverflow(CellStyle style, CellValueKind kind)
         {
-            var behavior = _report.GetOverflowBehavior(address) is { } fromDefinition
-                ? fromDefinition
-                : style.WrapText
-                    ? OverflowBehavior.Wrap
-                    : style.ShrinkToFit ? OverflowBehavior.Shrink : OverflowBehavior.Overflow;
+            var behavior = style.WrapText
+                ? OverflowBehavior.Wrap
+                : style.ShrinkToFit ? OverflowBehavior.Shrink : OverflowBehavior.Overflow;
 
             return behavior == OverflowBehavior.Wrap && kind == CellValueKind.Number ? OverflowBehavior.Clip : behavior;
         }

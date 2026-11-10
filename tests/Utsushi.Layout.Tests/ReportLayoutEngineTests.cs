@@ -23,8 +23,8 @@ namespace Utsushi.Layout.Tests
     {
         private readonly ReportLayoutEngine _engine = new(new ApproximateFontMetricsProvider());
 
-        private PagedLayout Compute(SheetModel sheet, ReportDefinition? definition = null) =>
-            _engine.Compute(ReportModel.Create(definition ?? Definition(), sheet));
+        private PagedLayout Compute(SheetModel sheet, ConversionSettings? settings = null) =>
+            _engine.Compute(ReportModel.Create(settings ?? Settings(), sheet));
 
         // -- 要件3.1: 印刷範囲 -------------------------------------------------
 
@@ -44,57 +44,22 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void 帳票定義の印刷範囲はExcelの設定より優先される()
-        {
-            var sheet = UniformSheet(
-                rows: 10, columns: 6,
-                pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("A1:F10") }));
-
-            var layout = Compute(sheet, Definition(printAreaOverride: CellRange.Parse("A1:B1")));
-
-            var texts = Texts(Assert.Single(layout.Pages)).Select(t => t.Text).ToHashSet();
-            Assert.Equal(new[] { "A1", "B1" }.ToHashSet(), texts);
-        }
-
-        [Fact]
-        public void 必須の置換フィールドが印刷範囲外を指す場合はエラーになる()
-        {
-            // 置換値自体は正しくセットされても、印刷範囲外のためPDFには出力されず
-            // 静かにデータが欠落する。要件2.4(必須値)と要件3.1(印刷範囲)の組み合わせで
-            // 帳票定義の設定ミスを早期に検出できるようにする。
-            var sheet = UniformSheet(
-                rows: 10, columns: 6,
-                pageSetup: NoMarginA4(printAreas: new[] { CellRange.Parse("B2:C4") }));
-
-            var definition = Definition(fields: new[]
-            {
-            new SubstitutionFieldDefinition("Foo", new CellAddress(1, 1), Required: true, Overflow: null),
-        });
-
-            var ex = Assert.Throws<LayoutComputationException>(() => Compute(sheet, definition));
-
-            Assert.Equal(ProcessingStage.Layout, ex.Stage);
-            Assert.Equal(new CellAddress(1, 1), ex.CellAddress);
-        }
-
-        [Fact]
-        public void 必須の置換フィールドが印刷タイトルの行を指す場合はエラーにならない()
+        public void 書き込んだセルが印刷タイトルの行にあればエラーにならない()
         {
             // 印刷タイトルの行/列は印刷範囲の外でも各ページに出力されるため(要件3.4)、
-            // 必須フィールドがタイトル行を指していても値は出力される。誤検知してはならない。
+            // 書き込んだセルがタイトル行にあっても値は出力される。誤検知してはならない。
             var sheet = UniformSheet(
                 rows: 20, columns: 1, rowHeightPt: 100.0,
                 pageSetup: NoMarginA4(
                     printAreas: new[] { CellRange.Parse("A5:A20") },
                     printTitles: new PrintTitles(1, 2, null, null)));
 
-            var definition = Definition(fields: new[]
+            var report = ReportModel.Create(Settings(), sheet) with
             {
-            new SubstitutionFieldDefinition("TitleField", new CellAddress(1, 1), Required: true, Overflow: null),
-        });
+                SubstitutedCells = new HashSet<CellAddress> { new(1, 1) },
+            };
 
-            // 例外にならないこと(以前は印刷タイトルを考慮せず誤って例外になっていた)
-            var layout = Compute(sheet, definition);
+            var layout = _engine.Compute(report);
             Assert.True(layout.PageCount > 0);
         }
 
@@ -158,23 +123,6 @@ namespace Utsushi.Layout.Tests
 
             Assert.Equal(4, layout.PageCount);
             Assert.Equal(new[] { 1, 2, 3, 4 }, layout.Pages.Select(p => p.PageNumber));
-        }
-
-        [Fact]
-        public void 帳票定義の印刷範囲指定は複数指定より優先される()
-        {
-            var sheet = UniformSheet(
-                rows: 10, columns: 4,
-                pageSetup: NoMarginA4(printAreas: new[]
-                {
-                CellRange.Parse("A1:B2"),
-                CellRange.Parse("C8:D9"),
-                }));
-
-            var layout = Compute(sheet, Definition(printAreaOverride: CellRange.Parse("A1:A1")));
-
-            var page = Assert.Single(layout.Pages);
-            Assert.Equal("A1", Assert.Single(Texts(page)).Text);
         }
 
         [Fact]
@@ -648,12 +596,12 @@ namespace Utsushi.Layout.Tests
         }
 
         [Fact]
-        public void 縮小指定ならセル幅に収まるまでフォントを縮める()
+        public void 縮小して全体を表示するセルはセル幅に収まるまでフォントを縮める()
         {
             const string longText = "株式会社ながいなまえの取引先さま";
             var cells = new Dictionary<CellAddress, CellModel>
             {
-                [new CellAddress(1, 1)] = new(longText, CellValueKind.Text, CellStyle.Default, longText),
+                [new CellAddress(1, 1)] = new(longText, CellValueKind.Text, CellStyle.Default with { ShrinkToFit = true }, longText),
             };
 
             var sheet = UniformSheet(rows: 1, columns: 1, columnWidth: 4.0, pageSetup: NoMarginA4()) with
@@ -661,20 +609,7 @@ namespace Utsushi.Layout.Tests
                 Cells = cells,
             };
 
-            var definition = Definition(
-                fields: new[]
-                {
-                new SubstitutionFieldDefinition(
-                    "Long", CellAddress.Parse("A1"), false, OverflowBehavior.Shrink),
-                });
-
-            var report = ReportModel.Create(definition, sheet) with
-            {
-                OverflowByCell = new Dictionary<CellAddress, OverflowBehavior>
-                {
-                    [CellAddress.Parse("A1")] = OverflowBehavior.Shrink,
-                },
-            };
+            var report = ReportModel.Create(Settings(), sheet);
 
             var text = Assert.Single(Texts(Assert.Single(_engine.Compute(report).Pages)));
 
@@ -724,7 +659,7 @@ namespace Utsushi.Layout.Tests
             // 隣のセルへははみ出せるが、このページの本文(3列×1行)の外へは出ない
             Assert.NotNull(text.ClipRect);
             var clip = text.ClipRect!.Value;
-            var cellWidth = ExcelUnitConverter.ColumnWidthToPoints(2.0, ReportDefinition.DefaultMaxDigitWidthPx);
+            var cellWidth = ExcelUnitConverter.ColumnWidthToPoints(2.0, ConversionSettings.DefaultMaxDigitWidthPx);
             Assert.Equal(0.0, clip.Left, 6);
             Assert.Equal(cellWidth * 3, clip.Right, 6);
             Assert.Equal(20.0, clip.Bottom, 6);
@@ -791,7 +726,7 @@ namespace Utsushi.Layout.Tests
         {
             const double columnWidthChars = 10.0;
             const double rowHeightPt = 20.0;
-            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ConversionSettings.DefaultMaxDigitWidthPx);
 
             var sheet = UniformSheet(
                 rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
@@ -867,7 +802,7 @@ namespace Utsushi.Layout.Tests
         {
             const double columnWidthChars = 10.0;
             const double rowHeightPt = 20.0;
-            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ConversionSettings.DefaultMaxDigitWidthPx);
 
             var sheet = UniformSheet(
                 rows: 5, columns: 5, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
@@ -897,7 +832,7 @@ namespace Utsushi.Layout.Tests
             // 印刷範囲がC列までしかなくても、D・E列ぶんの幅が正しく加算されることを確認する。
             const double columnWidthChars = 10.0;
             const double rowHeightPt = 20.0;
-            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ConversionSettings.DefaultMaxDigitWidthPx);
 
             var sheet = UniformSheet(
                 rows: 5, columns: 5, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt,
@@ -944,7 +879,7 @@ namespace Utsushi.Layout.Tests
         {
             const double columnWidthChars = 10.0;
             const double rowHeightPt = 20.0;
-            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ConversionSettings.DefaultMaxDigitWidthPx);
 
             var sheet = UniformSheet(
                 rows: 3, columns: 3, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
@@ -975,7 +910,7 @@ namespace Utsushi.Layout.Tests
         {
             const double columnWidthChars = 10.0;
             const double rowHeightPt = 20.0;
-            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ReportDefinition.DefaultMaxDigitWidthPx);
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(columnWidthChars, ConversionSettings.DefaultMaxDigitWidthPx);
 
             var sheet = UniformSheet(
                 rows: 5, columns: 5, columnWidth: columnWidthChars, rowHeightPt: rowHeightPt, pageSetup: NoMarginA4());
@@ -1106,7 +1041,7 @@ namespace Utsushi.Layout.Tests
                 sheet = sheet with { DrawingObjects = new[] { shape } };
 
                 var engine = new ReportLayoutEngine(new ApproximateFontMetricsProvider());
-                var page = Assert.Single(engine.Compute(ReportModel.Create(Definition(), sheet)).Pages);
+                var page = Assert.Single(engine.Compute(ReportModel.Create(Settings(), sheet)).Pages);
                 return Assert.Single(page.Commands.OfType<ShapeCommand>());
             }
 

@@ -25,7 +25,7 @@ namespace Utsushi.Layout.Tests
         private readonly ReportLayoutEngine _engine = new(new ApproximateFontMetricsProvider(), () => new DateTime(2026, 4, 20));
 
         private PagedLayout Compute(SheetModel sheet, params CellAddress[] substituted) =>
-            _engine.Compute(ReportModel.Create(Definition(), sheet) with
+            _engine.Compute(ReportModel.Create(Settings(), sheet) with
             {
                 SubstitutedCells = new HashSet<CellAddress>(substituted),
             });
@@ -171,7 +171,7 @@ namespace Utsushi.Layout.Tests
             var page = Assert.Single(Compute(sheet).Pages);
             var text = Texts(page).Single(t => t.Text == "A1");
 
-            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(2.0, ReportDefinition.DefaultMaxDigitWidthPx);
+            var columnWidthPt = ExcelUnitConverter.ColumnWidthToPoints(2.0, ConversionSettings.DefaultMaxDigitWidthPx);
             Assert.NotNull(text.ClipRect);
             Assert.Equal(0.0, text.ClipRect!.Value.Left, 6);
             Assert.Equal(columnWidthPt * 2, text.ClipRect.Value.Right, 6);

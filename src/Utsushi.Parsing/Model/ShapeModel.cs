@@ -5,7 +5,7 @@ namespace Utsushi.Parsing.Model
 {
     /// <summary>
     /// シートに配置された図形(要件10)。対応済みプリセット一覧に含まれない
-    /// プリセットジオメトリは読み取り対象にせず、サポート外要素として扱う。
+    /// プリセットジオメトリは読み取り対象にせず、未対応要素として記録する(excel2pdf-consolidation 要件2.7(b))。
     /// </summary>
     /// <param name="Id">
     /// <c>NonVisualDrawingProperties/@id</c>。接続線の接続先解決(要件10.11)のために保持する。
@@ -36,7 +36,14 @@ namespace Utsushi.Parsing.Model
         PointPt AnchorOffset,
         AnchorExtent Extent,
         bool FlipHorizontal = false,
-        bool FlipVertical = false) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
+        bool FlipVertical = false) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent)
+    {
+        /// <summary>
+        /// 塗りつぶしを近似・省略した場合の理由(スタイルの塗りつぶしの書式・模様の塗りつぶしなど)。近似していなければ null
+        /// (書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(g))。
+        /// </summary>
+        public string? FillApproximation { get; init; }
+    }
 
     /// <summary>
     /// 対応済みのプリセットジオメトリ(要件10.1補足)。自社帳票での実用上の必要性を
@@ -167,8 +174,25 @@ namespace Utsushi.Parsing.Model
     /// 段落内の改行(<c>a:br</c>)は <see cref="ShapeTextRun.Text"/> 中の <c>"\n"</c> で表し、
     /// 空の段落(ランを持たない <c>a:p</c>)は <see cref="ShapeTextParagraph.Runs"/> が空の段落で表す。
     /// </remarks>
+    /// <remarks>
+    /// <see cref="Vertical"/>・<see cref="RotationDegrees"/> は読み取るだけで、Utsushi は横書き・回転なしで描く
+    /// (書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(a))。
+    /// </remarks>
     public sealed record ShapeTextBody(
-        IReadOnlyList<ShapeTextParagraph> Paragraphs, VerticalAlignment VAlign, ShapeTextInsets? Insets = null);
+        IReadOnlyList<ShapeTextParagraph> Paragraphs, VerticalAlignment VAlign, ShapeTextInsets? Insets = null)
+    {
+        /// <summary>文字の向き(<c>a:bodyPr/@vert</c>)。横書き(<c>horz</c>)・指定なしは <c>null</c>。</summary>
+        public string? Vertical { get; init; }
+
+        /// <summary>文字の回転(<c>a:bodyPr/@rot</c>。度)。</summary>
+        public double RotationDegrees { get; init; }
+
+        /// <summary>
+        /// 文字のフォントが、図形のスタイル(<c>fontRef</c>)やテーマのフォント(<c>+mn-lt</c> など)を指していて、その書体を使わない場合の
+        /// 指定。使っていなければ null(書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(g))。
+        /// </summary>
+        public string? StyleFont { get; init; }
+    }
 
     /// <summary>図形内テキストの余白(ポイント、印刷倍率の適用前)。</summary>
     public sealed record ShapeTextInsets(double LeftPt, double TopPt, double RightPt, double BottomPt)
@@ -284,12 +308,25 @@ namespace Utsushi.Parsing.Model
         ShapeOutline? Outline,
         ShapeTextBody? Text,
         bool FlipHorizontal = false,
-        bool FlipVertical = false) : GroupChildModel(LocalRect);
+        bool FlipVertical = false) : GroupChildModel(LocalRect)
+    {
+        /// <summary><see cref="ShapeModel.FillApproximation"/> と同じ。</summary>
+        public string? FillApproximation { get; init; }
+    }
 
     /// <summary>グループ内の画像。<see cref="Id"/>は接続線の接続先解決(要件10.11)のために保持する。</summary>
     /// <param name="RotationDegrees"><c>a:xfrm/@rot</c> から変換した回転角(度、時計回り。要件9.7)。</param>
     public sealed record GroupChildImage(
-        uint Id, RectPt LocalRect, byte[] Data, string ContentType, double RotationDegrees) : GroupChildModel(LocalRect);
+        uint Id, RectPt LocalRect, byte[] Data, string ContentType, double RotationDegrees) : GroupChildModel(LocalRect)
+    {
+        /// <summary>
+        /// 左右の反転(<c>a:xfrm/@flipH</c>)。Utsushi は画像を反転せずに描く(書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(h))。
+        /// </summary>
+        public bool FlipHorizontal { get; init; }
+
+        /// <summary>上下の反転(<c>a:xfrm/@flipV</c>)。<see cref="FlipHorizontal"/> と同じく反転せずに描く。</summary>
+        public bool FlipVertical { get; init; }
+    }
 
     /// <summary>
     /// グループ内の接続線。<see cref="Id"/>は持たない(接続先として参照される対象ではないため。

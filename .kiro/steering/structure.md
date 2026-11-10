@@ -4,7 +4,7 @@ inclusion: always
 
 # Utsushi プロジェクト構成方針
 
-> 中核機能(`.kiro/specs/excel-report-pdf-conversion/`)の実装は完了している。
+> 中核機能(`.kiro/specs/excel-report-pdf-conversion/`)の実装と、入口の `Excel2Pdf` への一本化(`.kiro/specs/excel2pdf-consolidation/`)は完了している。
 > 以降の変更も本方針に従うこと。実際の構成は下記「ソリューション構成」を参照。
 
 ## レイヤー構成
@@ -16,9 +16,9 @@ inclusion: always
         ↓
 Excel解析レイヤー (Parsing)
         ↓
-帳票定義レイヤー (ReportDefinition)
+変換設定レイヤー (ReportDefinition。変換の設定と帳票モデル)
         ↓
-値差し込み(置換)レイヤー (Substitution)
+値の書き込みレイヤー (Substitution)
         ↓
 レイアウト計算レイヤー (Layout)
         ↓
@@ -27,12 +27,12 @@ PDF描画レイヤー (Rendering)
 ファサード (Utsushi)  ← 呼び出し元プロダクトが参照する唯一のアセンブリ
 ```
 
-`Utsushi.Core` は例外階層(`UtsushiException` とその派生)と、レイヤーをまたぐ値型
-(`CellAddress` / `CellRange` / `ArgbColor` / `RectPt` / `PointPt` / `Units`)のみを持つ。
-ロジックは置かず、どのレイヤーからも参照してよい。逆に `Utsushi.Core` は他のどのプロジェクトも参照しない。
+`Utsushi.Core` は例外階層(`UtsushiException` とその派生)、レイヤーをまたぐ値型
+(`CellAddress` / `CellRange` / `ArgbColor` / `RectPt` / `PointPt` / `Units`)、診断の記録の型(`UnsupportedElement`・`FormatApproximation` とその種類、
+`ProcessingStage`)と、診断の文の正規化(`DiagnosticText`)だけを持つ。変換のロジックは置かず、どのレイヤーからも参照してよい。逆に `Utsushi.Core` は他のどのプロジェクトも参照しない。
 
 - 上位レイヤー(Rendering側)は下位レイヤー(Parsing側)の実装詳細(例: OpenXml SDKの型)を直接知ってはならない。レイヤー間の受け渡しは各レイヤーが定義する内部モデル(POCO)を介する。
-- 帳票ごとの差異(セル位置、置換対象キー、既知の特殊処理)は「帳票定義レイヤー」のデータ(JSON等)に閉じ込め、他レイヤーのコードに帳票固有の分岐を持ち込まない。
+- 帳票ごとの差異はテンプレート(Excelの書式・印刷設定)と呼び出し元が書き込む値で表し、共通レイヤーのコードに帳票固有の分岐を持ち込まない。
 
 ## ソリューション構成
 
@@ -41,12 +41,12 @@ Utsushi/
 ├── src/
 │   ├── Utsushi.Core/               # 例外階層とレイヤー共通の値型のみ。他プロジェクトを参照しない
 │   ├── Utsushi.Parsing/            # Excel(OOXML)構造の読み取り。DocumentFormat.OpenXml に依存してよい唯一のプロジェクト
-│   ├── Utsushi.ReportDefinition/   # 帳票定義モデルとローダー(JSON定義ファイル → 内部モデル)
-│   ├── Utsushi.Substitution/       # 指定セルへの文字列置換ロジック
+│   ├── Utsushi.ReportDefinition/   # 変換の設定(ConversionSettings: 文書名・シート名・最大数字幅)と帳票モデル(ReportModel)
+│   ├── Utsushi.Substitution/       # セル番地を指定した値の書き込み
 │   ├── Utsushi.Layout/             # 改ページ・印刷範囲・列幅行高・フォントメトリクスに基づくレイアウト計算
 │   ├── Utsushi.Rendering/          # SkiaSharp を用いたPDF描画。Layoutレイヤーの計算結果のみを入力とする
-│   ├── Utsushi/                    # ファサード(Excel2Pdf・ReportPdfConverter)。呼び出し元プロダクトはここだけを参照する
-│   └── Utsushi.Cli/                # コマンドライン入口。ファサードを呼ぶだけの薄い層
+│   ├── Utsushi/                    # ファサード(Excel2Pdf・Excel2PdfEngine)。呼び出し元プロダクトはここだけを参照する
+│   └── Utsushi.Cli/                # コマンドライン入口(check・convert)。ファサードを呼ぶだけの薄い層
 ├── tests/
 │   ├── Utsushi.TestSupport/        # テストプロジェクト間で共有するヘルパー(製品コードからは参照されない)
 │   ├── Utsushi.Parsing.Tests/
@@ -54,14 +54,15 @@ Utsushi/
 │   ├── Utsushi.Substitution.Tests/
 │   ├── Utsushi.Layout.Tests/
 │   ├── Utsushi.Rendering.Tests/
-│   └── Utsushi.Golden.Tests/       # 登録済み帳票サンプルによるゴールデン(回帰)テストと、エッジケース検証用サンプルの変換テスト
-│       └── Fixtures/<帳票コード>/  # レビュー済みの期待出力
+│   ├── Utsushi.Cli.Tests/
+│   └── Utsushi.Golden.Tests/       # サンプル帳票によるゴールデン(回帰)テストと、エッジケース検証用サンプルの変換テスト
+│       └── Fixtures/<サンプル名>/  # レビュー済みの期待出力
 ├── tools/
 │   ├── Utsushi.SampleGenerator/    # 帳票サンプル(.xlsx)の生成ツール。製品コードからは参照されない
 │   └── edge-case-samples/          # エッジケース検証用サンプルの生成スクリプト(Python + openpyxl。開発用のみ)
 ├── samples/
-│   ├── reports/<帳票コード>/       # definition.json(手書き)と template.xlsx(生成物)
-│   └── edge-cases/<帳票コード>/    # エッジケース検証用(利用者が作りがちなテンプレート)。登録済み帳票ではない
+│   ├── reports/<サンプル名>/       # template.xlsx(生成物)
+│   └── edge-cases/<サンプル名>/    # エッジケース検証用(利用者が作りがちなテンプレート)
 ├── docs/                           # 人が読む補足ドキュメント
 ├── .kiro/
 │   ├── steering/                   # 本ファイル群。プロジェクト全体に常時適用される方針
@@ -85,19 +86,20 @@ Utsushi/
 
 - 名前空間・プロジェクト名は `Utsushi.<レイヤー名>` とする。
   - 例外: `Utsushi.ReportDefinition` プロジェクトの名前空間は `Utsushi.ReportDefinitions`(複数形)とする。
-    帳票定義の型名が `ReportDefinition` であり、同名の名前空間と衝突して参照が曖昧になるため。
-- 帳票定義ファイルは `samples/reports/<帳票コード>/definition.json` のように帳票コード単位でディレクトリを分ける。
-  テンプレートの Excel は同じディレクトリに `template.xlsx` として置く。
-- テストのゴールデンファイルは `tests/Utsushi.Golden.Tests/Fixtures/<帳票コード>/` に配置する。
+    プロジェクト名と同名の名前空間を避けるため(以前は同名の型 `ReportDefinition` があった)。プロジェクトの改名は機能を変えずに単独で行える別の変更とする。
+- サンプルのテンプレートは `samples/reports/<サンプル名>/template.xlsx` のようにサンプル単位でディレクトリを分ける。
+- テストのゴールデンファイルは `tests/Utsushi.Golden.Tests/Fixtures/<サンプル名>/` に配置する。
 
 ## 帳票の追加手順(標準ワークフロー)
 
-共通レイヤーのコードは変更しない。以下の3つのデータを足すだけで完結する(要件8.1)。
+共通レイヤーのコードは変更しない。テンプレートを整え、呼び出し元がセル番地を指定して値を書き込むだけで完結する(`product.md`)。
 
-1. `samples/reports/<帳票コード>/template.xlsx` に対象Excelファイル(個人情報等はマスキング)を追加する。
-   テンプレートの作り方・登録前のチェックリストは `docs/テンプレート作成ガイド.md` を参照。
-2. 同じディレクトリに `definition.json`(帳票定義)を追加する。スキーマは `docs/帳票定義スキーマ.md` を参照。
-3. `tests/Utsushi.Golden.Tests/ReportConversionGoldenTests.RegisteredReports` に帳票コードと置換値を追加し、
+1. テンプレートの作り方・登録前のチェックリストは `docs/テンプレート作成ガイド.md` を参照する。書き込むセルのはみ出しの扱いは、
+   セルの書式(「縮小して全体を表示する」「折り返して全体を表示する」)で表す。
+2. CLI の `check` でテンプレートを診断し、未対応の要素・文字の収まらない箇所・フォントの代替が無いことを確かめる
+   (書式の近似は参考として確かめる)。
+3. 回帰テストに加える場合は、`samples/reports/<サンプル名>/template.xlsx` に置き(個人情報等はマスキング)、
+   `tests/Utsushi.Golden.Tests/ReportConversionGoldenTests.SampleReports` にサンプル名とセル番地・値を追加して、
    テストを1度実行してゴールデンファイルを生成する。**生成された内容を必ずレビューしてからコミットする**
    (期待値の更新は `UTSUSHI_UPDATE_GOLDEN=1 dotnet test`)。
 4. 新規要件が既存のレイアウト計算で表現できない場合のみ、`.kiro/specs/` に新しい要件を追記し、`Utsushi.Layout` を拡張する。

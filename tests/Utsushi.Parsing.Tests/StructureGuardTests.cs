@@ -52,7 +52,7 @@ namespace Utsushi.Parsing.Tests
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
             Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Contains("/xl/test.xml", ex.Message, StringComparison.Ordinal);
         }
 
@@ -108,7 +108,7 @@ namespace Utsushi.Parsing.Tests
                     xml, maxDepth: 10, maxBytes: bytes.Length - 1, "/xl/test.xml", "report"));
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
         }
 
         // --- 要件6.7: 壊れたXML・DTD(ヘルパー) ----------------------------------------
@@ -162,9 +162,9 @@ namespace Utsushi.Parsing.Tests
 
                 using var stream = File.OpenRead(path);
                 var errorEx = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, ReportCode: "report")));
+                    () => _reader.ReadStrict(stream, new WorkbookReadOptions(DocumentName: "report")));
                 Assert.Equal(InvalidExcelFileReason.TooLarge, errorEx.Reason);
-                Assert.Equal("report", errorEx.ReportCode);
+                Assert.Equal("report", errorEx.DocumentName);
             }
             finally
             {
@@ -184,11 +184,11 @@ namespace Utsushi.Parsing.Tests
                 using (var stream = File.OpenRead(path))
                 {
                     var ex = Assert.Throws<UnsupportedWorkbookElementException>(
-                        () => _reader.Read(stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error)));
-                    Assert.Equal("GroupNestingTooDeep", ex.ElementKind);
+                        () => _reader.ReadStrict(stream, WorkbookReadOptions.Default));
+                    StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedGroupChild, "GroupNestingTooDeep");
                 }
 
-                // Ignore ならグループ全体が破棄され、読み取り自体は成功する。
+                // 読み込みではグループ全体が破棄され、読み取り自体は成功する。
                 var sheet = Assert.Single(_reader.ReadFile(path).Sheets);
                 Assert.Empty(sheet.DrawingObjects);
             }
@@ -282,7 +282,7 @@ namespace Utsushi.Parsing.Tests
                 () => OpenXmlWorkbookReader.EnsureColumnExpansionsWithinLimit(expansions: 6, maxExpansions: 5, "シート1", "report"));
 
             Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.Contains("シート1", ex.Message, StringComparison.Ordinal);
         }
 
@@ -451,9 +451,9 @@ namespace Utsushi.Parsing.Tests
             {
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(ReportCode: "report")));
+                    () => _reader.Read(stream, new WorkbookReadOptions(DocumentName: "report")));
                 Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
-                Assert.Equal("report", ex.ReportCode);
+                Assert.Equal("report", ex.DocumentName);
             }
             finally
             {
@@ -516,9 +516,9 @@ namespace Utsushi.Parsing.Tests
             {
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(ReportCode: "report")));
+                    () => _reader.Read(stream, new WorkbookReadOptions(DocumentName: "report")));
                 Assert.Equal(InvalidExcelFileReason.TooLarge, ex.Reason);
-                Assert.Equal("report", ex.ReportCode);
+                Assert.Equal("report", ex.DocumentName);
             }
             finally
             {
@@ -529,19 +529,17 @@ namespace Utsushi.Parsing.Tests
         // --- 要件6.10: 参照先パートの無い画像 ----------------------------------------
 
         [Fact]
-        public void 画像の参照先パートが無い場合unsupportedElementsがerrorならMissingImagePartになる()
+        public void 画像の参照先パートが無い場合MissingImagePartとして記録する()
         {
             var path = ShapeWorkbookFixtures.CreateWorkbook(SafetyLimitWorkbookFixtures.PictureAnchorWithMissingEmbed());
             try
             {
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<UnsupportedWorkbookElementException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, ReportCode: "report")));
+                    () => _reader.ReadStrict(stream, new WorkbookReadOptions(DocumentName: "report")));
 
-                Assert.Equal("MissingImagePart", ex.ElementKind);
-                Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-                Assert.Equal("report", ex.ReportCode);
-                Assert.Equal("テストシート", ex.SheetName);
+                var element = StrictReading.AssertContains(ex, UnsupportedElementKind.MissingImagePart);
+                Assert.Equal("テストシート", element.SheetName);
             }
             finally
             {
@@ -550,7 +548,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 画像の参照先パートが無い場合unsupportedElementsがignoreなら画像なしで読める()
+        public void 画像の参照先パートが無い場合読み込みでは画像なしで読める()
         {
             // 同じ drawing 内の図形は読み取られ、壊れた画像だけが読み飛ばされる。
             var path = ShapeWorkbookFixtures.CreateWorkbook(

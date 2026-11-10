@@ -101,7 +101,7 @@ namespace Utsushi.Parsing.Tests
 
         [Theory]
         [MemberData(nameof(MalformedDrawingAnchors))]
-        public void 図形の属性値が不正ならunsupportedElementsによらずCorruptedになる(string anchorXml, Type innerType)
+        public void 図形の属性値が不正なら未対応要素の扱いによらずCorruptedになる(string anchorXml, Type innerType)
         {
             var path = DrawingStyleWorkbookFixtures.CreateWorkbook(anchorXml, DrawingStyleWorkbookFixtures.OfficeThemeXml());
             try
@@ -110,7 +110,7 @@ namespace Utsushi.Parsing.Tests
 
                 using var stream = File.OpenRead(path);
                 var ex = Assert.Throws<InvalidExcelFileException>(
-                    () => _reader.Read(stream, new WorkbookReadOptions(UnsupportedElementBehavior.Error, ReportCode: "report")));
+                    () => _reader.ReadStrict(stream, new WorkbookReadOptions(DocumentName: "report")));
                 Assert.Equal(InvalidExcelFileReason.Corrupted, ex.Reason);
             }
             finally
@@ -148,11 +148,11 @@ namespace Utsushi.Parsing.Tests
         {
             using var stream = File.OpenRead(path);
             var ex = Assert.Throws<InvalidExcelFileException>(
-                () => _reader.Read(stream, new WorkbookReadOptions(ReportCode: "report")));
+                () => _reader.Read(stream, new WorkbookReadOptions(DocumentName: "report")));
 
             Assert.Equal(InvalidExcelFileReason.Corrupted, ex.Reason);
             Assert.Equal(ProcessingStage.Parsing, ex.Stage);
-            Assert.Equal("report", ex.ReportCode);
+            Assert.Equal("report", ex.DocumentName);
             Assert.NotNull(ex.InnerException);
             Assert.IsType(innerType, ex.InnerException);
         }

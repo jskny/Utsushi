@@ -66,7 +66,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 非対応の接続線プリセットはunsupportedElementsがignoreなら無視される()
+        public void 非対応の接続線プリセットは読み込みでは無視される()
         {
             var anchor = ConnectorAndGroupWorkbookFixtures.ConnectorAnchor(A.ShapeTypeValues.BentConnector4);
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
@@ -82,17 +82,17 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 非対応の接続線プリセットはunsupportedElementsがerrorなら例外になる()
+        public void 非対応の接続線プリセットは未対応要素として記録する()
         {
             var anchor = ConnectorAndGroupWorkbookFixtures.ConnectorAnchor(A.ShapeTypeValues.BentConnector4);
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("UnsupportedShapePreset", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedShapePreset);
             }
             finally
             {
@@ -101,16 +101,16 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void 接続線のみのシートはunsupportedElementsがerrorでも例外にならない()
+        public void 接続線のみのシートは未対応要素として記録しない()
         {
             var anchor = ConnectorAndGroupWorkbookFixtures.ConnectorAnchor(A.ShapeTypeValues.StraightConnector1);
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<ConnectorModel>());
             }
             finally
@@ -189,7 +189,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void twoCellAnchorの接続線のみのシートはunsupportedElementsがerrorでも例外にならない()
+        public void twoCellAnchorの接続線のみのシートは未対応要素として記録しない()
         {
             var connector = ConnectorAndGroupWorkbookFixtures.GroupChildConnectorElement(
                 A.ShapeTypeValues.StraightConnector1, 0L, 0L, 900000L, 900000L, id: 2U);
@@ -197,10 +197,10 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 var readConnector = Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<ConnectorModel>());
                 Assert.IsType<CellSpanAnchorExtent>(readConnector.Extent);
             }
@@ -315,7 +315,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void グループ内に非対応プリセットの図形が1つでもあればunsupportedElementsがignoreならグループ全体が破棄される()
+        public void グループ内に非対応プリセットの図形が1つでもあれば読み込みではグループ全体が破棄される()
         {
             var goodShape1 = ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(
                 A.ShapeTypeValues.Rectangle, 0L, 0L, 900000L, 900000L, id: 10U);
@@ -343,7 +343,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void グループ内に非対応プリセットの図形が1つでもあればunsupportedElementsがerrorなら例外になる()
+        public void グループ内に非対応プリセットの図形が1つでもあれば未対応要素として記録する()
         {
             var goodShape = ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(
                 A.ShapeTypeValues.Rectangle, 0L, 0L, 900000L, 900000L, id: 10U);
@@ -356,11 +356,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("UnsupportedShapePreset", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedGroupChild, "UnsupportedShapePreset");
             }
             finally
             {
@@ -391,7 +391,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void グループ内に非対応の描画オブジェクト種別が含まれる場合はerrorなら例外になる()
+        public void グループ内に非対応の描画オブジェクト種別が含まれる場合は未対応要素として記録する()
         {
             var goodShape = ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(
                 A.ShapeTypeValues.Rectangle, 0L, 0L, 900000L, 900000L, id: 10U);
@@ -403,11 +403,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("UnsupportedShapePreset", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedGroupChild, "graphicFrame");
             }
             finally
             {
@@ -482,10 +482,10 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 var group = Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<GroupShapeModel>());
 
                 IReadOnlyList<GroupChildModel> current = group.Children;
@@ -505,7 +505,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void グループのネストが上限を超える場合はunsupportedElementsがignoreならグループ全体が破棄される()
+        public void グループのネストが上限を超える場合は読み込みではグループ全体が破棄される()
         {
             // トップ(1段目)+5段のネストで6段目に到達し、上限(5段)を超える。
             var nestedLevels = OpenXmlWorkbookReader.MaxShapeNestingDepth;
@@ -528,7 +528,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void グループのネストが上限を超える場合はunsupportedElementsがerrorなら例外になる()
+        public void グループのネストが上限を超える場合は未対応要素として記録する()
         {
             var nestedLevels = OpenXmlWorkbookReader.MaxShapeNestingDepth;
             var leaf = ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(
@@ -540,11 +540,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("GroupNestingTooDeep", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.UnsupportedGroupChild, "GroupNestingTooDeep");
             }
             finally
             {
@@ -586,7 +586,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void グループ内の図形はトップレベルの図形と上限個数を共有し超過分はerrorなら例外になる()
+        public void グループ内の図形はトップレベルの図形と上限個数を共有し超過分を未対応要素として記録する()
         {
             var topLevelCount = OpenXmlWorkbookReader.MaxShapesPerSheet - 2; // 48
             var anchors = new List<OpenXmlElement>();
@@ -608,11 +608,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchors.ToArray());
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("TooManyShapes", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.LimitExceeded, "TooManyShapes");
             }
             finally
             {
@@ -659,7 +659,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void グループ自身を1件として数える時点で上限に達する場合はerrorなら例外になる()
+        public void グループ自身を1件として数える時点で上限に達する場合は未対応要素として記録する()
         {
             var topLevelCount = OpenXmlWorkbookReader.MaxShapesPerSheet - 3; // 47
             var anchors = new List<OpenXmlElement>();
@@ -681,11 +681,11 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchors.ToArray());
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.Read(stream, options));
-                Assert.Equal("TooManyShapes", ex.ElementKind);
+                var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => _reader.ReadStrict(stream, options));
+                StrictReading.AssertContains(ex, UnsupportedElementKind.LimitExceeded, "TooManyShapes");
             }
             finally
             {
@@ -694,7 +694,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void グループのみのシートはunsupportedElementsがerrorでも例外にならない()
+        public void グループのみのシートは未対応要素として記録しない()
         {
             var leaf = ConnectorAndGroupWorkbookFixtures.GroupChildShapeElement(
                 A.ShapeTypeValues.Rectangle, 0L, 0L, 300000L, 300000L, id: 10U);
@@ -704,10 +704,10 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 var group2 = Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<GroupShapeModel>());
                 Assert.Single(group2.Children);
             }
@@ -718,7 +718,7 @@ namespace Utsushi.Parsing.Tests
         }
 
         [Fact]
-        public void twoCellAnchorのグループのみのシートはunsupportedElementsがerrorでも例外にならない()
+        public void twoCellAnchorのグループのみのシートは未対応要素として記録しない()
         {
             // HasUnsupportedDrawingObjectはoneCellAnchor/twoCellAnchor双方の分岐でgrpSpを
             // 構造的にサポート済みとして扱う必要がある(要件10.7)。
@@ -730,10 +730,10 @@ namespace Utsushi.Parsing.Tests
             var path = ShapeWorkbookFixtures.CreateWorkbook(anchor);
             try
             {
-                var options = new WorkbookReadOptions(UnsupportedElementBehavior.Error);
+                var options = WorkbookReadOptions.Default;
                 using var stream = File.OpenRead(path);
 
-                var workbook = _reader.Read(stream, options);
+                var workbook = _reader.ReadStrict(stream, options);
                 var group2 = Assert.Single(workbook.Sheets[0].DrawingObjects.OfType<GroupShapeModel>());
                 Assert.IsType<CellSpanAnchorExtent>(group2.Extent);
             }

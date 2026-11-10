@@ -20,7 +20,7 @@ using Xunit;
 namespace Utsushi.Golden.Tests
 {
     /// <summary>
-    /// エッジケース検証用の帳票サンプル(<c>samples/edge-cases/</c>)を、差し込み値を変えながら変換する。
+    /// エッジケース検証用の帳票サンプル(<c>samples/edge-cases/</c>)を、書き込む値を変えながら <see cref="Excel2Pdf"/> で変換する。
     /// </summary>
     /// <remarks>
     /// <para>
@@ -42,13 +42,14 @@ namespace Utsushi.Golden.Tests
 
         private static readonly DateTime FixedTimestamp = new(2026, 4, 20, 10, 30, 0, DateTimeKind.Unspecified);
 
-        private static ReportPdfConverter CreateConverter(string definitionRoot)
+        /// <summary>エッジケースのサンプルの列幅の換算に使う最大数字幅(標準フォントの游ゴシック 11pt からの見積もりと同じ。design.md 6.1)。</summary>
+        private const double SampleMaxDigitWidthPx = 8;
+
+        private static Excel2PdfEngine CreateEngine()
         {
             var fontResolver = new FontResolver(FontResolverOptions.AllowFallback());
-
-            return new ReportPdfConverter(
+            return new Excel2PdfEngine(
                 new OpenXmlWorkbookReader(),
-                new FileSystemReportDefinitionRepository(definitionRoot),
                 new ReportModelBuilder(),
                 new CellSubstitutor(),
                 new ReportLayoutEngine(new ApproximateFontMetricsProvider(), () => FixedTimestamp),
@@ -56,23 +57,41 @@ namespace Utsushi.Golden.Tests
                 fontResolver);
         }
 
-        private static string Template(string reportCode) =>
-            Path.Combine(TestPaths.EdgeCaseSamplesRoot, reportCode, "template.xlsx");
+        private static string Template(string sample) =>
+            Path.Combine(TestPaths.EdgeCaseSamplesRoot, sample, "template.xlsx");
 
-        private static PagedLayout ComputeLayout(string reportCode, IReadOnlyDictionary<string, string> values)
+        /// <summary>
+        /// サンプルを開き、値を書き込む。注文書はグラフ・コメントを含むため、未対応要素を無視する
+        /// (以前の帳票定義の <c>unsupportedElements: "ignore"</c> に当たる。design.md 6.2)。
+        /// </summary>
+        private static Excel2Pdf Open(Excel2PdfEngine engine, string sample, IReadOnlyDictionary<string, string>? values = null)
         {
-            using var converter = CreateConverter(TestPaths.EdgeCaseSamplesRoot);
-            using var input = File.OpenRead(Template(reportCode));
-            return converter.ComputeLayout(reportCode, input, values);
+            var pdf = new Excel2Pdf(Template(sample), engine, new Excel2PdfOptions
+            {
+                MaxDigitWidthPx = SampleMaxDigitWidthPx,
+                DocumentName = sample,
+                UnsupportedElements = sample == OrderForm ? UnsupportedElementPolicy.Ignore : UnsupportedElementPolicy.Error,
+            });
+            foreach (var (cell, text) in values ?? new Dictionary<string, string>())
+            {
+                pdf.SetText(cell, text);
+            }
+
+            return pdf;
         }
 
-        private static byte[] Convert(string reportCode, IReadOnlyDictionary<string, string> values)
+        private static PagedLayout ComputeLayout(string sample, IReadOnlyDictionary<string, string> values)
         {
-            using var converter = CreateConverter(TestPaths.EdgeCaseSamplesRoot);
-            using var input = File.OpenRead(Template(reportCode));
-            using var output = new MemoryStream();
-            converter.Convert(reportCode, input, values, output);
-            return output.ToArray();
+            using var engine = CreateEngine();
+            using var pdf = Open(engine, sample, values);
+            return pdf.ComputeLayout(checkFit: true);
+        }
+
+        private static byte[] Convert(string sample, IReadOnlyDictionary<string, string> values)
+        {
+            using var engine = CreateEngine();
+            using var pdf = Open(engine, sample, values);
+            return pdf.ToPdfBytes();
         }
 
         private static List<string> Texts(PageLayout page) =>
@@ -89,42 +108,54 @@ namespace Utsushi.Golden.Tests
 
         // ---- 送付状: 差し込み値の極端な値 ----
 
-        private static Dictionary<string, string> CoverLetterValues(params (string Key, string? Value)[] changes)
+        // 送付状の書き込むセル(以前の帳票定義の置換キー → セル番地)。
+        private const string PostalCode = "A3";
+        private const string Address = "A4";
+        private const string CompanyName = "A7";
+        private const string Department = "A8";
+        private const string PersonName = "C8";
+        private const string SendDate = "H3";
+        private const string DocumentNo = "H4";
+        private const string Sender = "F5";
+        private const string Item1 = "B15";
+        private const string Item1Copies = "G15";
+        private const string Item1Note = "H15";
+        private const string Item2 = "B16";
+        private const string Item2Copies = "G16";
+        private const string Item2Note = "H16";
+        private const string AmountGeneral = "G21";
+        private const string AmountRight = "G22";
+        private const string Remarks = "A25";
+
+        private static Dictionary<string, string> CoverLetterValues(params (string Cell, string Value)[] changes)
         {
             var values = new Dictionary<string, string>
             {
-                ["PostalCode"] = "〒100-0001",
-                ["Address"] = "東京都千代田区千代田1-1-1\nサンプルビル 10F",
-                ["CompanyName"] = "株式会社サンプル商事",
-                ["Department"] = "総務部",
-                ["PersonName"] = "山田 太郎",
-                ["SendDate"] = "2026年4月1日",
-                ["DocumentNo"] = "0012",
-                ["Sender"] = "株式会社Utsushi\n〒150-0001 東京都渋谷区1-2-3\nTEL 03-0000-0000\n担当: 佐藤",
-                ["Item1"] = "ご請求書",
-                ["Item1Copies"] = "1",
-                ["Item1Note"] = "原本",
-                ["Item2"] = "納品書(控)",
-                ["Item2Copies"] = "2",
-                ["Item2Note"] = "",
-                ["AmountGeneral"] = "¥1,234,567",
-                ["AmountRight"] = "¥1,234,567",
-                ["Remarks"] = "ご不明な点は担当までお問い合わせください。",
-                ["LatinFontCell"] = "Calibriのセルに日本語",
-                ["UnformattedCell"] = "書式なしのセルに日本語",
-                ["ColumnStyleCell"] = "列全体の書式だけのセル",
+                [PostalCode] = "〒100-0001",
+                [Address] = "東京都千代田区千代田1-1-1\nサンプルビル 10F",
+                [CompanyName] = "株式会社サンプル商事",
+                [Department] = "総務部",
+                [PersonName] = "山田 太郎",
+                [SendDate] = "2026年4月1日",
+                [DocumentNo] = "0012",
+                [Sender] = "株式会社Utsushi\n〒150-0001 東京都渋谷区1-2-3\nTEL 03-0000-0000\n担当: 佐藤",
+                [Item1] = "ご請求書",
+                [Item1Copies] = "1",
+                [Item1Note] = "原本",
+                [Item2] = "納品書(控)",
+                [Item2Copies] = "2",
+                [Item2Note] = "",
+                [AmountGeneral] = "¥1,234,567",
+                [AmountRight] = "¥1,234,567",
+                [Remarks] = "ご不明な点は担当までお問い合わせください。",
+                ["B31"] = "Calibriのセルに日本語",
+                ["B32"] = "書式なしのセルに日本語",
+                ["C33"] = "列全体の書式だけのセル",
             };
 
-            foreach (var (key, value) in changes)
+            foreach (var (cell, value) in changes)
             {
-                if (value is null)
-                {
-                    values.Remove(key);
-                }
-                else
-                {
-                    values[key] = value;
-                }
+                values[cell] = value;
             }
 
             return values;
@@ -137,64 +168,64 @@ namespace Utsushi.Golden.Tests
             {
                 "長い値(縮小・切り取り・はみ出し・折り返しの上限)",
                 CoverLetterValues(
-                    ("CompanyName", "特定非営利活動法人日本サンプル帳票標準化推進協議会 東日本統括本部 関東第二支部"),
-                    ("Department", "経営企画本部 デジタルトランスフォーメーション推進部 第三課"),
-                    ("PersonName", "寿限無寿限無五劫の擦り切れ海砂利水魚"),
-                    ("Address", "北海道札幌市中央区北一条西二丁目1番地1 サンプルタワー札幌駅前ビルディング 25階 2501号室 気付"),
-                    ("Item1", "2026年度上期 業務委託契約書(甲乙双方記名押印済み原本)及び別紙仕様書・見積書・発注書の写し一式"),
-                    ("Item1Note", "返送不要・コピーにて保管のこと"),
-                    ("AmountGeneral", "¥123,456,789,012"),
-                    ("Remarks", "1行目\n2行目\n3行目\n4行目\n5行目"),
-                    ("Sender", "株式会社Utsushi\n〒150-0001\n東京都渋谷区神宮前1-2-3\nTEL 03-0000-0000")),
+                    (CompanyName, "特定非営利活動法人日本サンプル帳票標準化推進協議会 東日本統括本部 関東第二支部"),
+                    (Department, "経営企画本部 デジタルトランスフォーメーション推進部 第三課"),
+                    (PersonName, "寿限無寿限無五劫の擦り切れ海砂利水魚"),
+                    (Address, "北海道札幌市中央区北一条西二丁目1番地1 サンプルタワー札幌駅前ビルディング 25階 2501号室 気付"),
+                    (Item1, "2026年度上期 業務委託契約書(甲乙双方記名押印済み原本)及び別紙仕様書・見積書・発注書の写し一式"),
+                    (Item1Note, "返送不要・コピーにて保管のこと"),
+                    (AmountGeneral, "¥123,456,789,012"),
+                    (Remarks, "1行目\n2行目\n3行目\n4行目\n5行目"),
+                    (Sender, "株式会社Utsushi\n〒150-0001\n東京都渋谷区神宮前1-2-3\nTEL 03-0000-0000")),
             };
             yield return new object[]
             {
-                "必須の値だけ",
+                "一部のセルだけに書き込む(残りはテンプレートの値)",
                 new Dictionary<string, string>
                 {
-                    ["PostalCode"] = "〒100-0001", ["Address"] = "東京都千代田区", ["CompanyName"] = "株式会社A",
-                    ["SendDate"] = "2026年4月1日", ["DocumentNo"] = "1", ["Sender"] = "株式会社Utsushi",
-                    ["Item1"] = "見積書", ["Item1Copies"] = "1",
+                    [PostalCode] = "〒100-0001", [Address] = "東京都千代田区", [CompanyName] = "株式会社A",
+                    [SendDate] = "2026年4月1日", [DocumentNo] = "1", [Sender] = "株式会社Utsushi",
+                    [Item1] = "見積書", [Item1Copies] = "1",
                 },
             };
             yield return new object[]
             {
                 "任意の値が空文字・空白のみ",
-                CoverLetterValues(("PersonName", ""), ("Department", "   "), ("Remarks", "")),
+                CoverLetterValues((PersonName, ""), (Department, "   "), (Remarks, "")),
             };
             yield return new object[]
             {
                 "折り返さないセルの改行",
-                CoverLetterValues(("PersonName", "山田\r\n太郎"), ("Address", "東京都\r\n千代田区")),
+                CoverLetterValues((PersonName, "山田\r\n太郎"), (Address, "東京都\r\n千代田区")),
             };
             yield return new object[]
             {
                 "空白を含まない長いURL",
-                CoverLetterValues(("Remarks", "https://example.com/" + new string('a', 150) + "?query=1")),
+                CoverLetterValues((Remarks, "https://example.com/" + new string('a', 150) + "?query=1")),
             };
             yield return new object[]
             {
                 "ノーブレークスペース・全角空白",
-                CoverLetterValues(("PersonName", "山田 太郎　様")),
+                CoverLetterValues((PersonName, "山田 太郎　様")),
             };
             yield return new object[]
             {
                 "半角カナ・丸数字・ローマ数字・記号・JIS第1〜2水準外の漢字(髙・﨑)",
                 CoverLetterValues(
-                    ("CompanyName", "髙島屋 﨑山商店"),
-                    ("Department", "ｶﾌﾞｼｷｶﾞｲｼｬ ㈱ ①②③ Ⅳ"),
-                    ("Address", "東京都〜～ 1−2−3 ‐ー―\n♯♭♪ ℃ № ㎡")),
+                    (CompanyName, "髙島屋 﨑山商店"),
+                    (Department, "ｶﾌﾞｼｷｶﾞｲｼｬ ㈱ ①②③ Ⅳ"),
+                    (Address, "東京都〜～ 1−2−3 ‐ー―\n♯♭♪ ℃ № ㎡")),
             };
             yield return new object[]
             {
                 "マイナスの金額",
-                CoverLetterValues(("AmountRight", "-¥1,000"), ("AmountGeneral", "▲1,000")),
+                CoverLetterValues((AmountRight, "-¥1,000"), (AmountGeneral, "▲1,000")),
             };
         }
 
         [Theory]
         [MemberData(nameof(AcceptedCoverLetterValues))]
-        public void 送付状は極端な差し込み値でも例外にならず1ページのPDFになる(string scenario, Dictionary<string, string> values)
+        public void 送付状は極端な値を書き込んでも例外にならず1ページのPDFになる(string scenario, Dictionary<string, string> values)
         {
             var layout = ComputeLayout(CoverLetter, values);
             Assert.True(layout.PageCount == 1, $"{scenario}: 1ページに収まるはず(実際 {layout.PageCount} ページ)");
@@ -205,7 +236,7 @@ namespace Utsushi.Golden.Tests
         [Fact]
         public void 折り返さないセルの改行は表示せず1行につなげる()
         {
-            var layout = ComputeLayout(CoverLetter, CoverLetterValues(("PersonName", "山田\r\n太郎")));
+            var layout = ComputeLayout(CoverLetter, CoverLetterValues((PersonName, "山田\r\n太郎")));
 
             Assert.Contains("山田太郎", Texts(layout));
         }
@@ -215,7 +246,7 @@ namespace Utsushi.Golden.Tests
         {
             var url = "https://example.com/" + new string('a', 150) + "?query=1";
 
-            var texts = Texts(ComputeLayout(CoverLetter, CoverLetterValues(("Remarks", url))));
+            var texts = Texts(ComputeLayout(CoverLetter, CoverLetterValues((Remarks, url))));
 
             // 備考の各行は連続した描画命令になる。先頭行から、つなげると URL 全体になるまでを集める。
             var first = texts.FindIndex(t => t.StartsWith("https://example.com/", StringComparison.Ordinal));
@@ -233,7 +264,7 @@ namespace Utsushi.Golden.Tests
         [Fact]
         public void 送付状の住所が折り返しでセルの高さを超えると例外で止まる()
         {
-            var values = CoverLetterValues(("Address", "1\n2\n3\n4\n5\n6"));
+            var values = CoverLetterValues((Address, "1\n2\n3\n4\n5\n6"));
 
             var ex = Assert.Throws<LayoutComputationException>(() => ComputeLayout(CoverLetter, values));
 
@@ -242,9 +273,9 @@ namespace Utsushi.Golden.Tests
 
         public static IEnumerable<object[]> RejectedSubstitutionValues()
         {
-            yield return new object[] { "タブ文字(表計算ソフトからのコピー)", "Address", "東京都千代田区\t千代田1-1-1" };
-            yield return new object[] { "ゼロ幅スペース", "PersonName", "山田\u200B太郎" };
-            yield return new object[] { "BOM", "PersonName", "\uFEFF山田太郎" };
+            yield return new object[] { "タブ文字(表計算ソフトからのコピー)", Address, "東京都千代田区\t千代田1-1-1" };
+            yield return new object[] { "ゼロ幅スペース", PersonName, "山田\u200B太郎" };
+            yield return new object[] { "BOM", PersonName, "\uFEFF山田太郎" };
 
             // 対になっていないサロゲートは xUnit がテストケースをシリアライズする際に U+FFFD へ化ける
             // (Visual Studio のテストエクスプローラーで実行した場合)ため、別の [Fact] で確かめる。
@@ -252,50 +283,23 @@ namespace Utsushi.Golden.Tests
 
         [Theory]
         [MemberData(nameof(RejectedSubstitutionValues))]
-        public void 描画できない文字を含む差し込み値は例外で止まる(string scenario, string key, string value)
+        public void 描画できない文字を含む値は例外で止まる(string scenario, string cell, string value)
         {
-            var values = CoverLetterValues((key, value));
+            var values = CoverLetterValues((cell, value));
 
             var ex = Assert.Throws<InvalidSubstitutionValueException>(() => ComputeLayout(CoverLetter, values));
 
-            Assert.True(ex.Target == key, $"{scenario}: 例外の Target は置換キー {key} のはず(実際 {ex.Target})");
+            Assert.True(ex.CellAddress == CellAddress.Parse(cell), $"{scenario}: 例外のセルは {cell} のはず(実際 {ex.CellAddress})");
         }
 
         [Fact]
-        public void 対になっていないサロゲートを含む差し込み値は例外で止まる()
+        public void 対になっていないサロゲートを含む値は例外で止まる()
         {
-            var values = CoverLetterValues(("PersonName", "山田\uD842"));
+            var values = CoverLetterValues((PersonName, "山田\uD842"));
 
             var ex = Assert.Throws<InvalidSubstitutionValueException>(() => ComputeLayout(CoverLetter, values));
 
-            Assert.Equal("PersonName", ex.Target);
-        }
-
-        [Fact]
-        public void 必須の値が空文字なら例外で止まる()
-        {
-            var ex = Assert.Throws<RequiredSubstitutionValueMissingException>(
-                () => ComputeLayout(CoverLetter, CoverLetterValues(("CompanyName", ""))));
-
-            Assert.Equal(CellAddress.Parse("A7"), ex.CellAddress);
-        }
-
-        [Fact]
-        public void 必須の値が渡されなければ例外で止まる()
-        {
-            var ex = Assert.Throws<RequiredSubstitutionValueMissingException>(
-                () => ComputeLayout(CoverLetter, CoverLetterValues(("Address", null))));
-
-            Assert.Equal(CellAddress.Parse("A4"), ex.CellAddress);
-        }
-
-        [Fact]
-        public void 帳票定義に無い置換キーは例外で止まる()
-        {
-            var ex = Assert.Throws<SubstitutionKeyNotFoundException>(
-                () => ComputeLayout(CoverLetter, CoverLetterValues(("CustomerNmae", "綴りを誤ったキー"))));
-
-            Assert.Equal("CustomerNmae", ex.Key);
+            Assert.Equal(CellAddress.Parse(PersonName), ex.CellAddress);
         }
 
         [Fact]
@@ -303,7 +307,7 @@ namespace Utsushi.Golden.Tests
         {
             // 外字用の代替フォントの既定(同梱のBIZ UDPゴシック → IPAmj明朝)に絵文字が無いことに依存する。
             // 既定の一覧に絵文字を持つフォントを加えた場合は、このテストを見直す。
-            var values = CoverLetterValues(("PersonName", "山田 太郎 \U0001F647"));
+            var values = CoverLetterValues((PersonName, "山田 太郎 \U0001F647"));
 
             Assert.Throws<MissingGlyphException>(() => Convert(CoverLetter, values));
         }
@@ -313,8 +317,8 @@ namespace Utsushi.Golden.Tests
         private static PagedLayout ComputeSalesListLayout() =>
             ComputeLayout(SalesList, new Dictionary<string, string>
             {
-                ["Period"] = "2026年4月1日〜2026年4月30日",
-                ["Department"] = "東日本営業統括本部 首都圏第二営業部 法人営業課",
+                ["A2"] = "2026年4月1日〜2026年4月30日",
+                ["J2"] = "東日本営業統括本部 首都圏第二営業部 法人営業課",
             });
 
         [Fact]
@@ -365,8 +369,8 @@ namespace Utsushi.Golden.Tests
         {
             var layout = ComputeLayout(Schedule, new Dictionary<string, string>
             {
-                ["ProjectName"] = "サンプル新社屋建設工事",
-                ["Author"] = "作成: 工務部 佐藤",
+                ["A2"] = "サンプル新社屋建設工事",
+                ["A3"] = "作成: 工務部 佐藤",
             });
 
             Assert.Equal(8, layout.PageCount);
@@ -393,10 +397,10 @@ namespace Utsushi.Golden.Tests
 
         private static readonly IReadOnlyDictionary<string, string> OrderFormValues = new Dictionary<string, string>
         {
-            ["SupplierName"] = "株式会社サンプル文具オフィスサプライ東日本ロジスティクスセンター",
-            ["OrderNo"] = "PO-2026-0001",
-            ["PaymentTerms"] = "月末締め翌月末払い(プルダウンの選択肢に無い値)",
-            ["Approver"] = "部長 山田",
+            ["A3"] = "株式会社サンプル文具オフィスサプライ東日本ロジスティクスセンター",
+            ["G4"] = "PO-2026-0001",
+            ["B5"] = "月末締め翌月末払い(プルダウンの選択肢に無い値)",
+            ["C24"] = "部長 山田",
         };
 
         [Fact]
@@ -419,7 +423,7 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
-        public void 注文書はunsupportedElementsがignoreなら画像だけを出力しグラフで止まらない()
+        public void 注文書は未対応要素を無視する指定なら画像だけを出力しグラフで止まらない()
         {
             var layout = ComputeLayout(OrderForm, OrderFormValues);
 
@@ -432,67 +436,59 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
-        public void 注文書をunsupportedElementsがerrorの帳票定義で変換するとグラフで止まる()
+        public void 注文書を既定の設定で変換するとグラフとコメントを一覧にしたエラーで止まる()
         {
-            var root = Path.Combine(Path.GetTempPath(), "utsushi-test-" + Guid.NewGuid().ToString("N"));
-            var directory = Path.Combine(root, OrderForm);
-            Directory.CreateDirectory(directory);
-            try
-            {
-                File.Copy(Template(OrderForm), Path.Combine(directory, "template.xlsx"));
-                var definition = File.ReadAllText(Path.Combine(TestPaths.EdgeCaseSamplesRoot, OrderForm, "definition.json"))
-                    .Replace("\"unsupportedElements\": \"ignore\"", "\"unsupportedElements\": \"error\"", StringComparison.Ordinal);
-                Assert.Contains("\"error\"", definition, StringComparison.Ordinal);
-                File.WriteAllText(Path.Combine(directory, "definition.json"), definition);
+            using var engine = CreateEngine();
+            using var pdf = new Excel2Pdf(Template(OrderForm), engine, new Excel2PdfOptions { MaxDigitWidthPx = SampleMaxDigitWidthPx });
 
-                using var converter = CreateConverter(root);
-                using var input = File.OpenRead(Path.Combine(directory, "template.xlsx"));
+            var ex = Assert.Throws<UnsupportedWorkbookElementException>(() => pdf.ToPdfBytes());
 
-                var ex = Assert.Throws<UnsupportedWorkbookElementException>(
-                    () => converter.ComputeLayout(OrderForm, input, OrderFormValues));
-
-                Assert.Equal("Chart", ex.ElementKind);
-            }
-            finally
-            {
-                Directory.Delete(root, recursive: true);
-            }
+            // 最初の1件で止めず、グラフ(アンカーのセル番地つき)とコメント(レガシー図形)の両方を返す(excel2pdf-consolidation 要件2.2)。
+            Assert.Contains(ex.Elements, e => e.Kind == UnsupportedElementKind.Chart && e.Anchor is not null);
+            Assert.Contains(ex.Elements, e => e.Kind == UnsupportedElementKind.LegacyDrawing);
         }
 
-        // ---- 帳票定義なしの変換 ----
+        [Fact]
+        public void 注文書の診断は例外にせず未対応要素の一覧を返す()
+        {
+            using var engine = CreateEngine();
+            using var pdf = new Excel2Pdf(Template(OrderForm), engine, new Excel2PdfOptions { MaxDigitWidthPx = SampleMaxDigitWidthPx });
+
+            var diagnostics = pdf.Check();
+
+            Assert.True(diagnostics.HasIssues);
+            Assert.Contains(diagnostics.UnsupportedElements, e => e.Kind == UnsupportedElementKind.Chart && e.Anchor is not null);
+            Assert.Contains(diagnostics.UnsupportedElements, e => e.Kind == UnsupportedElementKind.LegacyDrawing);
+        }
+
+        // ---- 既定の設定(最大数字幅・文書名を指定しない)での変換 ----
 
         [Theory]
         [InlineData(CoverLetter, 1)]
         [InlineData(SalesList, 6)]
         [InlineData(Schedule, 8)]
         [InlineData(OrderForm, 1)]
-        public void エッジケースのテンプレートは帳票定義なしでも変換できる(string reportCode, int expectedPages)
+        public void エッジケースのテンプレートは既定の設定で変換できる(string sample, int expectedPages)
         {
-            using var converter = CreateConverter(TestPaths.EdgeCaseSamplesRoot);
-
-            using (var input = File.OpenRead(Template(reportCode)))
+            using var engine = CreateEngine();
+            var options = new Excel2PdfOptions
             {
-                var layout = converter.ComputeLayoutWithoutDefinition(input);
-                Assert.Equal(expectedPages, layout.PageCount);
-            }
+                UnsupportedElements = sample == OrderForm ? UnsupportedElementPolicy.Ignore : UnsupportedElementPolicy.Error,
+            };
+            using var pdf = new Excel2Pdf(Template(sample), engine, options);
 
-            using (var input = File.OpenRead(Template(reportCode)))
-            using (var output = new MemoryStream())
-            {
-                converter.ConvertWithoutDefinition(input, output);
-                AssertPdf(output.ToArray());
-            }
+            Assert.Equal(expectedPages, pdf.ComputeLayout(checkFit: false).PageCount);
+            AssertPdf(pdf.ToPdfBytes());
         }
 
         [Fact]
-        public void 帳票定義なしでは保存時に開いていたシートを変換し非表示のシートは使わない()
+        public void 保存時に開いていたシートを変換し非表示のシートは使わない()
         {
-            using var converter = CreateConverter(TestPaths.EdgeCaseSamplesRoot);
-            using var input = File.OpenRead(Template(OrderForm));
+            using var engine = CreateEngine();
+            using var pdf = new Excel2Pdf(
+                Template(OrderForm), engine, new Excel2PdfOptions { UnsupportedElements = UnsupportedElementPolicy.Ignore });
 
-            var layout = converter.ComputeLayoutWithoutDefinition(input);
-
-            Assert.Equal("注文書", layout.SheetName);
+            Assert.Equal("注文書", pdf.ComputeLayout(checkFit: false).SheetName);
         }
 
         // ---- エッジケース検証レポートの検出事項への対応(要件1.10, 1.11, 4.12, 13) ----
@@ -535,17 +531,14 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
-        public void 収まりの確認で隣の値と重なる文字と収まらない数値を検出しPDFは変えない()
+        public void 収まりの確認で隣の値と重なる文字と収まらない値を検出しPDFは変えない()
         {
-            using var converter = CreateConverter(TestPaths.EdgeCaseSamplesRoot);
+            using var engine = CreateEngine();
+            using var pdf = Open(engine, OrderForm, OrderFormValues);
 
-            IReadOnlyList<FitIssue> issues;
-            using (var input = File.OpenRead(Template(OrderForm)))
-            {
-                var result = converter.CheckFit(OrderForm, input, OrderFormValues);
-                Assert.False(result.IsTruncated);
-                issues = result.Issues;
-            }
+            var diagnostics = pdf.Check();
+            Assert.False(diagnostics.FitIssuesTruncated);
+            var issues = diagnostics.FitIssues;
 
             // 狭い A 列の見出し「支払条件」が、右隣の B5「月末締め…」に重なる(検証レポート5-1)。
             var label = Assert.Single(issues, i => i.Cell == CellAddress.Parse("A5"));
@@ -553,17 +546,13 @@ namespace Utsushi.Golden.Tests
             Assert.False(label.IsSubstituted);
             Assert.Contains("B5", label.Message, StringComparison.Ordinal);
 
-            // 差し込んだ値(B5、置換キー PaymentTerms)は結合範囲 B5:C5 の幅で切れる。
+            // 書き込んだ値(B5)は結合範囲 B5:C5 の幅で切れる。
             var payment = Assert.Single(issues, i => i.Cell == CellAddress.Parse("B5"));
             Assert.Equal(FitIssueKind.Clipped, payment.Kind);
-            Assert.Equal("PaymentTerms", payment.SubstitutionKey);
+            Assert.True(payment.IsSubstituted);
 
-            // ComputeLayout の結果と同じ(CheckFit は ComputeLayout の FitIssues を返すだけで、描画は変えない)。
-            using (var input = File.OpenRead(Template(OrderForm)))
-            {
-                var layout = converter.ComputeLayout(OrderForm, input, OrderFormValues);
-                Assert.Equal(issues, layout.FitIssues);
-            }
+            // ComputeLayout の結果と同じ(診断は ComputeLayout の FitIssues を返すだけで、描画は変えない)。
+            Assert.Equal(issues, pdf.ComputeLayout(checkFit: true).FitIssues);
         }
 
         [Fact]
@@ -575,20 +564,12 @@ namespace Utsushi.Golden.Tests
         }
 
         [Fact]
-        public void 収まりの確認は帳票定義なしでも使え変換がエラーになる入力では同じ例外を送出する()
+        public void 収まりの確認は変換がエラーになる入力では同じ例外を送出する()
         {
-            using var converter = CreateConverter(TestPaths.EdgeCaseSamplesRoot);
+            using var engine = CreateEngine();
+            using var pdf = Open(engine, CoverLetter, CoverLetterValues((Address, "1\n2\n3\n4\n5\n6")));
 
-            using (var input = File.OpenRead(Template(OrderForm)))
-            {
-                Assert.Contains(converter.CheckFitWithoutDefinition(input).Issues, i => i.Cell == CellAddress.Parse("A5"));
-            }
-
-            using (var input = File.OpenRead(Template(CoverLetter)))
-            {
-                Assert.Throws<LayoutComputationException>(
-                    () => converter.CheckFit(CoverLetter, input, CoverLetterValues(("Address", "1\n2\n3\n4\n5\n6"))));
-            }
+            Assert.Throws<LayoutComputationException>(() => pdf.Check());
         }
     }
 }

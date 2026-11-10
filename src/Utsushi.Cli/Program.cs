@@ -1,371 +1,194 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Utsushi;
+using System.Linq;
+using Utsushi.Core;
 using Utsushi.Core.Exceptions;
-using Utsushi.Rendering;
 
 namespace Utsushi.Cli
 {
     /// <summary>
-    /// Utsushi のコマンドラインエントリーポイント。
+    /// Utsushi のコマンドラインエントリーポイント(excel2pdf-consolidation 要件5)。
     /// </summary>
     /// <remarks>
-    /// 本体は <see cref="ReportPdfConverter"/>(ライブラリ)であり、CLI は動作確認・バッチ実行用の薄い入口である。
+    /// 本体は <see cref="Excel2Pdf"/>(ライブラリ)であり、CLI はテンプレートの診断と変換を試すための薄い入口である。
     /// 呼び出し元プロダクトは CLI ではなく <c>Utsushi</c> アセンブリを直接参照する。
     /// </remarks>
     internal static class Program
     {
+        /// <summary><c>check</c>: 問題なし。<c>convert</c>: 保存した。<c>--help</c>: 使い方を出した。</summary>
         internal const int ExitSuccess = 0;
+
+        /// <summary><c>check</c>: 問題が1つ以上ある。</summary>
+        internal const int ExitIssuesFound = 1;
+
+        /// <summary>使い方エラー。</summary>
         internal const int ExitUsageError = 2;
+
+        /// <summary>変換・診断のエラー。</summary>
         internal const int ExitConversionError = 3;
 
-        internal static int Main(string[] args)
+        /// <summary>エラー出力の「原因:」の行の最大の長さ。</summary>
+        private const int MaxCauseLength = 200;
+
+        internal static int Main(string[] args) => Run(args, Console.Out, Console.Error);
+
+        /// <summary>CLI を実行し、終了コードを返す(design.md 5.3)。</summary>
+        internal static int Run(string[] args, TextWriter stdout, TextWriter stderr)
         {
             var options = CommandLineOptions.Parse(args, out var error);
             if (options is null)
             {
-                if (error is not null)
+                if (error is null)
                 {
-                    Console.Error.WriteLine("エラー: " + error);
-                    Console.Error.WriteLine();
+                    PrintUsage(stdout);
+                    return ExitSuccess;
                 }
 
-                PrintUsage();
-                return error is null ? ExitSuccess : ExitUsageError;
+                stderr.WriteLine("エラー: " + error);
+                stderr.WriteLine();
+                PrintUsage(stderr);
+                return ExitUsageError;
             }
 
+            var action = options.Command == CliCommand.Check ? "診断" : "変換";
             try
             {
-                var fontOptions = options.AllowFontFallback
-                    ? FontResolverOptions.AllowFallback(options.FallbackFont)
-                    : FontResolverOptions.Strict;
-
-                var renderOptions = options.OutlineText ? PdfRenderOptions.OutlineText : PdfRenderOptions.Default;
-                if (options.AllowMissingGlyphs)
+                using var pdf = new Excel2Pdf(options.InputPath, options.ToExcel2PdfOptions());
+                foreach (var (cell, text) in options.Texts)
                 {
-                    renderOptions = renderOptions with { MissingGlyphs = MissingGlyphPolicy.Render };
+                    pdf.SetText(cell.ToString(), text);
                 }
 
-                if (options.ReportCode is null)
+                foreach (var (cell, number) in options.Numbers)
                 {
-                    // --report 省略時は帳票定義なしで変換する(要件12.7)。
-                    using var converter = ReportPdfConverter.CreateDefault(fontOptions, renderOptions);
-                    converter.ConvertFileWithoutDefinition(
-                        options.InputPath, options.OutputPath, options.CellOverrides, maxDigitWidthPx: options.MaxDigitWidthPx);
-                }
-                else
-                {
-                    using var converter = ReportPdfConverter.CreateDefault(
-                        options.DefinitionRoot, fontOptions, renderOptions);
-                    converter.ConvertToFile(
-                        options.ReportCode, options.InputPath, options.Values, options.OutputPath, options.CellOverrides);
+                    pdf.SetValue(cell.ToString(), number);
                 }
 
-                Console.WriteLine($"PDFを出力しました: {options.OutputPath}");
+                if (options.Command == CliCommand.Check)
+                {
+                    var diagnostics = pdf.Check();
+                    WriteDiagnostics(diagnostics, stdout);
+                    return CheckExitCode(diagnostics);
+                }
+
+                pdf.Save(options.OutputPath!);
+                stdout.WriteLine($"PDFを出力しました: {options.OutputPath}");
                 return ExitSuccess;
             }
             catch (UtsushiException ex)
             {
-                // 帳票コード・シート名・セル番地・処理段階を含めて報告する(要件6.4)。
-                Console.Error.WriteLine("変換に失敗しました。");
-                Console.Error.WriteLine(ex.ToDiagnosticString());
+                // 文書名・シート名・セル番地・処理段階を含めて報告する。未対応要素による中止では要素の一覧を含む(要件5.7)。
+                stderr.WriteLine($"{action}に失敗しました。");
+                stderr.WriteLine(ex.ToDiagnosticString());
                 if (ex.InnerException is not null)
                 {
-                    Console.Error.WriteLine("原因: " + ex.InnerException.Message);
+                    // 内側の例外のメッセージは、ファイル由来の不正な値を含みうる。改行で偽の行を差し込ませず、長さを抑える(security-reviewer指摘)。
+                    stderr.WriteLine("原因: " + DiagnosticText.Normalize(ex.InnerException.Message, MaxCauseLength));
                 }
 
+                return ExitConversionError;
+            }
+            catch (InvalidOperationException ex)
+            {
+                // 部品の契約違反など、入力によらない内部のエラー。プロセスを異常終了させず、変換・診断のエラーとして報告する。
+                stderr.WriteLine($"{action}に失敗しました(内部のエラー): " + DiagnosticText.Normalize(ex.Message, MaxCauseLength));
+                return ExitConversionError;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                stderr.WriteLine("ファイルの入出力に失敗しました: " + ex.Message);
                 return ExitConversionError;
             }
             catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
             {
-                // 引数の解釈では弾けない不正な値(NUL文字を含むパス、形式が不正なパスなど)を、
-                // 未処理の例外でプロセスを落とさず使い方エラーとして報告する。
-                Console.Error.WriteLine("エラー: 引数の値が不正です: " + ex.Message);
-                Console.Error.WriteLine("使い方は --help を参照してください。");
+                // 引数の解釈では弾けない不正な値(形式が不正なパスなど)を、未処理の例外でプロセスを落とさず使い方エラーとして報告する。
+                stderr.WriteLine("エラー: 引数の値が不正です: " + ex.Message);
+                stderr.WriteLine("使い方は --help を参照してください。");
                 return ExitUsageError;
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        }
+
+        /// <summary>
+        /// <c>check</c> の終了コード。問題(未対応要素・文字の収まらない箇所・フォントの代替)が1つ以上あれば1、無ければ0。
+        /// 書式の近似は終了コードに影響させない(要件5.2)。
+        /// </summary>
+        internal static int CheckExitCode(Excel2PdfDiagnostics diagnostics) =>
+            diagnostics.HasIssues ? ExitIssuesFound : ExitSuccess;
+
+        /// <summary>
+        /// 診断の結果を種類ごとに出す(design.md 5.2)。書式の近似は「(参考)」として最後に出す。
+        /// 文字の収まらない箇所は、セルの文字列(個人情報を含みうる)を出さず、説明の文だけを出す。
+        /// </summary>
+        internal static void WriteDiagnostics(Excel2PdfDiagnostics diagnostics, TextWriter output)
+        {
+            WriteSection(output, "未対応の要素", diagnostics.UnsupportedElements, diagnostics.UnsupportedElementsTruncated, e => e.ToString());
+            WriteSection(
+                output,
+                "文字の収まらない箇所",
+                diagnostics.FitIssues,
+                diagnostics.FitIssuesTruncated,
+                i => $"[{i.Kind}] {i.Cell}({i.PageNumber}ページ目): {DiagnosticText.Normalize(i.Message, int.MaxValue)}");
+            WriteSection(output, "フォントの代替", diagnostics.FontSubstitutions, truncated: false, s => s.ToString());
+            WriteSection(
+                output,
+                "書式の近似(参考)",
+                diagnostics.FormatApproximations,
+                diagnostics.FormatApproximationsTruncated,
+                a => a.ToString());
+
+            if (!diagnostics.HasIssues)
             {
-                Console.Error.WriteLine("ファイル入出力に失敗しました: " + ex.Message);
-                return ExitConversionError;
+                output.WriteLine(diagnostics.HasFormatApproximations
+                    ? "問題は見つかりませんでした(書式の近似は参考情報です)。"
+                    : "問題は見つかりませんでした。");
             }
         }
 
-        private static void PrintUsage()
+        private static void WriteSection<T>(
+            TextWriter output, string title, IReadOnlyList<T> items, bool truncated, Func<T, string> format)
         {
-            Console.Error.WriteLine("Utsushi - 自社帳票(Excel)のPDF変換");
-            Console.Error.WriteLine();
-            Console.Error.WriteLine("使い方:");
-            Console.Error.WriteLine("  utsushi --report <帳票コード> --input <xlsxパス> --output <pdfパス>");
-            Console.Error.WriteLine("          [--definitions <帳票定義ルート>] [--set <キー>=<値> ...]");
-            Console.Error.WriteLine("          [--override <セル番地>=<値> ...]");
-            Console.Error.WriteLine("          [--allow-font-fallback [<代替フォント名>]] [--allow-missing-glyphs] [--outline-text]");
-            Console.Error.WriteLine("  utsushi --input <xlsxパス> --output <pdfパス> [--override <セル番地>=<値> ...] [上記の出力オプション]");
-            Console.Error.WriteLine("          (帳票定義なしで変換する。アクティブシートを変換し、未対応の要素は無視する)");
-            Console.Error.WriteLine();
-            Console.Error.WriteLine("オプション:");
-            Console.Error.WriteLine("  --report, -r        帳票コード(帳票定義のディレクトリ名)。省略すると帳票定義なしで変換する");
-            Console.Error.WriteLine("                      (差し込みの --set は使えない。見た目の一致は保証しない)");
-            Console.Error.WriteLine("  --input, -i         入力するExcelテンプレート(.xlsx)のパス");
-            Console.Error.WriteLine("  --output, -o        出力するPDFのパス");
-            Console.Error.WriteLine("  --definitions, -d   帳票定義のルートディレクトリ(既定: ./reports)");
-            Console.Error.WriteLine("  --set, -s           置換キーと値。複数指定可(例: --set InvoiceNo=A-001)");
-            Console.Error.WriteLine("  --override          セル番地と値。帳票定義への登録有無に関わらず直接上書きする。");
-            Console.Error.WriteLine("                      複数指定可(例: --override A1=請求書(控))。結合セルは");
-            Console.Error.WriteLine("                      先頭(アンカー)セルの番地を指定すること");
-            Console.Error.WriteLine("  --max-digit-width   帳票定義なしの変換で、列幅の換算に使う最大数字幅(ピクセル)。");
-            Console.Error.WriteLine("                      省略時はブックの標準フォントから見積もる(Calibri 11=7、");
-            Console.Error.WriteLine("                      ＭＳ Ｐゴシック/游ゴシック 11=8)。列幅がExcelとずれる場合に指定する");
-            Console.Error.WriteLine("  --allow-font-fallback");
-            Console.Error.WriteLine("                      フォント未検出時に代替フォントを使う(見た目が崩れる可能性あり)");
-            Console.Error.WriteLine("  --allow-missing-glyphs");
-            Console.Error.WriteLine("                      フォントに字形が無い文字があってもエラーにせず出力する");
-            Console.Error.WriteLine("                      (その文字は豆腐(□)や空白になる。動作確認用)");
-            Console.Error.WriteLine("  --outline-text      文字をアウトライン化して出力する。ファイルサイズは大幅に小さくなるが");
-            Console.Error.WriteLine("                      PDF内の文字列検索・コピーができなくなる");
-            Console.Error.WriteLine("  --help, -h          このヘルプを表示する");
+            if (items.Count == 0)
+            {
+                return;
+            }
+
+            output.WriteLine($"{title}: {items.Count}件" + (truncated ? "(上限で打ち切り)" : string.Empty));
+            foreach (var line in items.Select(format))
+            {
+                output.WriteLine("  " + line);
+            }
         }
 
-        /// <summary>コマンドライン引数。</summary>
-        internal sealed class CommandLineOptions
+        private static void PrintUsage(TextWriter output)
         {
-            private CommandLineOptions(
-                string? reportCode,
-                string inputPath,
-                string outputPath,
-                string definitionRoot,
-                IReadOnlyDictionary<string, string> values,
-                IReadOnlyDictionary<string, string> cellOverrides,
-                bool allowFontFallback,
-                string? fallbackFont,
-                bool allowMissingGlyphs,
-                bool outlineText,
-                double? maxDigitWidthPx)
-            {
-                MaxDigitWidthPx = maxDigitWidthPx;
-                ReportCode = reportCode;
-                InputPath = inputPath;
-                OutputPath = outputPath;
-                DefinitionRoot = definitionRoot;
-                Values = values;
-                CellOverrides = cellOverrides;
-                AllowFontFallback = allowFontFallback;
-                FallbackFont = fallbackFont;
-                AllowMissingGlyphs = allowMissingGlyphs;
-                OutlineText = outlineText;
-            }
-
-            /// <summary>帳票コード。null の場合は帳票定義なしで変換する(要件12.7)。</summary>
-            public string? ReportCode { get; }
-
-            public string InputPath { get; }
-
-            public string OutputPath { get; }
-
-            public string DefinitionRoot { get; }
-
-            public IReadOnlyDictionary<string, string> Values { get; }
-
-            public IReadOnlyDictionary<string, string> CellOverrides { get; }
-
-            public bool AllowFontFallback { get; }
-
-            public string? FallbackFont { get; }
-
-            public bool AllowMissingGlyphs { get; }
-
-            public bool OutlineText { get; }
-
-            /// <summary>帳票定義なしの変換で使う最大数字幅。null ならブックの標準フォントから見積もる。</summary>
-            public double? MaxDigitWidthPx { get; }
-
-            /// <summary>引数を解釈する。ヘルプ要求時は options=null, error=null を返す。</summary>
-            public static CommandLineOptions? Parse(string[] args, out string? error)
-            {
-                error = null;
-
-                string? reportCode = null, inputPath = null, outputPath = null;
-                var definitionRoot = Path.Combine(Directory.GetCurrentDirectory(), "reports");
-                var definitionRootSpecified = false;
-                var values = new Dictionary<string, string>(StringComparer.Ordinal);
-                var cellOverrides = new Dictionary<string, string>(StringComparer.Ordinal);
-                var allowFallback = false;
-                string? fallbackFont = null;
-                var allowMissingGlyphs = false;
-                var outlineText = false;
-                double? maxDigitWidthPx = null;
-
-                if (args.Length == 0)
-                {
-                    return null;
-                }
-
-                for (var i = 0; i < args.Length; i++)
-                {
-                    switch (args[i])
-                    {
-                        case "--help" or "-h":
-                            return null;
-
-                        case "--report" or "-r":
-                            if (!TryTakeValue(args, ref i, "--report", out reportCode, out error)) { return null; }
-                            break;
-
-                        case "--input" or "-i":
-                            if (!TryTakeValue(args, ref i, "--input", out inputPath, out error)) { return null; }
-                            break;
-
-                        case "--output" or "-o":
-                            if (!TryTakeValue(args, ref i, "--output", out outputPath, out error)) { return null; }
-                            break;
-
-                        case "--definitions" or "-d":
-                            if (!TryTakeValue(args, ref i, "--definitions", out var root, out error)) { return null; }
-                            if (string.IsNullOrWhiteSpace(root))
-                            {
-                                error = "--definitions の値が空です。";
-                                return null;
-                            }
-
-                            definitionRoot = root!;
-                            definitionRootSpecified = true;
-                            break;
-
-                        case "--set" or "-s":
-                            {
-                                if (!TryTakeValue(args, ref i, "--set", out var pair, out error)) { return null; }
-                                if (!TryParseKeyValuePair(pair!, "--set", "<キー>=<値>", values, out error)) { return null; }
-                                break;
-                            }
-
-                        case "--override":
-                            {
-                                if (!TryTakeValue(args, ref i, "--override", out var pair, out error)) { return null; }
-                                if (!TryParseKeyValuePair(pair!, "--override", "<セル番地>=<値>", cellOverrides, out error)) { return null; }
-                                break;
-                            }
-
-                        case "--allow-font-fallback":
-                            allowFallback = true;
-
-                            // 直後の引数がオプションでなければ代替フォント名として扱う。
-                            if (i + 1 < args.Length && !args[i + 1].StartsWith("-", StringComparison.Ordinal))
-                            {
-                                fallbackFont = args[++i];
-                            }
-
-                            break;
-
-                        case "--allow-missing-glyphs":
-                            allowMissingGlyphs = true;
-                            break;
-
-                        case "--outline-text":
-                            outlineText = true;
-                            break;
-
-                        case "--max-digit-width":
-                            {
-                                if (!TryTakeValue(args, ref i, "--max-digit-width", out var text, out error)) { return null; }
-                                if (!double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var mdw)
-                                    || double.IsNaN(mdw) || mdw <= 0 || double.IsInfinity(mdw))
-                                {
-                                    error = $"--max-digit-width には正の数を指定してください: '{text}'";
-                                    return null;
-                                }
-
-                                maxDigitWidthPx = mdw;
-                                break;
-                            }
-
-                        default:
-                            error = $"不明なオプションです: '{args[i]}'";
-                            return null;
-                    }
-                }
-
-                if (reportCode is not null && string.IsNullOrWhiteSpace(reportCode))
-                {
-                    error = "--report の値が空です。帳票定義なしで変換する場合は --report 自体を省略してください。";
-                    return null;
-                }
-
-                if (reportCode is null && values.Count > 0)
-                {
-                    error = "--set(置換キーによる差し込み)は --report と併用してください。"
-                        + "帳票定義なしで変換する場合は --override <セル番地>=<値> を使ってください。";
-                    return null;
-                }
-
-                if (reportCode is not null && maxDigitWidthPx is not null)
-                {
-                    error = "--max-digit-width は帳票定義なしの変換(--report の省略)でのみ指定できます。"
-                        + "帳票定義ありの場合は definition.json の maxDigitWidthPx を使います。";
-                    return null;
-                }
-
-                if (reportCode is null && definitionRootSpecified)
-                {
-                    error = "--definitions は --report と併用してください。";
-                    return null;
-                }
-
-                if (string.IsNullOrWhiteSpace(inputPath))
-                {
-                    error = "--input は必須です。";
-                    return null;
-                }
-
-                if (string.IsNullOrWhiteSpace(outputPath))
-                {
-                    error = "--output は必須です。";
-                    return null;
-                }
-
-                return new CommandLineOptions(
-                    reportCode, inputPath!, outputPath!, definitionRoot, values, cellOverrides,
-                    allowFallback, fallbackFont, allowMissingGlyphs, outlineText, maxDigitWidthPx);
-            }
-
-            private static bool TryTakeValue(
-                string[] args, ref int index, string optionName, out string? value, out string? error)
-            {
-                if (index + 1 >= args.Length)
-                {
-                    value = null;
-                    error = $"{optionName} には値が必要です。";
-                    return false;
-                }
-
-                value = args[++index];
-                error = null;
-                return true;
-            }
-
-            /// <summary>"<キー>=<値>" 形式の引数を分割し、辞書に格納する(--set / --override で共通)。</summary>
-            private static bool TryParseKeyValuePair(
-                string pair, string optionName, string formatHint, Dictionary<string, string> destination, out string? error)
-            {
-                var separator = pair.IndexOf('=');
-                if (separator <= 0)
-                {
-                    error = $"{optionName} の指定は {formatHint} の形式で指定してください: '{pair}'";
-                    return false;
-                }
-
-                var key = pair.Substring(0, separator);
-                if (destination.ContainsKey(key))
-                {
-                    // 同じキーを重ねて指定すると、後の値だけが黙って採用されてしまう。
-                    error = $"{optionName} で '{key}' が重複して指定されています。1つにしてください。";
-                    return false;
-                }
-
-                destination.Add(key, pair.Substring(separator + 1));
-                error = null;
-                return true;
-            }
+            output.WriteLine("Utsushi - Excel のテンプレートの診断と PDF への変換");
+            output.WriteLine();
+            output.WriteLine("使い方:");
+            output.WriteLine("  utsushi check   <入力.xlsx>              [オプション]");
+            output.WriteLine("  utsushi convert <入力.xlsx> <出力.pdf>   [オプション]");
+            output.WriteLine("  utsushi --help");
+            output.WriteLine();
+            output.WriteLine("  check   未対応の要素・文字の収まらない箇所・フォントの代替・書式の近似(参考)を出す。");
+            output.WriteLine("          問題が無ければ終了コード0、あれば1(書式の近似だけなら0)");
+            output.WriteLine("  convert PDF に変換して保存する");
+            output.WriteLine("  パスはコマンドの直後(オプションより前)に書く");
+            output.WriteLine();
+            output.WriteLine("オプション:");
+            output.WriteLine("  --text <セル>=<文字列>          セルに文字列を書き込む(複数指定可。例: --text A3=株式会社サンプル)");
+            output.WriteLine("  --number <セル>=<数値>          セルに数値を書き込む。セルの表示形式で表示する(複数指定可。");
+            output.WriteLine("                                  小数点は「.」。日時は Excel のシリアル値で指定する)");
+            output.WriteLine("  --sheet <シート名>              変換するシート(省略すると保存時に開いていたシート)");
+            output.WriteLine("  --document-name <名前>          PDF のタイトル・エラーの情報に使う名前(省略すると入力のファイル名)");
+            output.WriteLine("  --max-digit-width <px>          列幅の換算に使う最大数字幅(省略するとブックの標準フォントから見積もる)");
+            output.WriteLine("  --ignore-unsupported            グラフなどの未対応の要素があっても、その要素を除いて変換する");
+            output.WriteLine("                                  (check では、指定しても問題として数える)");
+            output.WriteLine("  --allow-font-fallback [書体名]  フォントが無ければ代替の書体で描く(省略すると同梱のBIZ UDPゴシック)");
+            output.WriteLine("  --allow-missing-glyphs          フォントに字形の無い文字があってもエラーにしない(動作確認用)");
+            output.WriteLine("  --outline-text                  文字をアウトライン化する(PDF の文字列の検索・コピーはできなくなる)");
+            output.WriteLine("  -h, --help                      この使い方を出す");
+            output.WriteLine();
+            output.WriteLine("終了コード: 0 成功/問題なし、1 問題あり(check)、2 使い方エラー、3 変換・診断のエラー");
         }
     }
 }

@@ -1,4 +1,4 @@
-report=receipt sheet=領収書 pages=2
+document=receipt sheet=領収書 pages=2
 
 ## page 1 paper=A4/Portrait size=595.28x841.89 scale=1 rows=1-13 cols=1-4
 line   from=(50.4,111) to=(249.9,111) color=#FF000000 width=0.75 dash=Solid

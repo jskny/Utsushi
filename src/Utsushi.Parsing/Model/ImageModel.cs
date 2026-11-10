@@ -21,5 +21,14 @@ namespace Utsushi.Parsing.Model
         double RotationDegrees,
         CellAddress AnchorCell,
         PointPt AnchorOffset,
-        AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent);
+        AnchorExtent Extent) : DrawingObjectModel(AnchorCell, AnchorOffset, Extent)
+    {
+        /// <summary>
+        /// 左右の反転(<c>a:xfrm/@flipH</c>)。Utsushi は画像を反転せずに描く(書式の近似として診断で返す。excel2pdf-consolidation 要件7.2(h))。
+        /// </summary>
+        public bool FlipHorizontal { get; init; }
+
+        /// <summary>上下の反転(<c>a:xfrm/@flipV</c>)。<see cref="FlipHorizontal"/> と同じく反転せずに描く。</summary>
+        public bool FlipVertical { get; init; }
+    }
 }
