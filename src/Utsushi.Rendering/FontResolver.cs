@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using SkiaSharp;
+using Utsushi.Core;
 using Utsushi.Core.Exceptions;
 using Utsushi.Rendering.Fonts;
 using Utsushi.Parsing.Model;
@@ -62,6 +63,19 @@ namespace Utsushi.Rendering
                 foreach (var directory in _options.FontDirectories)
                 {
                     RegisterFontDirectory(directory);
+                }
+
+                // 代替フォント名を指定した場合は、作る時点でその書体があることを確かめる(要件11.7)。
+                // 無ければ同梱フォントで黙って代替せず、書体名の誤りに気付けるようエラーにする。
+                if (_options.Mode == FontResolutionMode.AllowFallback
+                    && _options.FallbackFamilyName is { } fallbackName
+                    && FindFallback(fallbackName) is null)
+                {
+                    throw new FontNotAvailableException(
+                        fallbackName,
+                        $"代替フォント '{DiagnosticText.Normalize(fallbackName)}' が実行環境に見つかりません。"
+                        + "書体名を確かめるか、フォントをインストール・登録してください"
+                        + "(代替フォント名を省略すると、同梱のBIZ UDPゴシックで代替します)。");
                 }
             }
             catch
@@ -303,16 +317,12 @@ namespace Utsushi.Rendering
                     + "フォントをインストールするか、FontResolverOptions でフォントファイルを登録してください。");
             }
 
-            if (_options.FallbackFamilyName is { } fallbackName)
+            if (_options.FallbackFamilyName is { } fallbackName && FindFallback(fallbackName) is { } fallback)
             {
-                var fallback = FindInstalled(fallbackName, bold: false, italic: false) ?? BundledFonts.Find(fallbackName);
-                if (fallback is not null)
-                {
-                    return new ResolvedTypeface(fallback, font.Bold, font.Italic);
-                }
+                return new ResolvedTypeface(fallback, font.Bold, font.Italic);
             }
 
-            // 代替フォント名の指定が無い(または見つからない)場合は、実行環境の既定書体(Linuxでは多くの場合
+            // 代替フォント名の指定が無い場合(指定した書体が無ければ、作る時点でエラーにしている)は、実行環境の既定書体(Linuxでは多くの場合
             // 日本語の字形を持たない DejaVu Sans)ではなく、同梱の日本語フォントを使う(要件11.1)。
             return new ResolvedTypeface(BundledFonts.JapaneseGothicTypeface, font.Bold, font.Italic);
         }
@@ -553,6 +563,12 @@ namespace Utsushi.Rendering
                 Resolve(font);
             }
         }
+
+        /// <summary>代替フォントの書体を 明示登録 → インストール済み → 同梱 の順に探す。無ければ null。</summary>
+        private SKTypeface? FindFallback(string familyName) =>
+            TryGetRegistered(familyName, bold: false, italic: false, out var registered)
+                ? registered
+                : FindInstalled(familyName, bold: false, italic: false) ?? BundledFonts.Find(familyName);
 
         private bool TryGetRegistered(string familyName, bool bold, bool italic, out SKTypeface typeface)
         {

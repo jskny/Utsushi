@@ -232,6 +232,58 @@ namespace Utsushi.Rendering.Tests
                 Array.Empty<string>(),
                 null);
 
+        [Fact]
+        public void 指定した代替フォント名が見つからなければ作る時点でエラーにする()
+        {
+            // 同梱フォントで黙って代替せず、書体名の誤りに気付けるようにする(要件11.7)。
+            var ex = Assert.Throws<FontNotAvailableException>(
+                () => new FontResolver(FontResolverOptions.AllowFallback("存在しない書体-ZZZ")));
+
+            Assert.Equal("存在しない書体-ZZZ", ex.FontName);
+            Assert.Contains("存在しない書体-ZZZ", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void 同梱フォントの名前は代替フォント名に指定できる()
+        {
+            using var resolver = new FontResolver(FontResolverOptions.AllowFallback("BIZ UDPGothic"));
+
+            Assert.Equal("BIZ UDPGothic", resolver.GetSubstitution(FontStyle.Default with { Name = "存在しないフォント-ZZZ" }));
+        }
+
+        [Fact]
+        public void 明示登録した書体は代替フォント名に指定できる()
+        {
+            var options = FontResolverOptions.AllowFallback("社内書体") with
+            {
+                FontFiles = new Dictionary<string, string> { ["社内書体"] = BundledFontFile() },
+            };
+
+            using var resolver = new FontResolver(options);
+
+            Assert.NotNull(resolver.GetSubstitution(FontStyle.Default with { Name = "存在しないフォント-ZZZ" }));
+        }
+
+        [Fact]
+        public void 厳格モードでは代替フォント名を確かめない()
+        {
+            using var resolver = new FontResolver(FontResolverOptions.Strict with { FallbackFamilyName = "存在しない書体-ZZZ" });
+        }
+
+        /// <summary>リポジトリにある同梱フォントのファイル(明示登録のテストに使う)。</summary>
+        private static string BundledFontFile()
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Utsushi.sln")))
+            {
+                directory = directory.Parent;
+            }
+
+            return Path.Combine(
+                directory?.FullName ?? throw new InvalidOperationException("リポジトリのルートが見つかりません。"),
+                "src", "Utsushi.Rendering", "Fonts", "BIZUDPGothic-Regular.ttf");
+        }
+
         private static string? FindAnyInstalledFont() =>
             EnumerateFontFiles().FirstOrDefault();
 

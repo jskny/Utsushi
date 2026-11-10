@@ -1055,3 +1055,11 @@
     - _Requirements: 2.16, 14.2, 14.3, 14.4_
   - [x] 30.7 バイト列・ストリームの入力と `ToPdfBytes`、帳票定義なしのシートの指定(`Excel2PdfOptions.SheetName`)、設定の消去(`Clear`)
     - _Requirements: 14.10, 14.11, 14.12_
+
+- [x] 31. 指定した代替フォント名が見つからない場合をエラーにする
+  - [x] 31.1 requirements.md に要件11.7を追加し、design.md に設計を書く
+    - _Requirements: 11.7_
+  - [x] 31.2 `FontResolver` のコンストラクタで代替フォント名を解決し、見つからなければ `FontNotAvailableException` にする。代替の時点でも明示登録の書体を探す。テストを含む
+    - _Requirements: 11.7_
+  - [ ] 31.3 docs(ライブラリの使い方・CLAUDE.md・README)を更新し、code-reviewer・doc-reviewer でレビューする
+    - _Requirements: 11.7_
