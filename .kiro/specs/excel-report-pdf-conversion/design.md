@@ -938,7 +938,7 @@ SkiaSharp に直接依存してはならない。そこで `IFontMetricsProvider
   検証だけを先に行いたい場合は `FontResolver.EnsureAvailable` を使う。
 - **字形の欠落検出(要件5.5)**: `DrawText`(セル・ヘッダー/フッター・図形内テキストの共通経路)で、
   描画前に各文字(`string.EnumerateRunes`)を`SKFont.GetGlyph`で字形IDに変換し、0(.notdef)になる文字が
-  あれば`MissingGlyphException`(`FontName`・`CodePoint`・`Text`、帳票コード・シート名)を送出する。
+  あれば`MissingGlyphException`(`FontName`・`CodePoint`・`Text`、文書名・シート名)を送出する。
   制御文字は判定しない。例外メッセージには宛名・住所などの個人情報がログへ丸ごと流れないよう描画文字列の
   先頭10文字だけを載せ、全文は`Text`プロパティで参照させる。`PdfRenderOptions.MissingGlyphs`(`MissingGlyphPolicy.Error`が既定、
   `Render`で従来どおり描画)で切り替えられる。`PdfRenderOptions`の位置パラメータには加えず`init`
